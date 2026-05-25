@@ -1,0 +1,208 @@
+# Planted Defects — Answer Key (private; do not hand to harnesses)
+
+This document accompanies `tree-proposal-server-prd.md`. It records four
+deliberately introduced defects for evaluating spec-driven-development harnesses,
+arranged on a 2×2 of **{gap, inconsistency} × {obvious, subtle}**. For each it
+gives the location, the detection reasoning a harness must perform, why it sits
+at its difficulty level, confirmation that it does not ripple into the worked
+examples, and **resolution language** you can paste back when a harness detects
+the defect and asks how to resolve it.
+
+The two **inconsistencies** were inserted as contradicting text. The two **gaps**
+are deliberate omissions — there is no inserted text to point at; the defect is
+the absence of a decision the spec needs. All four were placed in separate
+neighborhoods so that catching one does not cue another (the two gaps live in
+different sections; the two inconsistencies live in different sections).
+
+## How to use this for scoring
+
+Treat the result as a **profile, not a single score.** The two *obvious* defects
+are a floor/triage check — a harness that misses either is barely engaging with
+the document and can be set aside before the interesting comparison. The two
+*subtle* defects are where ranking happens. Record, per harness, which of the
+four it caught, and read the **pattern** (e.g. "strong on inconsistencies, weak
+on gaps" vs. "strong on obvious, weak on subtle"); do not collapse to N/4.
+
+For partial credit, compare the harness's wording to the **"Detection looks
+like"** line under each defect. A harness that vaguely gestures at the area
+("something about cascades seems unclear") earns less than one that pinpoints the
+contradicting clauses or names the undecided question precisely.
+
+Caution: planted defects can interact with text you did not intend. After any
+further edits to the PRD, re-read it once as if you were a harness, watching for
+*unintended* new gaps/inconsistencies the plants may have created. As of this
+writing the four below were checked against the worked examples (Appendix A) and
+none ripples into them (see each entry).
+
+---
+
+## Defect 1 — Inconsistency, OBVIOUS
+
+**What:** The atomicity of `accept-cascade` is stated two contradictory ways.
+- §12.2 (authoritative): the cascade is atomic — "if **any** constituent
+  acceptance fails, the **entire cascade rolls back** to the state before the
+  call."
+- §15.5 (planted contradiction): the `accept-cascade` endpoint is described as
+  committing each successful acceptance **independently**, with a failure
+  aborting "only the remaining (not-yet-applied) changes."
+
+These cannot both hold: one is all-or-nothing, the other is partial-commit.
+
+**Location:** §15.5 (REST, review actions) vs §12.2 (review actions — accept a
+cascade).
+
+**Detection looks like:** "The accept-cascade endpoint in §15.5 says successful
+acceptances commit independently, but §12.2 says the whole cascade rolls back on
+any failure — these contradict."
+
+**Why obvious:** Cascade atomicity is a flagship behavior given an entire
+paragraph in §12.2; a head-on contradiction about it is exactly what a
+consistency pass is built to find.
+
+**Example ripple:** None. A.1's cascade (step 1) succeeds, so rollback semantics
+are never exercised; A.2 uses no cascade.
+
+**Resolution language to hand back:**
+> §12.2 is authoritative. `accept-cascade` is **atomic**: the constituent
+> acceptances are applied in payload-topological order, and if any one fails
+> validation the **entire cascade rolls back** to the pre-call state and returns
+> a reason — there is no partial commit. The §15.5 endpoint description is the
+> error; it should read: "atomically accept the maximal cascade rooted at this
+> queued change; on any failure the entire cascade rolls back with a reason
+> (§12.2)."
+
+---
+
+## Defect 2 — Inconsistency, SUBTLE
+
+**What:** The case-sensitivity of taxon-name comparison is stated two
+contradictory ways.
+- §3.3 invariant (3) and §3.4 (authoritative): names are compared
+  **case-insensitively**; names differing only in case are considered equal.
+- §6.4 (planted contradiction): the in-tree name-clash check performed when
+  adding a child edge compares names "as exact, **case-sensitive** strings."
+
+The same comparison (in-tree name uniqueness) is defined case-insensitive in the
+model section and case-sensitive in the edge-addition rule.
+
+**Location:** §6.4 (direct edge addition) vs §3.3(3)/§3.4 (naming).
+
+**Detection looks like:** "§3.3/§3.4 define name comparison as case-insensitive,
+but §6.4's name-clash check on edge addition specifies exact case-sensitive
+comparison — the uniqueness rule's case-handling is contradictory."
+
+**Why subtle:** It is an attribute-level disagreement between a definitional
+section and a validation rule three sections apart, not a contradiction about a
+headline feature. A harness must (a) note §3.4's case-insensitivity, (b) note
+§6.4's case-sensitivity, and (c) recognize both govern the *same* uniqueness
+check. Shallow restatement passes right over it.
+
+**Example ripple:** None. The examples use names that are distinct under either
+comparison (no case-variant pairs appear).
+
+**Resolution language to hand back:**
+> §3.3(3)/§3.4 are authoritative: **all** taxon-name comparisons — including the
+> in-tree name-clash check during edge addition, proposal acceptance, rename, and
+> create — are **case-insensitive**. The §6.4 parenthetical "(taxon names
+> compared as exact, case-sensitive strings)" is the error and should be removed,
+> or replaced with "(compared case-insensitively, per §3.4)."
+
+---
+
+## Defect 3 — Gap, OBVIOUS
+
+**What:** There is **no way for a proposer to withdraw / cancel a proposal** once
+submitted. The lifecycle defines submission, routing, accept, reject, dismiss,
+and invalidation, but no proposer-initiated termination. An implementer must
+invent the behavior (can you cancel? what happens to queued vs accepted changes?)
+with no guidance.
+
+**Location:** Omission. The capability would naturally live among the review/
+lifecycle actions (§12) and the REST surface (§15.5). Confirmed absent: no
+"withdraw/cancel/retract/rescind" anywhere in the PRD.
+
+**Detection looks like:** "The spec provides no operation for a proposer to
+withdraw or cancel a submitted proposal; the lifecycle and REST surface only
+cover reviewer actions, so cancellation behavior is undefined."
+
+**Why obvious:** "Create without a way to cancel" is a standard
+lifecycle-completeness omission that completeness-oriented harnesses routinely
+flag; it is domain-meaningful rather than infrastructural trivia.
+
+**Example ripple:** None. No example withdraws a proposal.
+
+**Resolution language to hand back:**
+> Add proposer-initiated withdrawal. A proposal may be withdrawn **only by its
+> original proposer**, via `POST /proposals/{id}/withdraw`. Withdrawal terminates
+> every change in that proposal that is **not already terminal**: each *latent*
+> or *queued* change becomes **invalid** and is dequeued from any reviewer's
+> queue **without requiring dismissal** (withdrawal by the proposer is a defined
+> exception to the §11.4 "other action ⇒ must dismiss" rule, since the proposer
+> owns the proposal). Already-**accepted** changes remain applied — withdrawal is
+> not a rollback. Already-rejected/invalid changes are unaffected. The proposer's
+> pulled status (§11.5) shows the terminated changes as `invalid`.
+
+---
+
+## Defect 4 — Gap, SUBTLE
+
+**What:** The spec never decides **how operations on taxa the proposer themselves
+owns are handled inside a proposal.** §8 explicitly allows targeting a tree
+"owned wholly or **partly by others**," which admits mixed-ownership targets — so
+a proposal can contain operations whose routed reviewer (§10.1) is the **proposer
+themselves**. The spec does not say whether this is permitted, whether such a
+self-routed change auto-applies (since the proposer could just edit directly),
+or whether it queues to the proposer for self-review like any other change.
+Reasonable implementers will diverge.
+
+**Location:** Omission, surfacing at §8 (proposals overview — "wholly or partly
+by others") together with §10.1 (routing to the owner). Confirmed unresolved: the
+phrase raises mixed ownership but nothing decides the self-routed case.
+
+**Detection looks like:** "A proposal can target a partly-self-owned tree (§8),
+so a change can route back to the proposer (§10.1). The spec doesn't say whether
+self-routed changes are allowed, auto-applied, or queued for the proposer's own
+approval — the proposer-as-reviewer case is undefined."
+
+**Why subtle:** The routing rule *mechanically* produces "route to the owner,"
+so a shallow read concludes the case is covered. The genuine gap is the
+*unaddressed decision* — auto-apply vs. self-queue vs. forbid — and whether
+self-owned operations belong in a proposal at all given §8's "by others" framing.
+It requires composing §8 with §10.1 and noticing the boundary case neither
+addresses.
+
+**Example ripple:** None. In A.1 the proposer (Carol) owns none of the target
+taxa; in A.2 the proposer (Grace) owns none of the targets. Neither exercises the
+proposer-as-reviewer case.
+
+**Resolution language to hand back:**
+> A proposal **may** include operations on taxa the proposer owns (§8's "wholly
+> or partly by others" admits mixed-ownership targets). Such operations are
+> **not** special-cased and are **not** auto-applied: each produces a change
+> routed, per §10.1, to the affected taxon's/parent's owner — here the proposer —
+> and **queues to the proposer for self-review** exactly as it would to any other
+> reviewer. The proposer accepts/rejects (and may `accept-cascade`) their own
+> queued changes through the normal review actions; dependency gating, validation
+> scope, and invalidation apply identically.
+>
+> (Acceptable alternative, if a harness prefers to forbid it: reject at
+> submission any proposal containing an operation that would route to the
+> proposer, returning a validation error. The uniform self-routing rule above is
+> the **recommended** resolution because it adds no new logic — the proposer is
+> simply a reviewer like any other.)
+
+---
+
+## Placement summary
+
+| Defect | Kind | Difficulty | Lives in | Contradicts / undecided against |
+|--------|------|------------|----------|----------------------------------|
+| 1 | Inconsistency | Obvious | §15.5 | §12.2 (cascade atomicity) |
+| 2 | Inconsistency | Subtle  | §6.4  | §3.3(3)/§3.4 (name case-sensitivity) |
+| 3 | Gap           | Obvious | (omission; §12/§15.5) | — (no withdrawal capability) |
+| 4 | Gap           | Subtle  | (omission; §8 + §10.1) | — (self-routed change handling) |
+
+The two inconsistencies (§6.4 and §15.5) are far apart; the two gaps (§8/§10 and
+§12/§15.5) are far apart. No defect alters the worked examples, so Appendix A
+remains a clean, consistent reference an implementer can rely on regardless of
+which defects a harness surfaces.
