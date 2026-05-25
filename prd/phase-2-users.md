@@ -3,7 +3,7 @@
 **Position:** Depends on Phase 1 (error model + username validator + test runner).
 **Authoritative PRD sections:** §4, §15.1, plus the null-user/registration rules
 referenced in §2 and §4.
-**Source of truth:** `prd.txt`. Where this brief restates a requirement, the
+**Source of truth:** `prd.md`. Where this brief restates a requirement, the
 PRD's wording governs.
 
 ## Goal

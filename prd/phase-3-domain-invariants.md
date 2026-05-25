@@ -3,7 +3,7 @@
 **Position:** Depends on Phases 1–2.
 **Authoritative PRD sections:** §3 (§3.1–§3.4), §3.3 invariants, §15.2 reads.
 §2 for ID generation and in-memory state.
-**Source of truth:** `prd.txt`. Where this brief restates a requirement, the
+**Source of truth:** `prd.md`. Where this brief restates a requirement, the
 PRD's wording governs.
 
 ## Goal

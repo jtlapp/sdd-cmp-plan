@@ -212,7 +212,7 @@ which defects a harness surfaces.
 
 Maps each defect to the implementation phase(s) that own its sections and the
 phase by which detection is expected. Phases reference the briefs in the phase
-folder. **Caveat:** every harness receives the full `prd.txt`, not just its
+folder. **Caveat:** every harness receives the full `prd.md`, not just its
 phase's sections, so any defect is catchable in any phase. "Expected detection
 phase" is the *bar* — the earliest phase whose scoped work forces engagement with
 the defect's sections and at which a competent harness's spec analysis / initial

@@ -2,7 +2,7 @@
 
 **Position:** First phase. No dependencies.
 **Authoritative PRD sections:** §2, §3.4, §4 (format rules only), §15.6.
-**Source of truth:** `prd.txt`. Where this brief restates a requirement, the
+**Source of truth:** `prd.md`. Where this brief restates a requirement, the
 PRD's wording governs.
 
 ## Goal

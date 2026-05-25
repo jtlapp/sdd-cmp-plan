@@ -3,7 +3,7 @@
 **Position:** Depends on Phases 1–5.
 **Authoritative PRD sections:** §11.2, §11.3 (promotion), §12.1, §12.3, plus the
 acceptance-time validation scope from §10.3 and the ownership rule from §5/§12.1.
-**Source of truth:** `prd.txt`. Where this brief restates a requirement, the
+**Source of truth:** `prd.md`. Where this brief restates a requirement, the
 PRD's wording governs.
 
 ## Goal

@@ -1,21 +1,21 @@
 # Implementation phases — index
 
-This folder breaks the project described in `prd.txt` into seven sequential
+This folder breaks the project described in `prd.md` into seven sequential
 implementation phases, one brief per file. Each brief is meant to be handed to a
-development harness together with the **full `prd.txt`** and the
-**`toolchain-supplement.txt`** (which `prd.txt` incorporates by reference,
-§2/§13), plus the **non-normative `sample-taxonomy.txt`** as a source of
+development harness together with the **full `prd.md`** and the
+**`toolchain-supplement.md`** (which `prd.md` incorporates by reference,
+§2/§13), plus the **non-normative `sample-taxonomy.md`** as a source of
 fiction-genre names for tests (§13).
 
 ## How to use these briefs
 
-- **`prd.txt` is the authoritative specification.** Each brief scopes a slice of
+- **`prd.md` is the authoritative specification.** Each brief scopes a slice of
   the work and points at the PRD sections that govern it. Where a brief restates
-  a requirement, the PRD's own wording governs. The `toolchain-supplement.txt` is
-  incorporated into `prd.txt` by reference and is equally binding: it governs
+  a requirement, the PRD's own wording governs. The `toolchain-supplement.md` is
+  incorporated into `prd.md` by reference and is equally binding: it governs
   toolchain and test mechanics (runtime version, module system, build model, test
-  framework), while `prd.txt` governs domain behavior. Hand it to the harness
-  alongside every brief. The `sample-taxonomy.txt` is **non-normative** test data
+  framework), while `prd.md` governs domain behavior. Hand it to the harness
+  alongside every brief. The `sample-taxonomy.md` is **non-normative** test data
   — a naming resource for the §13 suite — not a specification input; it neither
   adds requirements nor constrains the system's structure.
 - Phases are **sequential**: each assumes the previous phases are complete and

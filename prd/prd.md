@@ -19,7 +19,7 @@ The deliverable is a working server plus an automated test suite (see §13).
 - Runtime: **Node.js**, language **TypeScript**.
 - HTTP layer: **Hono**, exposing a **REST** API.
 - **Toolchain and test conventions.** The accompanying toolchain supplement
-  (`toolchain-supplement.txt`) is **incorporated into this PRD by reference and is
+  (`toolchain-supplement.md`) is **incorporated into this PRD by reference and is
   binding**. It fixes the toolchain details this section leaves open — the
   Node.js version, the module system, the build/compile model, and project
   layout — and the test mechanics referenced in §13. Consult it for any such
@@ -470,7 +470,7 @@ The implementation must include an automated test suite covering:
 
 Tests should use taxa representing **genres of fiction** (e.g. "Epic Fantasy,"
 "Psychological Thriller," "Space Opera") rather than real-world scientific or
-organizational categories. A sample fiction-genre taxonomy (`sample-taxonomy.txt`)
+organizational categories. A sample fiction-genre taxonomy (`sample-taxonomy.md`)
 is provided as a **non-normative** source of realistic names and a suggestive
 hierarchy; tests may draw names from it, rearrange them, extend it, or fabricate
 others as needed. No taxonomy used in tests need match any published

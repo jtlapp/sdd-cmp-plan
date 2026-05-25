@@ -3,7 +3,7 @@
 **Position:** Final phase. Depends on Phases 1–6.
 **Authoritative PRD sections:** §11.4, §12.2, §12.4, §13, §14, Appendix A.
 Builds on the single review loop from Phase 6.
-**Source of truth:** `prd.txt`. Where this brief restates a requirement, the
+**Source of truth:** `prd.md`. Where this brief restates a requirement, the
 PRD's wording governs.
 
 ## Goal

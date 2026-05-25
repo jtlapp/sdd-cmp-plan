@@ -4,7 +4,7 @@
 **Authoritative PRD sections:** §8, §9 (§9.1–§9.4), §10 (§10.1–§10.3),
 §11.3 (initial disposition only), §11.5, §15.4, plus `GET /proposals*` and
 `GET /queue` from §15.2.
-**Source of truth:** `prd.txt`. Where this brief restates a requirement, the
+**Source of truth:** `prd.md`. Where this brief restates a requirement, the
 PRD's wording governs.
 
 ## Goal

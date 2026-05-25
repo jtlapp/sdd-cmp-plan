@@ -2,7 +2,7 @@
 
 **Position:** Depends on Phases 1–3 (middleware, invariant engine, reads).
 **Authoritative PRD sections:** §5, §6 (§6.1–§6.4), §7, §11.1, §15.3.
-**Source of truth:** `prd.txt`. Where this brief restates a requirement, the
+**Source of truth:** `prd.md`. Where this brief restates a requirement, the
 PRD's wording governs.
 
 ## Goal
