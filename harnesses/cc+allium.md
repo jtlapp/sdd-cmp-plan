@@ -129,7 +129,7 @@ domain invariants, proposals, review, cascade all have genuine ambiguity).
 
 Continue the spec in `specs/taxonomy.allium`. This session adds ONLY Phase N, scoped by
 `prd/phase-N-*.md` and the PRD sections it cites. Read the existing spec first and don't
-re-litigate settled entities. `prd/prd.md` is authoritative. Ask me what you need; I'll
+re-litigate settled entities. `prd/prd.md` is authoritative for requirements. Ask me what you need; I'll
 answer from the PRD. Flag any tension you find between this phase's requirements and
 what's already in the spec.
 ```
