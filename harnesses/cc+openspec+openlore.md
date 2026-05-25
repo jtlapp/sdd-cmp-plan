@@ -100,8 +100,8 @@ contribution stays comparable across phases):
 Before we start Phase N, get oriented in the existing code first. Use the OpenLore
 orient tool with a short description of this phase's work — "<one-liner>" — to
 surface the prior-phase modules, functions, and insertion points this phase will
-build on, rather than re-reading files exhaustively. Then read prd/phase-N-*.md and
-the sections of prd/prd.md it cites. Don't write any code or proposal yet — just
+build on, rather than re-reading files exhaustively. Then read `prd/phase-N-*.md` and
+the sections of `prd/prd.md` it cites. Don't write any code or proposal yet — just
 confirm what you're building on and flag anything from earlier phases that looks
 relevant or surprising.
 ```
@@ -128,9 +128,9 @@ In Claude Code, hand the agent the phase brief + the full PRD + supplement and a
 for an OpenSpec change proposal scoped to this phase:
 
 ```
-/opsx:propose implement phase-N per prd/phase-N-*.md
+/opsx:propose implement phase-N per `prd/phase-N-*.md`
 
-Authoritative spec is prd/prd.md (and prd/toolchain-supplement.md, incorporated by
+We're building the system described in the produce requirements design (PRD) document `prd/prd.md` (and `prd/toolchain-supplement.md`, incorporated by
 reference). The brief scopes this phase and points at the governing PRD sections;
 where the brief restates a requirement, the PRD's wording governs. Produce the
 proposal, the spec deltas, and a tasks checklist for this phase's scope only.
@@ -155,7 +155,7 @@ Before any implementation, have the agent write the phase's **initial test plan*
 from the spec:
 
 ```
-Write the initial test plan for phase-N to test-plans/phase-N-initial.md — what you
+Write the initial test plan for phase-N to `test-plans/phase-N-initial.md` — what you
 believe needs testing for this phase and why, derived from the spec before you write
 code. This file will be frozen.
 ```
@@ -207,7 +207,7 @@ openlore test --coverage          # which spec scenarios have corresponding test
 At phase end:
 
 ```
-Write test-plans/phase-N-final.md: the final test plan that supersedes the initial
+Write `test-plans/phase-N-final.md`: the final test plan that supersedes the initial
 one and reflects what was actually tested, plus a short changelog of how it differs
 from the frozen initial plan — scenarios added, removed, or changed, and why.
 ```

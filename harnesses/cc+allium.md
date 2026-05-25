@@ -110,12 +110,13 @@ This is the forward spec step **and the primary defect-detection surface.**
 ```
 /allium:elicit
 
-We're building the system specified in prd/prd.md (with prd/toolchain-supplement.md,
+We're building the system described in the produce requirements design document `prd/prd.md` (with `prd/toolchain-supplement.md`,
 incorporated by reference). Work in phases; this session covers ONLY Phase 1, scoped
-by prd/phase-1-scaffold.md — the error model and the two format validators (taxon
-name, username). prd/prd.md is authoritative; where the brief restates a requirement,
-the PRD's wording governs. Capture scope comments marking what's deferred to later
-phases. Write the spec to specs/taxonomy.allium. Ask me what you need; I'll answer
+by `prd/phase-1-scaffold.md` — the error model and the two format validators (taxon
+name, username). The brief scopes this phase and points at the governing PRD sections;
+where the brief restates a requirement,
+the wording in `prd/prd.md` governs. Capture scope comments marking what's deferred to later
+phases. Write the spec to `specs/taxonomy.allium`. Ask me what you need; I'll answer
 from the PRD.
 ```
 
@@ -126,9 +127,9 @@ domain invariants, proposals, review, cascade all have genuine ambiguity).
 ```
 /allium:elicit
 
-Continue the spec in specs/taxonomy.allium. This session adds ONLY Phase N, scoped by
-prd/phase-N-*.md and the PRD sections it cites. Read the existing spec first and don't
-re-litigate settled entities. prd/prd.md is authoritative. Ask me what you need; I'll
+Continue the spec in `specs/taxonomy.allium`. This session adds ONLY Phase N, scoped by
+`prd/phase-N-*.md` and the PRD sections it cites. Read the existing spec first and don't
+re-litigate settled entities. `prd/prd.md` is authoritative. Ask me what you need; I'll
 answer from the PRD. Flag any tension you find between this phase's requirements and
 what's already in the spec.
 ```
@@ -169,7 +170,7 @@ Then, in Claude Code:
 
 ```
 Using the Allium test obligations from `allium plan` and this phase's spec, write the
-initial test plan for Phase N to test-plans/phase-N-initial.md — what needs testing
+initial test plan for Phase N to `test-plans/phase-N-initial.md` — what needs testing
 and why, derived from the spec before any implementation. This file will be frozen.
 ```
 
@@ -188,11 +189,11 @@ Have the agent implement this phase's scope with the `.allium` spec as the bindi
 description of behaviour:
 
 ```
-Implement Phase N now. The spec in specs/taxonomy.allium is the authoritative
+Implement Phase N now. The spec in `specs/taxonomy.allium` is the authoritative
 description of behaviour; the code is its expression. Build only this phase's scope
 (respect the deferred markers). Write the phase's automated tests, covering the
 obligations from the initial test plan plus anything you discover while building.
-Use the runtime/test framework from prd/toolchain-supplement.md.
+Use the runtime/test framework from `prd/toolchain-supplement.md`.
 ```
 
 If implementation surfaces a behaviour the spec didn't capture, update the spec
@@ -224,7 +225,7 @@ green before closing the phase.
 ### Step 5 — Final test plan + changelog
 
 ```
-Write test-plans/phase-N-final.md: the final plan superseding the initial one,
+Write `test-plans/phase-N-final.md` the final plan superseding the initial one,
 reflecting what was actually tested (including propagated tests and anything added
 while building), plus a short changelog of how it differs from the frozen initial
 plan — scenarios added, removed, or changed, and why.

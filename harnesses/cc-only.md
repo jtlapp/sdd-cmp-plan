@@ -73,14 +73,14 @@ Start the phase by pointing the agent at the brief and the PRD. This is delibera
 plain prompt — no orientation tool, no spec step:
 
 ```
-We're building the system in prd/prd.md (with prd/toolchain-supplement.md, incorporated
+We're building the system described in `prd/prd.md` (with `prd/toolchain-supplement.md`, incorporated
 by reference and equally binding for toolchain/test mechanics). We work in sequential
-phases. This phase is Phase N — implement only what prd/phase-N-*.md puts in scope, and
-respect its "explicitly deferred" list. prd/prd.md is authoritative; where the brief
-restates a requirement, the PRD's wording governs. prd/sample-taxonomy.md is
+phases. This phase is Phase N — implement only what `prd/phase-N-*.md` puts in scope, and
+respect its "explicitly deferred" list. `prd/prd.md` is authoritative; where the brief
+restates a requirement, the PRD's wording governs. `prd/sample-taxonomy.md` is
 non-normative naming data for tests only.
 
-Read prd/phase-N-*.md and the PRD sections it cites, then tell me your plan for this
+Read `prd/phase-N-*.md` and the PRD sections it cites, then tell me your plan for this
 phase before you start coding. Raise anything in the spec that's unclear or that you'd
 have to decide yourself.
 ```
@@ -95,7 +95,7 @@ Before implementation:
 
 ```
 Before writing code, write the initial test plan for Phase N to
-test-plans/phase-N-initial.md — what you believe needs testing for this phase and why,
+`test-plans/phase-N-initial.md` — what you believe needs testing for this phase and why,
 derived from the spec. This file will be frozen and not edited afterward.
 ```
 
@@ -115,7 +115,7 @@ status — they're applied identically everywhere.)
 ```
 Implement Phase N now. Build only this phase's scope. Write the phase's automated tests
 covering the initial test plan plus anything you find you need while building. Use the
-runtime and test framework specified in prd/toolchain-supplement.md.
+runtime and test framework specified in `prd/toolchain-supplement.md`.
 ```
 
 Let the agent work however it normally does. Run the suite via the supplement's single
@@ -124,7 +124,7 @@ documented command and get it green before closing the phase.
 ### Step 4 — Final test plan + changelog
 
 ```
-Write test-plans/phase-N-final.md: the final plan superseding the initial one,
+Write `test-plans/phase-N-final.md`: the final plan superseding the initial one,
 reflecting what was actually tested (including anything added while building), plus a
 short changelog of how it differs from the frozen initial plan — scenarios added,
 removed, or changed, and why.
