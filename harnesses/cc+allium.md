@@ -303,12 +303,10 @@ experiment, defects, or scoring.
 - Derive and maintain the spec from the requirements: read `prd/` to understand intent,
   then capture it in the spec. Once captured, the spec is what you implement and test
   against — consult it first, not the raw requirements, during coding.
-- When the spec and the requirements disagree, or the requirements can't be cleanly
-  expressed in the spec (ambiguity, contradiction, or silence), do not paper over it:
-  record an `open question` / surface the conflict and ask. Resolve from `prd/prd.md`'s
-  wording where it speaks; where it's silent, leave the open question for a human decision.
-  Reconciling that gap — not overriding the spec with the PRD — is the job.
-  
+- If a requirement is unclear or underdetermined when you go to specify it, don't
+  guess: record it with `open question` and resolve it explicitly before relying on
+  it. Resolve from `prd/prd.md`'s wording; keep the derived spec aligned with it
+  rather than overriding the spec with the raw PRD.  
 ## Testing
 - Each phase ships an automated test suite for the behavior it introduces, run by the
   single documented command from the toolchain supplement.

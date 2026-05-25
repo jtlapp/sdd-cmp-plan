@@ -341,12 +341,11 @@ scoring. Here's a starting point:
 - Each phase: explore the phase's requirements, turn them into an OpenSpec change,
   implement against it, then archive it into the living specs. Consult the spec during
   coding, not the raw requirements.
-- When requirements are ambiguous, contradictory, or silent on something the spec needs,
-  surface it during explore / in the change proposal and decide explicitly rather than
-  inventing behaviour. Resolve from `prd/prd.md`'s wording where it speaks; where it's
-  silent, record the decision. Reconciling that gap is the job — don't override the
-  derived spec with the raw PRD.
-
+- If a requirement is unclear or underdetermined when you go to specify it, don't
+  guess: raise it during explore or in the change proposal and resolve it explicitly
+  before relying on it. Resolve from `prd/prd.md`'s wording; keep the derived spec
+  aligned with it rather than overriding the spec with the raw PRD.
+  
 ## How we work
 - Spec-driven via OpenSpec: every phase is an OpenSpec change — explore, propose, apply,
   archive. Align the spec before writing code.
