@@ -1,4 +1,4 @@
-# PRD: Taxon-Tree & Change-Proposal Server
+# PRD: Collaborative Taxon Tree Server
 
 ## 1. Purpose and audience
 

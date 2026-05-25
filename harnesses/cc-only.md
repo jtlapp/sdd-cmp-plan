@@ -173,7 +173,7 @@ Keep it to the same durable facts the other configs state, minus any methodology
 files add. **No** mention of the experiment, defects, or scoring.
 
 ```markdown
-# Project: Tree Proposal Server
+# Project: Collaborative Taxon Tree Server
 
 ## Source of truth
 - `prd/prd.md` is the authoritative specification. `prd/toolchain-supplement.md` is

@@ -282,7 +282,7 @@ Durable project facts and the workflow contract only — **no** mention of the
 experiment, defects, or scoring.
 
 ```markdown
-# Project: Tree Proposal Server
+# Project: Collaborative Taxon Tree Server
 
 ## Requirements (source of intent)
 - `prd/prd.md` is the authoritative statement of *requirements* — what the system must

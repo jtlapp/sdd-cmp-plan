@@ -273,7 +273,7 @@ any engineer joining the project. **No** mention of the experiment, defects, or
 scoring. Here's a starting point:
 
 ```markdown
-# Project: Tree Proposal Server
+# Project: Collaborative Taxon Tree Server
 
 ## Requirements (source of intent)
 - `prd/prd.md` is the authoritative statement of *requirements*. `prd/toolchain-supplement.md`
