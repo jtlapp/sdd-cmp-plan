@@ -275,6 +275,8 @@ scoring. Here's a starting point:
 ```markdown
 # Project: Collaborative Taxon Tree Server
 
+@.openlore/analysis/CODEBASE.md
+
 ## Requirements (source of intent)
 - `prd/prd.md` is the authoritative statement of *requirements*. `prd/toolchain-supplement.md`
   is incorporated by reference and equally binding for toolchain and test mechanics;
@@ -301,11 +303,23 @@ scoring. Here's a starting point:
 ## How we work
 - Spec-driven via OpenSpec: every phase is an OpenSpec change — propose, apply,
   archive. Align the spec before writing code.
-- When the spec is ambiguous or silent on something you need, do not silently invent
-  behavior: surface the question, decide explicitly, and record the decision in the
-  change proposal. Resolve from the PRD's own wording wherever it speaks.
-- Use the OpenLore `orient` tool to get your bearings in existing code before
-  starting a phase, instead of re-reading files exhaustively.
+
+## OpenLore (orientation & drift)
+
+Start every phase by orienting, then reach for inventory/trace tools instead of
+re-reading files:
+1. `orient "<phase task>"` — relevant functions, files, spec domains, call paths,
+   insertion points in one call. Always first.
+2. For data models / APIs / middleware: `get_schema_inventory`,
+   `get_route_inventory`, `get_middleware_inventory`.
+3. "How does X reach Y?" → `trace_execution_path`. Before modifying a function,
+   `get_subgraph` / `analyze_impact` to see blast radius.
+4. On demand when orient isn't enough: `search_code`, `suggest_insertion_points`,
+   `get_spec <domain>`, `search_specs`, `get_function_body` / `get_function_skeleton`.
+5. At each phase gate, check spec drift: `check_spec_drift` (MCP) or `openlore drift`
+   (CLI).
+
+Do NOT use `record_decision` or any ADR/decision-recording mechanism in this project.
 
 ## Testing
 - Each phase ships an automated test suite for the behavior it introduces, run by a
