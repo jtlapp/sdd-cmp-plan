@@ -110,7 +110,7 @@ This is the forward spec step **and the primary defect-detection surface.**
 ```
 /allium:elicit
 
-We're building the system described in the produce requirements design document `prd/prd.md` (with `prd/toolchain-supplement.md`,
+We're building the system described in the product requirements design (PRD) document `prd/prd.md` (with `prd/toolchain-supplement.md`,
 incorporated by reference). Work in phases; this session covers ONLY Phase 1, scoped
 by `prd/phase-1-scaffold.md` — the error model and the two format validators (taxon
 name, username). The brief scopes this phase and points at the governing PRD sections;
