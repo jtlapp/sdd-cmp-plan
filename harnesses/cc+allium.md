@@ -284,27 +284,30 @@ experiment, defects, or scoring.
 ```markdown
 # Project: Tree Proposal Server
 
-## Source of truth
-- `prd/prd.md` is the authoritative specification. `prd/toolchain-supplement.md` is
-  incorporated by reference and equally binding: it governs toolchain and test
-  mechanics (runtime, module system, build, test framework); `prd/prd.md` governs
-  domain behavior.
-- `prd/phase-N-*.md` scope the work into sequential phases. Where a brief restates a
-  requirement, the PRD's wording governs. Build only the current phase's scope; respect
-  each brief's "explicitly deferred" list.
+## Requirements (source of intent)
+- `prd/prd.md` is the authoritative statement of *requirements* — what the system must
+  do. `prd/toolchain-supplement.md` is incorporated by reference and equally binding for
+  toolchain and test mechanics (runtime, module system, build, test framework); domain
+  requirements live in `prd/prd.md`.
+- `prd/phase-N-*.md` scope the requirements into sequential phases. Where a brief
+  restates a requirement, `prd/prd.md`'s wording governs. Build only the current phase's
+  scope; respect each brief's "explicitly deferred" list.
 - `prd/sample-taxonomy.md` is non-normative test data (fiction-genre names) — a naming
   resource for tests, not a requirements input.
 
-## Specification
-- `specs/taxonomy.allium` is the behavioural specification — the primary artifact. It
-  captures what the system does (entities, rules, transitions, invariants), not how
-  it's built. The code is the expression of the spec; keep them aligned.
-- When you find an ambiguity or contradiction, do not resolve it silently. Record an
-  `open question` (or surface the conflict) and ask. Resolve from the PRD's own wording
-  wherever it speaks; where it is silent, leave the open question for a human decision.
-- After editing any `.allium` file, validate it (the CLI hook runs automatically when
-  installed) and fix structural diagnostics before continuing.
-
+## Specification (what we build from)
+- `specs/taxonomy.allium` is *the specification* — the behavioural model derived from the
+  requirements and the authoritative description of behaviour for implementation. The code
+  is the expression of this spec; keep them aligned.
+- Derive and maintain the spec from the requirements: read `prd/` to understand intent,
+  then capture it in the spec. Once captured, the spec is what you implement and test
+  against — consult it first, not the raw requirements, during coding.
+- When the spec and the requirements disagree, or the requirements can't be cleanly
+  expressed in the spec (ambiguity, contradiction, or silence), do not paper over it:
+  record an `open question` / surface the conflict and ask. Resolve from `prd/prd.md`'s
+  wording where it speaks; where it's silent, leave the open question for a human decision.
+  Reconciling that gap — not overriding the spec with the PRD — is the job.
+  
 ## Testing
 - Each phase ships an automated test suite for the behavior it introduces, run by the
   single documented command from the toolchain supplement.
@@ -318,6 +321,17 @@ experiment, defects, or scoring.
 ## State reset
 - `POST /reset` restores fresh-boot state and is callable without a registered user.
   Every phase that adds state confirms `reset` clears that state.
+
+## Allium toolchain workarounds
+- Known parser limitation (juxt/allium#37): a `contract` operation signature cannot
+  express a zero-argument operation — both `name: () -> ReturnType` and
+  `name: -> ReturnType` fail to parse. If you need a parameterless contract operation
+  (e.g. a listing, global-state fetch, or reset surface), use the documented unit-
+  parameter workaround: `name: (_unit: Any) -> ReturnType`. The `_unit: Any` parameter
+  exists only to satisfy the grammar — it carries no domain meaning, must not be
+  referenced in `requires`/`ensures`, and should not influence the modelled behaviour.
+  Don't spend effort rediscovering the bug or inventing a different shape; apply this
+  workaround and move on.
 ```
 
 ---

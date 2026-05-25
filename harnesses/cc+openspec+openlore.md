@@ -275,17 +275,29 @@ scoring. Here's a starting point:
 ```markdown
 # Project: Tree Proposal Server
 
-## Source of truth
-- `prd/prd.md` is the authoritative specification. `prd/toolchain-supplement.md` is
-  incorporated into it by reference and is equally binding: it governs toolchain and
-  test mechanics (runtime, module system, build, test framework); `prd/prd.md`
-  governs domain behavior.
-- `prd/phase-N-*.md` scope the work into sequential phases. Where a brief restates
-  a requirement, the PRD's wording governs. Build only the current phase's scope;
+## Requirements (source of intent)
+- `prd/prd.md` is the authoritative statement of *requirements*. `prd/toolchain-supplement.md`
+  is incorporated by reference and equally binding for toolchain and test mechanics;
+  domain requirements live in `prd/prd.md`.
+- `prd/phase-N-*.md` scope the requirements into sequential phases. Where a brief restates
+  a requirement, `prd/prd.md`'s wording governs. Build only the current phase's scope;
   respect each brief's "explicitly deferred" list.
-- `prd/sample-taxonomy.md` is non-normative test data (fiction-genre names) — a
-  naming resource for tests, not a requirements input.
+- `prd/sample-taxonomy.md` is non-normative test data — a naming resource for tests, not a
+  requirements input.
 
+## Specification (what we build from)
+- The OpenSpec specs under `openspec/specs/` (and the per-phase change proposals) are *the
+  specification* — derived from the requirements and authoritative for implementation. The
+  code implements the spec; keep them aligned.
+- Each phase: turn the phase's requirements into an OpenSpec change, implement against it,
+  then archive it into the living specs. Consult the spec during coding, not the raw
+  requirements.
+- When requirements are ambiguous, contradictory, or silent on something the spec needs,
+  surface it in the change proposal and decide explicitly rather than inventing behaviour.
+  Resolve from `prd/prd.md`'s wording where it speaks; where it's silent, record the
+  decision. Reconciling that gap is the job — don't override the derived spec with the raw
+  PRD.
+  
 ## How we work
 - Spec-driven via OpenSpec: every phase is an OpenSpec change — propose, apply,
   archive. Align the spec before writing code.
