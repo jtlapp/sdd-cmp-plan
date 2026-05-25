@@ -27,6 +27,11 @@ domain logic, no persistence of taxa, no business endpoints yet.
    validation-vs-forbidden distinction the PRD draws in §4.
 5. **Test runner.** Wire up the automated test harness (§13) so every subsequent
    phase ships tests.
+6. **State reset endpoint (§15).** The `POST /reset` operation that restores
+   fresh-boot state, exempt from the §4 gate (it must work against an empty
+   registry). At this phase there is little to clear; implement it as a true full
+   reset so that, as each later phase adds state, that state falls under reset's
+   fresh-start guarantee — and confirm so in that phase.
 
 ## Explicitly deferred
 
@@ -76,3 +81,5 @@ separate is what makes the anticipated-vs-discovered difference visible.
 - Both validators exist as pure, independently importable functions whose
   behavior matches §3.4 and §4, including the case-insensitive comparisons.
 - The test runner executes via a single documented command.
+- `POST /reset` returns the server to fresh-boot state and is callable without a
+  registered user.

@@ -2,13 +2,22 @@
 
 This folder breaks the project described in `prd.txt` into seven sequential
 implementation phases, one brief per file. Each brief is meant to be handed to a
-development harness together with the **full `prd.txt`**.
+development harness together with the **full `prd.txt`** and the
+**`toolchain-supplement.txt`** (which `prd.txt` incorporates by reference,
+§2/§13), plus the **non-normative `sample-taxonomy.txt`** as a source of
+fiction-genre names for tests (§13).
 
 ## How to use these briefs
 
 - **`prd.txt` is the authoritative specification.** Each brief scopes a slice of
   the work and points at the PRD sections that govern it. Where a brief restates
-  a requirement, the PRD's own wording governs.
+  a requirement, the PRD's own wording governs. The `toolchain-supplement.txt` is
+  incorporated into `prd.txt` by reference and is equally binding: it governs
+  toolchain and test mechanics (runtime version, module system, build model, test
+  framework), while `prd.txt` governs domain behavior. Hand it to the harness
+  alongside every brief. The `sample-taxonomy.txt` is **non-normative** test data
+  — a naming resource for the §13 suite — not a specification input; it neither
+  adds requirements nor constrains the system's structure.
 - Phases are **sequential**: each assumes the previous phases are complete and
   their modules are available to call into.
 - Each brief states what is **in scope**, what is **explicitly deferred** to a
@@ -17,6 +26,9 @@ development harness together with the **full `prd.txt`**.
 - The done-when checklists describe behavior, not test scenarios. Per §13,
   choosing and structuring the specific test scenarios is the harness's
   responsibility and is deliberately not enumerated in these briefs.
+- The reset endpoint (PRD §15) is introduced in Phase 1; by its fresh-start
+  definition it must clear every later phase's state, and each phase confirms this
+  for the state it adds.
 
 ## Test-plan requirement (for your reference)
 
@@ -42,7 +54,8 @@ project.
 
 1. **Scaffold, error model, format validators** — stack skeleton, JSON error
    envelope and status mapping, the two pure format validators (taxon name,
-   username), and the test runner.
+   username), the test runner, and the `POST /reset` state-reset endpoint used
+   for per-test isolation.
 2. **Users, identity, registry** — registration, `X-Username` parsing, and the
    400/403 middleware that gates every later write.
 3. **Domain model and the invariant engine** — in-memory store, IDs, edges, the

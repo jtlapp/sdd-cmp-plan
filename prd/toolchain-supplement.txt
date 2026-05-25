@@ -68,6 +68,15 @@ node --test "dist/**/*.test.js"
 - Rationale: uniformity across harnesses — zero test dependencies, no
   framework/version variance, and no install step that can itself fail.
 
+## Test isolation
+
+Any test that exercises server state must call the reset endpoint (PRD §15)
+**before** it runs, so no state leaks between tests — e.g. wired into a per-test
+`beforeEach`/setup. Such tests must assume an empty registry and empty graph at
+start, register the users they need, and must not assume specific server-assigned
+IDs (implementation-defined, §2). Pure unit tests that touch no server state need
+not reset.
+
 ## Per-phase obligations (restating, not replacing, the briefs)
 
 - Every phase still ships its automated test suite per §13 of the PRD and the

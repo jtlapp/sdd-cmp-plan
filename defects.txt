@@ -206,3 +206,27 @@ The two inconsistencies (§6.4 and §15.5) are far apart; the two gaps (§8/§10
 §12/§15.5) are far apart. No defect alters the worked examples, so Appendix A
 remains a clean, consistent reference an implementer can rely on regardless of
 which defects a harness surfaces.
+---
+
+## Phase mapping (for scoring)
+
+Maps each defect to the implementation phase(s) that own its sections and the
+phase by which detection is expected. Phases reference the briefs in the phase
+folder. **Caveat:** every harness receives the full `prd.txt`, not just its
+phase's sections, so any defect is catchable in any phase. "Expected detection
+phase" is the *bar* — the earliest phase whose scoped work forces engagement with
+the defect's sections and at which a competent harness's spec analysis / initial
+test plan should surface it. Catching a defect **before** its expected phase is a
+positive signal, not a deviation; the expected phase is the latest point by which
+a strong harness should have flagged it.
+
+| Defect | Kind / difficulty | Defect sections → owning phase(s) | Expected detection | Note |
+|--------|-------------------|-----------------------------------|--------------------|------|
+| 1 | Inconsistency, obvious | §12.2 and the §15.5 cascade endpoint → **P7** | **P7** | Both clauses concern accept-cascade, implemented in P7; that is where they must be reconciled. A P6 harness scanning all of §15.5 for the single-accept endpoints could spot the cascade-endpoint contradiction early, but §12.2 and cascade are out of P6 scope. |
+| 2 | Inconsistency, subtle | §3.3(3)/§3.4 → **P3**; §6.4 → **P4** | **P4** | The case-insensitive side is built in P3 (invariant module); the contradicting case-sensitive clause is only read when implementing edge-add in P4 against that module. Detectable in P3 only by reading ahead into out-of-scope §6.4. |
+| 3 | Gap, obvious | proposer surface §15.4/§11.5 → **P5**; reviewer/lifecycle actions §12/§15.5 → **P6–P7** | **P6** (earliest **P5**; backstop **P7**) | A completeness pass can ask "how does a proposer cancel?" once submission exists (P5); the proposer-vs-reviewer asymmetry is unmissable once reviewer actions land (P6); §13 lifecycle coverage in P7 is the final backstop. |
+| 4 | Gap, subtle | §8 and §10.1 → **P5** | **P5** (re-surfaces **P6**) | Both sections are in Phase 5 routing scope; composing §8's "partly by others" with §10.1's route-to-owner exposes the self-routed case at routing time. If missed, it re-surfaces in P6 when a proposer would accept their own queued change. |
+
+Operationally, "detection" means the defect is surfaced in that phase's spec
+analysis, raised as a question, or reflected in its initial/final test plan —
+consistent with the per-phase test-plan artifacts the briefs require.

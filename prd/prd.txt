@@ -18,6 +18,13 @@ The deliverable is a working server plus an automated test suite (see §13).
 
 - Runtime: **Node.js**, language **TypeScript**.
 - HTTP layer: **Hono**, exposing a **REST** API.
+- **Toolchain and test conventions.** The accompanying toolchain supplement
+  (`toolchain-supplement.txt`) is **incorporated into this PRD by reference and is
+  binding**. It fixes the toolchain details this section leaves open — the
+  Node.js version, the module system, the build/compile model, and project
+  layout — and the test mechanics referenced in §13. Consult it for any such
+  detail not stated here. Where it and this PRD overlap, the supplement governs
+  **toolchain and testing mechanics** and this PRD governs **domain behavior**.
 - No authentication. Each request carries a possibly-null **username** (see §4).
   The server trusts that the client legitimately represents the named user.
 - No user interface. Clients are out of scope; only server behavior is specified.
@@ -463,8 +470,29 @@ The implementation must include an automated test suite covering:
 
 Tests should use taxa representing **genres of fiction** (e.g. "Epic Fantasy,"
 "Psychological Thriller," "Space Opera") rather than real-world scientific or
-organizational categories. The genre taxonomy used in tests may be fabricated as
-needed; it need not match any published classification.
+organizational categories. A sample fiction-genre taxonomy (`sample-taxonomy.txt`)
+is provided as a **non-normative** source of realistic names and a suggestive
+hierarchy; tests may draw names from it, rearrange them, extend it, or fabricate
+others as needed. No taxonomy used in tests need match any published
+classification.
+
+The sample taxonomy is **inspiration only** — a pool of names. It carries no
+owners, IDs, or live structure, and the system builds nothing from it directly.
+The trees the product operates on are created dynamically by operations, so tests
+must **construct and vary that structure themselves**: multiple roots and trees,
+shared taxa and DAG shapes, multi-owner ownership and routing, grafts, and the
+deliberate invariant violations (cycle, in-tree duplicate, and in-tree name clash,
+including case-variant clashes per §3.4). Draw names from the taxonomy where
+convenient; assign owners, and let the server assign IDs.
+
+The test framework, file layout, and run commands are fixed by the toolchain
+supplement (incorporated by reference, §2): tests use the built-in `node:test`
+runner with `node:assert/strict`, and no third-party test framework is permitted.
+This section governs **what behavior** the suite must cover; the supplement
+governs **how** tests are written and run. The per-phase initial and final
+test-plan artifacts (with changelog) required by the implementation briefs are
+likewise binding. Tests that exercise server state must isolate it via the reset
+endpoint (§15) before each test; the toolchain supplement fixes the mechanics.
 
 Specific test scenarios are intentionally **not enumerated** here; choosing and
 structuring them is part of the implementation.
@@ -502,6 +530,19 @@ The following consequences of the model are **intentional** and must not be
 All requests carry the user via the `X-Username` header (absent/empty = null
 user). All responses are JSON. The endpoint set below is normative in behavior;
 exact paths may be adapted so long as the operations and semantics are preserved.
+
+**State reset (test support).** The server exposes a single reset operation —
+suggested `POST /reset` — that restores the server to the state it would have
+immediately after a fresh start: it clears **all** in-memory state (taxa and
+edges; proposals and their derived changes and queues; the user registry),
+leaving no taxa, no proposals, and an empty registry, and resets any server-side
+ID-generation state. Reset is **exempt from the §4 authorization gate**: it is
+callable by any client regardless of `X-Username`, including the null and
+unregistered cases. It runs under the §11.1 write serialization and returns
+`204 No Content` on success (or the §15.6 error envelope on failure). Because
+reset is defined as equivalent to a fresh start, every phase that introduces new
+in-memory state must keep reset clearing that state. Tests use it for isolation
+(§13).
 
 ### 15.1 User registry
 
