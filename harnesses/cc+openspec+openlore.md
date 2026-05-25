@@ -224,13 +224,10 @@ those go in the final plan, not back into the frozen initial plan.
 
 ### Step 5 — Re-analyze + drift check (OpenLore)
 
-After the code lands, refresh the graph and check the new code against the
-OpenSpec-authored spec:
+After the code lands, check the new code against the OpenSpec-authored spec:
 
 ```bash
-openlore analyze --force          # refresh call graph + CODEBASE.md for next phase's orient()
 openlore drift --verbose          # spec-vs-code drift on this phase's changes
-openlore audit                    # coverage gaps: uncovered funcs, hub gaps, stale domains
 ```
 
 `drift` compares git changes against spec mappings, so make sure Step 3's and any
@@ -350,19 +347,16 @@ scoring. Here's a starting point:
 - Spec-driven via OpenSpec: every phase is an OpenSpec change — explore, propose, apply,
   archive. Align the spec before writing code.
 
-## OpenLore (orientation & drift)
-Start every phase by orienting, then reach for inventory/trace tools instead of
-re-reading files:
-1. `orient "<phase task>"` — relevant functions, files, spec domains, call paths,
-   insertion points in one call. Always first.
-2. For data models / APIs / middleware: `get_schema_inventory`,
-   `get_route_inventory`, `get_middleware_inventory`.
-3. "How does X reach Y?" → `trace_execution_path`. Before modifying a function,
-   `get_subgraph` / `analyze_impact` to see blast radius.
-4. On demand when orient isn't enough: `search_code`, `suggest_insertion_points`,
-   `get_spec <domain>`, `search_specs`, `get_function_body` / `get_function_skeleton`.
-5. At each phase gate, check spec drift: `check_spec_drift` (MCP) or `openlore drift`
-   (CLI).
+## OpenLore
+
+After implementing a phase and getting its tests passing and before writing the final
+test plan, check spec drift via the `check_spec_drift` tool. Report a brief summary
+of the result either way: state that the check ran and, if clean, say so; if it
+reports drift, list each item and its category (e.g. code changed but spec not updated,
+a new file with no spec, or a spec referencing deleted code). Then reconcile any drift:
+update the spec to match the intended behavior, or fix the code if the spec is right,
+and re-run until clean. If the drift reflects a deliberate, spec-backed change you
+can't resolve, note it in the summary rather than forcing it.
 
 Do NOT use `record_decision` or any ADR/decision-recording mechanism in this project.
 
