@@ -111,96 +111,34 @@ Your installed OpenSpec profile is **core**: the available commands are
 
 ### Step 1 — Orient (OpenLore)
 
-For Phase 1 there's nothing to orient against; skip. For Phases 2–7, start the
-Claude Code session by having the agent orient itself in the prior phases' code
-before it reads the new brief. **`orient` is an MCP tool the agent calls, not a
-command you type** — you prompt the agent in plain language and it invokes the tool.
-This only returns anything useful if the previous phase's `openlore analyze --force`
-(Step 5) has run, so the graph reflects the latest code.
-
-Use this generic prompt every phase, substituting the phase number and the
-one-liner from the table below (keep the rest verbatim, so OpenLore's orientation
-contribution stays comparable across phases):
-
-```
-Before we start Phase N, get oriented in the existing code first. Use the OpenLore
-orient tool with a short description of this phase's work — "<one-liner>" — to
-surface the prior-phase modules, functions, and insertion points this phase will
-build on, rather than re-reading files exhaustively. Then read `prd/phase-N-*.md` and
-the sections of `prd/prd.md` it cites. Don't write any code or proposal yet — just
-confirm what you're building on and flag anything from earlier phases that looks
-relevant or surprising.
-```
-
-One-liner per phase:
-
-| Phase | `<one-liner>` |
-|---|---|
-| 2 | add the user registry, X-Username identity parsing, and the write-gating auth middleware |
-| 3 | add the in-memory domain store, IDs, edges, the reachability layer, the pure §3.3 invariant engine, and the read endpoints |
-| 4 | add create/edit/edge-add-remove/delete owner actions and global write serialization on top of the invariant engine |
-| 5 | add proposal submission: payload parsing, change derivation and per-op routing, dependency classification, and initial latent/queued disposition |
-| 6 | add the single-review loop: accept-single, reject, latent→queued promotion, and ownership transfer on accepting a create |
-| 7 | add atomic accept-cascade with rollback, the three §11.4 invalidation modes with dismiss, and end-to-end integration |
-
-The payoff is modest in Phases 2–3 (the codebase is still small) and grows in
-Phases 4–7. Run it every phase anyway for consistency across the three
-configurations.
+UPDATE: Section deleted because I opted not to include anything from OpenLore
+but drift checks.
 
 ### Step 2 — Explore, then author the spec (OpenSpec)
 
-This is the forward spec step and the **main place PRD defects should surface.** It
-is two commands, not one. `/opsx:propose` takes a **short change-name argument**
-(e.g. `phase-3-domain-invariants`), so the framing goes
-into `/opsx:explore` first, as discussion, and `propose` inherits that context.
+UPDATE: The first time I opened Claude Code in this repo, it automatically picked
+up phase one and entered explore mode for it. Each subsequent time (for each
+subsequent session), I started explore mode with `/opsx:explore`, at which point
+it immediately picked up the next available phase and began the exploration process.
 
-**First, explore** to establish the phase's context (this command produces no
-artifacts — it's the think-it-through step, and the natural place ambiguities and
-contradictions come up):
-
-```
-/opsx:explore
-
-We're building the system described in the product requirements document (PRD)
-`prd/prd.md` (with `prd/toolchain-supplement.md`, incorporated by reference). This
-phase is Phase N, scoped by `prd/phase-N-*.md`, which points at the governing PRD
-sections; where the brief restates a requirement, the PRD's wording governs. Help me
-think through this phase's scope before we commit to a change: what's in scope, what
-the brief explicitly defers, and anything in the cited PRD sections that's unclear or
-that we'd have to decide ourselves.
-```
-
-**Then propose** with a terse change name matching the brief filename:
+After the LLM felt it had answes to its questions, it asked whether to write the
+proposal, because this information was in `CLAUDE.md`. I don't believe I ever had
+to type the following, just had to confirm it was okay to write the proposal:
 
 ```
 /opsx:propose phase-N-<short-name>
 ```
-
 e.g. `/opsx:propose phase-3-domain-invariants`. This scaffolds the proposal, the spec
 deltas, and the tasks checklist for this phase's scope, using the explored context.
 
-> **Argument convention:** `/opsx:propose <description>` expects a short descriptor,
-> and the command does its own thinking/scaffolding from there — it does **not**
-> prompt you for a multi-line brief afterward. Put the briefing in `/opsx:explore`
-> (or in an ordinary message before `propose`), never as the command's argument. If
-> in doubt about how a command consumes input, open its definition under
-> `.claude/commands/opsx/` and look for `$ARGUMENTS`.
-
-Let the agent surface ambiguities here naturally — **do not** coach it toward the
-defects. If it raises a question about the spec, answer **only** from the PRD's own
-wording; if the PRD genuinely doesn't decide something, say so plainly and let the
-harness choose, recording its choice in the proposal. (That recorded choice is your
-signal that it detected a gap.)
-
 ### Step 3 — Freeze the initial test plan
 
-Before any implementation, have the agent write the phase's **initial test plan**
-from the spec:
+After the LLM completed the proposal, it would either ask whether it should write the
+initial test plan, in which case I said "yes," or whether it should apply the proposal,
+in which case I responded as follows:
 
 ```
-Write the initial test plan for phase-N to `test-plans/phase-N-initial.md` — what you
-believe needs testing for this phase and why, derived from the spec before you write
-code. This file will be frozen.
+Write the initial test plan.
 ```
 
 Commit it **on its own** so the freeze is enforced by git history, not honor system:
@@ -214,6 +152,9 @@ After this commit, do not edit `phase-N-initial.md` again.
 
 ### Step 4 — Implement (OpenSpec apply, under Claude Code)
 
+After it completed writing the test plan, it usually did not offer a next step,
+so I had to type:
+
 ```
 /opsx:apply
 ```
@@ -224,7 +165,8 @@ those go in the final plan, not back into the frozen initial plan.
 
 ### Step 5 — Re-analyze + drift check (OpenLore)
 
-After the code lands, check the new code against the OpenSpec-authored spec:
+The LLM would automatically test for drift with OpenLore, so I never had to run
+the following:
 
 ```bash
 openlore drift --verbose          # spec-vs-code drift on this phase's changes
@@ -235,12 +177,6 @@ WIP commits are in place (or pass `--base <ref>` to pick the comparison point).
 If `drift`/`audit` flags something, feed it back to the agent and let it reconcile
 code and spec the way it normally would. (Note: this catches spec-vs-code drift, not
 PRD-vs-spec — see the scope note at top.)
-
-Optionally generate spec-driven test stubs to compare against what the agent wrote:
-
-```bash
-openlore test --coverage          # which spec scenarios have corresponding tests
-```
 
 ### Step 6 — Final test plan + changelog
 

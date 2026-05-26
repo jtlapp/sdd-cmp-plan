@@ -1,5 +1,8 @@
 # Development process — Claude Code alone (control)
 
+**Note:** Once I got the workflow started, the LLM proceeded with the plan without my
+having to dictate each step, because `CLAUDE.md` provided most of the steps. 
+
 This is the per-phase procedure for the **Claude Code only** configuration — the
 experiment's **control**. No spec framework, no architectural-memory tool, no
 behavioural-spec language. The whole point is to capture what Claude Code does on its
@@ -91,13 +94,8 @@ PRD and nothing more. Don't elaborate it into a spec-analysis checklist.
 
 ### Step 2 — Freeze the initial test plan
 
-Before implementation:
-
-```
-Before writing code, write the initial test plan for Phase N to
-`test-plans/phase-N-initial.md` — what you believe needs testing for this phase and why,
-derived from the spec. This file will be frozen and not edited afterward.
-```
+I never had to ask the LLM to write the initial test plan before implementation, because
+this was in `CLAUDE.md`, and it always did so on its own.
 
 Commit it on its own so the freeze is enforced by git history:
 
@@ -112,11 +110,8 @@ status — they're applied identically everywhere.)
 
 ### Step 3 — Implement
 
-```
-Implement Phase N now. Build only this phase's scope. Write the phase's automated tests
-covering the initial test plan plus anything you find you need while building. Use the
-runtime and test framework specified in `prd/toolchain-supplement.md`.
-```
+After writing the test plan, Claude Code would usually ask whether to implement the
+plan, and I'd say "yes," but I think sometimes I had to ask it to do so directly.
 
 Let the agent work however it normally does. Run the suite via the supplement's single
 documented command and get it green before closing the phase.
