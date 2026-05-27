@@ -8,6 +8,7 @@ The objective of this experiment is to evaluate how well spec-driven development
 
 ## Caveats
 
+- I had the tools create anticipated test cases in advance of implementation, which certainly affected outcomes. The tools also maintained summaries of the final test cases and the diffs from the initial.
 - OpenSpec is not intended for more than 10 tasks at a time, but several phases had more than 10.
 - I started with a specification detailing observable behavior but not implementation. Spec-driven development may be more geared toward working with the LLM to define the initial specification, especially one as technical as I defined.
 - The tools gave opportunities for me to explore aspects of implementation during planning, but I only explored the aspects that the LLM appeared to be indicating were potentially problematic. I think both LLMs would have done better had I done more joint exploration.
@@ -15,6 +16,8 @@ The objective of this experiment is to evaluate how well spec-driven development
 ## Tools Tested
 
 I intended to test OpenSpec, Allium, and vanilla Claude Code, but the effort was too time-consuming and I did not get around to testing Allium. I did however design the test of OpenSpec to be comparable to the intended test of Allium.
+
+TBD: describe the tools
 
 | Feature | Claude Code<br>w/ Planning | OpenSpec | OpenSpec +<br> OpenLore drift | Allium<br>(untested) |
 | --- | --- | --- | --- | --- |
@@ -134,6 +137,53 @@ graph TD
 ```
 
 In reality, the trees would be much more complex, sharing many subtrees having many different owners.
+
+## PRD and Phases
+
+TBD
+
+TBD: Planned to measure refactors for peer-to-peer protocol
+
+## Introduced Issues
+
+TBD
+
+## Anticipated Complications
+
+TBD
+
+## Process
+
+Add `CLAUDE.md`
+
+Claude Code
+
+- Plan
+- (Interaction)
+- (Write initial test plan)
+- Approve and accept edits
+- (Write final test plan)
+
+OpenSpec
+
+- Explore
+- (Interaction)
+- Propose
+- (Interaction ?)
+- (Write initial test plan)
+- Apply
+- (Write final test plan)
+- Archive
+
+## Conclusions
+
+- OpenSpec invites more participation in the design and implementation process
+- OpenSpec `explore` is friendlier and more enjoyable than CC's `plan`
+- OpenSpec is a great tool for understanding what the AI is doing
+- OpenSpec is a better tool for helping junior devs learn
+- OpenSpec takes a lot more time and is a lot more costly
+- Vanilla CC is better for vibe code a quick solution
+- Allium, having 9 agents vote on each code change, is probably very expensive, best suited for developing a particular component.
 
 ## Notes
 

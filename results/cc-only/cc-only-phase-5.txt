@@ -1,0 +1,638 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-only
+
+❯ We're building the system described in `prd/prd.md` (with                     
+  `prd/toolchain-supplement.md`, incorporated                                   
+  by reference and equally binding for toolchain/test mechanics). We work in    
+  sequential                                                                    
+  phases. This phase is Phase 5 — implement only what                           
+  `prd/phase-5-proposal-submission.md` puts in scope, and                       
+  respect its "explicitly deferred" list. `prd/prd.md` is authoritative; where  
+  the brief                                                                     
+  restates a requirement, the PRD's wording governs. `prd/sample-taxonomy.md`   
+  is                                                                            
+  non-normative naming data for tests only.                                     
+                                                                                
+  Read `prd/phase-5-proposal-submission.md` and the PRD sections it cites, then 
+   tell me your plan for this                                                   
+  phase before you start coding. Raise anything in the spec that's unclear or   
+  that you'd                                                                    
+  have to decide yourself.                                                      
+                                                                                
+
+  Read 26 files, listed 2 directories (ctrl+o to expand)
+
+⏺ I've read the Phase 5 brief, the cited PRD sections, and the existing code so
+  I understand the patterns to extend. Here's my plan and the spec ambiguities
+  I'd like to flag before coding.
+
+  Plan
+
+  Module layout
+
+  - src/proposals.ts — in-memory store of proposals + per-reviewer queue index;
+  pure routing/dependency/disposition logic; registers itself with state.ts for
+  /reset.
+  - src/routes/proposals.ts — POST /proposals (§15.4), GET /proposals (§15.2,
+  optional ?proposer=), GET /proposals/{id} (§11.5).
+  - src/routes/queue.ts — GET /queue (§15.2), the calling user's queued changes.
+  - Wire all three into src/app.ts.
+
+  Data model (in memory)
+
+  - Proposal { id, proposer, targetRootId, topTaxonId, payload, changes }.
+  - payload is the parsed-and-normalized payload tree (we assign each node an
+  internal node-id so the status view can be rendered isomorphically).
+  - Each operative node (rename/add/detach) gets a Change { id, proposalId, op, 
+  payloadPath (top→here, by internal-id), 
+  affectedTaxonId/proposedName/payloadParentTaxonId, state, reviewer? }.
+  - Disposition per §11.3: a change is queued if no add/graft ancestor sits on
+  its payload path; otherwise latent. Nothing is promoted in this phase.
+  - Reviewer per §10.1: rename → owner of id; add/detach → owner of
+  payload-parent's taxon. For queued changes reviewers are always knowable now;
+  for latent changes whose payload-parent is an add-create, the reviewer is
+  deferred (the accepting reviewer becomes the owner — Phase 6+). We don't need
+  to record reviewers for latent changes in this phase since /queue only
+  surfaces queued ones.
+  - no-op taxa produce no change; status view marks them structural.
+
+  Submission-time validation
+
+  In this order, mapped to the §15.6 error codes already used by Phase 4:
+  1. Identity gate (identityWithRegistry + requireWriter) — same as Phase 4
+  writes.
+  2. Body parsing — { targetRootId, topTaxonId, payload } shape → 400.
+  3. targetRootId must be an existing root → 404 / 400 as appropriate.
+  4. payload.id must equal topTaxonId; top op must be no-op or rename (§9.2); id
+   must reference a taxon currently reachable from targetRootId (§9.2) →
+  400/404/409.
+  5. Per-node schema (§9.1): required op/id/name per the table; detach must be a
+   leaf; add-create requires name; add-graft ignores name.
+  6. Every non-create id must reference an existing taxon (otherwise we can't
+  route). I'm treating this as the minimum needed for §10.1 to be well-defined;
+  deeper existence-dependency checking is acceptance-time (§10.3, deferred).
+  7. Inside the write lock (§11.1): assign proposal-id + change-ids, compute
+  payload paths and decision-vs-existence dependency classification, compute
+  initial disposition per §11.3, install queued changes into per-reviewer
+  queues.
+
+  Tests (proposed file split, mirroring Phase-4 style)
+
+  - proposalsParse.test.ts — schema, top-taxon constraints, partial-payload
+  rule, malformed bodies.
+  - proposalsRouting.test.ts — per-op routing including the boundary case where
+  a rename and its add/detach siblings route to different owners.
+  - proposalsDependencies.test.ts — decision-dep vs existence-dep classification
+   along the payload path (the A.1 keystone: a rename ancestor does not block a
+  descendant).
+  - proposalsDisposition.test.ts — initial latent/queued, including nested
+  creates (Appendix A.1 Paranormal Romance shape) and grafts with nested ops
+  (A.2 shape).
+  - proposalsStatusView.test.ts — GET /proposals/{id} is isomorphic to the
+  submitted payload, dispositions correct, no-op shown as structural.
+  - queueRead.test.ts — GET /queue returns only queued changes for the caller;
+  auth and isolation across users.
+  - proposalsAuth.test.ts — null / unregistered / malformed-X-Username against
+  POST /proposals and reads.
+  - proposalsReset.test.ts — /reset clears proposals, queues, and change-id
+  counter.
+  - proposalsIntegration.test.ts — multi-step end-to-end stories (mixed-owner
+  routing, graft preserves ownership in dependency calc, partial payload not
+  asserting unlisted siblings).
+  - Plus envelope-shape assertions woven through, as in Phase 4.
+
+  Two artifacts to ship: test-plans/phase-5-initial.md (frozen at first commit
+  of impl) and test-plans/phase-5-final.md (delivered at the end, with a
+  changelog vs. the initial).
+
+  Spec items I'd like your call on before I start
+
+  1. topTaxonId field name. §15.4 and the brief both say topTaxonId. Appendix
+  A's examples use topNodeId. I'll use topTaxonId as the on-the-wire field and
+  treat the appendix as a non-normative typo. OK?
+  2. Must payload.id === topTaxonId? Not stated. I'll require equality and 400
+  otherwise — they name the same taxon and a mismatch is ambiguous.
+  3. Submission-time "id must exist" check. I'll require every non-add-create id
+   (rename, detach, no-op, graft) in the payload to reference a
+  currently-existing taxon (404 if not), because routing per §10.1 needs an
+  owner. Deeper existence-dependency satisfaction (the no-op/rename ancestor's
+  id being at the right position in the target tree) I'll defer to
+  acceptance-time per §10.3, since the brief explicitly defers all
+  decision/promotion/invalidation behavior. Acceptable scope?
+  4. Disposition value for no-op in the §11.5 status view. §11.5 calls for "a
+  disposition indicating they are structural and produce no change" without
+  naming it. I'll use the literal string "structural" to keep it disjoint from
+  the five real states.
+  5. POST /proposals 201 response body. §15.4 says "the proposal ID and its
+  initial status tree." I'll return { id, proposer, targetRootId, topTaxonId, 
+  payload: <status tree> } — the same shape GET /proposals/{id} returns.
+  6. GET /proposals filter. §15.2 mentions "optionally filterable by proposer."
+  I'll support ?proposer=<username> (case-insensitive, matched via the
+  registry's canonical form).
+  7. GET /queue in Phase 5. §15.2 says "including those in the
+  invalid–awaiting-dismiss sub-state" — that sub-state can't yet arise (no
+  acceptances in this phase), so Phase 5's queue is just truly queued changes.
+  Phase 7 will add the invalid-awaiting-dismiss case.
+
+  If any of those go against what you'd prefer, say the word and I'll adjust
+  before writing the initial test plan.
+
+✻ Brewed for 4m 22s
+
+※ recap: Goal: implement Phase 5 (proposal submission, routing, dependency classification, initial latent/queued disposition) per the brief. I've shared a plan and seven spec-ambiguity decisions awaiting your sign-off. Next: your answers, then I write the initial test plan. (disable recaps in /config)
+
+❯ write the initial test plan                                                   
+
+⏺ Write(test-plans/phase-5-initial.md)
+  ⎿  Wrote 688 lines to test-plans/phase-5-initial.md
+      2 # Phase 5 — Initial Test Plan (FROZEN)
+      3 This plan is written from the spec (`prd/prd.md` §8, §9 (§9.1–§9.
+      4 (§10.1–§10.3), §11.3, §11.5, §13, §14, §15.2 (`GET /proposals*`,
+      5 `GET /queue`), §15.4, §15.6 and `prd/phase-5-proposal-submission.
+        md`)
+        nds, thisimplementation begins**. Once any implementation code la
+      7 file is frozen and must not be edited. The phase's `phase-5-final
+      8 supersedes it and records what was actually tested, with a change
+        log of
+      9 differences.
+     … +838 lines (ctrl+o to expand)
+
+⏺ Initial test plan written to test-plans/phase-5-initial.md. It's organized as:
+
+  - Scope under test — in-scope items mapped to §-references;
+  explicitly-deferred items called out.
+  - Resolved spec ambiguities (15 decisions, including the seven I raised with
+  you plus eight more I had to settle to write the plan): field naming,
+  payload.id↔topTaxonId equality, submission-time existence check,
+  targetRootId/topTaxonId/in-tree-presence error codes (400 vs 404 vs 409), 201
+  response body, disposition values, status-node shape, change-ID format,
+  list/queue response shapes, self-routed proposals allowed, validation
+  precedence, unknown-key lenience, and reset clearing the new state.
+  - Coverage dimensions — mapped to the brief's three categories, plus the §14
+  properties verifiable in this phase (non-atomic moves' structural
+  independence, the Paranormal Romance latent-chain shape, graft preserving
+  ownership in routing).
+  - Test groups (1–12) — parsing/validation, routing, dependency classification,
+   disposition boundary cases, partial-payload, status view, list, queue,
+  cross-phase integration, reset, write-serialization addendum, and §15.6
+  envelope round-trips folded into the per-group suites.
+  - Out of scope — Phase 6/7 deferrals (review actions, promotion, invalidation,
+   reasons, cascade).
+  - Test mechanics — node:test, NBSP for malformed-header tests, names drawn
+  from sample-taxonomy.md, Appendix-A fixtures intentionally re-used so the
+  worked examples are testable verbatim.
+
+  This file is now frozen as soon as I start implementing. Ready for me to begin
+   coding when you give the word.
+
+✻ Cooked for 3m 31s
+
+❯ proceed                                                                       
+
+⏺ Starting with the proposals state module — it carries the parsing, validation,
+   routing, dependency classification, and disposition logic.
+
+⏺ Write(src/proposals.ts)  ⎿  Wrote 706 lines to src/proposals.ts
+       2 // Proposal subsystem from PRD §8–§11 (Phase 5 slice).
+         e/ In Phase 5 we accept proposals, parse the payload tree, deriv
+       4 // individually-routed changes, classify dependencies per §10.2,
+       5 // each change's INITIAL disposition (latent vs. queued) per §11
+         .3. No
+         ppens yet —n, acceptance, rejection, invalidation, or cascade ha
+       8 // all of that is deferred to Phases 6–7.
+       9 // This module is PURE+STATE: schema/validation/routing logic is
+      10 // (takes a TaxonState snapshot), and the resulting Proposal rec
+         ords are
+     … +793 lines (ctrl+o to expand)
+
+⏺ Write(src/routes/proposals.ts)
+  ⎿  Wrote 132 lines to src/routes/proposals.ts
+       2 // Proposal routes from PRD §15.4 (write) and §15.2 (reads).
+         ser is the callerals          — submit a proposal (§15.4), propo
+       4 //   GET  /proposals          — list proposals, optional ?propos
+       5 //   GET  /proposals/{id}     — §11.5 isomorphic status view (§1
+         5.2)
+       7 // Write goes through the §11.1 lock (same one Phase 4 introduce
+       8 // Reads are open to all (including the null user) per §15.2; th
+         e
+         n/ identity gate still runs so a malformed X-Username 400s and a
+      10 // unregistered well-formed one 403s on the writes.
+     … +134 lines (ctrl+o to expand)
+
+⏺ Write(src/routes/queue.ts)
+  ⎿  Wrote 28 lines to src/routes/queue.ts
+         hanges /queue from PRD §15.2 — calling user's currently queued c
+       2 // across all proposals. In Phase 5 only the "queued" state is r
+       3 // the §15.2 "including invalid–awaiting-dismiss" sub-state is u
+         nreachable
+       4 // until Phase 7 introduces external invalidation.
+       6 // Auth (initial-plan decision #11):
+       7 //   - null caller     → 200, empty list (nothing is ever routed
+       8 //   - unregistered    → 403 (the identity gate rejects)
+       9 //   - malformed       → 400 (the identity gate rejects)
+      10 //   - registered      → 200, the caller's queue
+     … +24 lines (ctrl+o to expand)
+
+⏺ Update(src/app.ts)
+  ⎿  Added 2 lines
+       3  import { ApiError, errorBody, httpError, STATUS_BY_CODE } from 
+          "./errors.js";
+       4  import type { AppEnv } from "./identity.js";
+       5  import { identityWithRegistry } from "./middleware/identity.js"
+          ;
+       6 +import { proposalsRouter } from "./routes/proposals.js";       
+       7 +import { queueRouter } from "./routes/queue.js";               
+       8  import { readsRouter } from "./routes/reads.js";
+       9  import { usersRouter } from "./routes/users.js";
+      10  import { writesRouter } from "./routes/writes.js";
+
+⏺ Update(src/app.ts)
+  ⎿  Added 7 lines
+      41    // gates and the write lock live inside the sub-router.
+      42    app.route("/", writesRouter);
+      43  
+      44 +  // §15.4 proposal submission + §15.2 proposal reads. Identity
+         + gates and                                                     
+      45 +  // the write lock live inside the sub-router.                
+      46 +  app.route("/", proposalsRouter);                             
+      47 +                                                               
+      48 +  // §15.2 GET /queue — caller's currently queued changes.     
+      49 +  app.route("/", queueRouter);                                 
+      50 +                                                               
+      51    app.notFound((c) =>
+      52      httpError(c, "not_found", `no route matches ${c.req.method}
+           ${new URL(c.req.url).pathname}`),
+      53    );
+
+⏺ Now let me build to catch typing issues before writing tests.
+
+⏺ Bash(npx tsc 2>&1 | head -100)
+  ⎿  (No output)
+
+⏺ Clean build. Marking task 4 done and starting tests.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ I'll create a small shared helper file to keep the proposal tests focused; the
+   existing test files all hand-roll the same freshApp/register boilerplate and
+  the proposal tests will need even more setup.
+
+⏺ Write(test/proposalsTestHelpers.ts)
+  ⎿  Wrote 183 lines to test/proposalsTestHelpers.ts
+        selfhared helpers for the Phase-5 test suites. Not a test file it
+      2 // (filename intentionally lacks `.test.` so the node:test glob s
+      3 // Compiled by `tsc` alongside the rest of the suite.
+      4 //
+        -4-writesthe boilerplate of fresh-app + register + taxa-via-Phase
+      6 // out of every proposal test file. Each helper is a thin wrapper
+      7 // `app.request(...)` — no domain logic, no assertions beyond fix
+        ture
+        p toanity (registration / creation must succeed for the test setu
+      9 // be meaningful).
+     … +189 lines (ctrl+o to expand)
+
+⏺ Now the parsing test file:
+
+⏺ Write(test/proposalsParse.test.ts)
+  ⎿  Wrote 558 lines to test/proposalsParse.test.ts
+         y validation.§9.2, §15.4, §15.6 — proposal payload parsing & bod
+       2 //
+       3 // Pure body-level concerns: the proposal envelope, per-op schem
+       4 // constraints, and the §4 identity gate composing with POST /pr
+         oposals.
+       5 
+       7 import assert from "node:assert/strict";
+       8 
+       9 import {
+      10   attach,
+     … +590 lines (ctrl+o to expand)
+
+⏺ Write(test/proposalsRouting.test.ts)
+  ⎿  Wrote 317 lines to test/proposalsRouting.test.ts
+       2 // PRD §10.1 — per-op routing assertions.
+       3 // Each change is routed to a single reviewer:
+       4 //   rename → owner of the renamed taxon (the id)
+       5 //   detach → owner of the payload-parent
+       6 //   add (create or graft) → owner of the payload-parent
+       8 //   no-op → produces no change
+       9 // Routing observability: a queued change appears in EXACTLY ONE
+          reviewer's
+      10 // /queue. We seed multi-owner state, submit a proposal, then re
+         ad /queue
+     … +340 lines (ctrl+o to expand)
+
+⏺ Write(test/proposalsDependencies.test.ts)  ⎿  Wrote 324 lines to test/proposalsDependencies.test.ts
+        spositions.2, §11.3 — dependency classification observable via di
+      2 //
+      3 // Decision dependency = add/graft ancestor on the payload path. 
+      4 // with any decision-dep ancestor is LATENT at submission. Existe
+        nce
+      5 // dependencies (no-op / rename ancestors) do NOT gate queuing — 
+      6 // keystone is that a pending rename does not block a descendant.
+      7 
+      8 import { test } from "node:test";
+      9 import assert from "node:assert/strict";
+     … +350 lines (ctrl+o to expand)
+
+⏺ Write(test/proposalsDisposition.test.ts)
+  ⎿  Wrote 254 lines to test/proposalsDisposition.test.ts
+         osition.11.3 — boundary cases for the initial latent/queued disp
+       2 //
+       3 // The decision-dependency rule is "any add ancestor on the payl
+       4 // these tests pin the boundaries where the disposition flips, a
+         nd the
+       5 // invariants that queue-placement matches disposition.
+       7 import { test } from "node:test";
+       8 import assert from "node:assert/strict";
+       9 
+      10 import {
+     … +267 lines (ctrl+o to expand)
+
+⏺ Write(test/proposalsPartialPayload.test.ts)
+  ⎿  Wrote 126 lines to test/proposalsPartialPayload.test.ts
+       2 // PRD §9.1 — partial-payload rule.
+       3 // "A payload taxon asserts something about itself and about the
+          children
+       4 //  explicitly listed beneath it, and asserts NOTHING about any 
+         unlisted
+       6 //  children of the corresponding live taxon."
+       7 import { test } from "node:test";
+       8 import assert from "node:assert/strict";
+       9 
+      10 import {
+     … +127 lines (ctrl+o to expand)
+
+⏺ Write(test/proposalsStatusView.test.ts)
+  ⎿  Wrote 277 lines to test/proposalsStatusView.test.ts
+       2 // PRD §11.5, §15.2 — GET /proposals/{id} status view.
+       3 // The view is "isomorphic to the submitted payload tree" with a
+       4 // disposition per node. Tests pin structure and shape, not pros
+         e.
+       5 
+       6 import { test } from "node:test";
+       7 import assert from "node:assert/strict";
+       8 
+       9 import {
+      10   attach,
+     … +289 lines (ctrl+o to expand)
+
+⏺ Task list is current — task 5 is still in progress while I write the remaining
+   test files. Continuing.
+
+⏺ Write(test/proposalsList.test.ts)
+  ⎿  Wrote 142 lines to test/proposalsList.test.ts
+         er filter..2 — GET /proposals list endpoint with optional propos
+       2 
+       3 import { test } from "node:test";
+       4 import assert from "node:assert/strict";
+       5 
+       6 import {
+       7   createTaxon,
+       8   freshApp,
+       9   listProposals,
+      10   register,
+     … +138 lines (ctrl+o to expand)
+
+⏺ Write(test/queueRead.test.ts)
+  ⎿  Wrote 301 lines to test/queueRead.test.ts
+       2 // PRD §15.2 — GET /queue.
+       3 // Lists the calling user's currently queued changes across all 
+         proposals.
+       4 // Phase 5: only the "queued" state is reachable; invalid-awaiti
+         ng-dismiss
+       6 // is unreachable until Phase 7.
+       7 import { test } from "node:test";
+       8 import assert from "node:assert/strict";
+       9 
+      10 import {
+     … +322 lines (ctrl+o to expand)
+
+⏺ Write(test/proposalsReset.test.ts)
+  ⎿  Wrote 147 lines to test/proposalsReset.test.ts
+          Phase 5.5 — POST /reset clears all proposal state introduced by
+       2 
+       3 import { test } from "node:test";
+       4 import assert from "node:assert/strict";
+       5 
+       6 import {
+       7   attach,
+       8   createTaxon,
+       9   freshApp,
+      10   getQueue,
+     … +145 lines (ctrl+o to expand)
+
+⏺ Write(test/proposalsIntegration.test.ts)
+  ⎿  Wrote 256 lines to test/proposalsIntegration.test.ts
+         lierhase-5 integration — multi-step end-to-end stories tying ear
+       2 // phases plus proposal submission to verify the phase composes 
+         correctly.
+       3 // Stops short of acceptance (Phase 6+).
+       4 
+       6 import assert from "node:assert/strict";
+       7 
+       8 import {
+       9   attach,
+      10   createTaxon,
+     … +269 lines (ctrl+o to expand)
+
+⏺ Now the writeSerialization addendum:
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test/writeSerialization.test.ts)
+  ⎿  Added 48 lines
+      108    assert.equal(body.id, "t1", "reset must restart the ID count
+           er");
+      109  });
+      110  
+      111 +test("write serialization: two POST /proposals fired in the sa
+          +me tick produce ordered proposal+change ids", async () => {   
+      112 +  const app = await freshApp();                               
+      113 +  // Alice owns the target root; the proposal is a trivial no-
+          +op + create,                                                  
+      114 +  // submitted by Alice (self-routed) for simplicity.         
+      115 +  const root = (await (await postTaxa(app, "Alice", "Fiction")
+          +).json()) as TaxonRecord;                                     
+      116 +  const body = JSON.stringify({                               
+      117 +    targetRootId: root.id,                                    
+      118 +    topTaxonId: root.id,                                      
+      119 +    payload: {                                                
+      120 +      op: "no-op",                                            
+      121 +      id: root.id,                                            
+      122 +      children: [{ op: "add", id: null, name: "X" }],         
+      123 +    },                                                        
+      124 +  });                                                         
+      125 +  // Dispatch three in the same tick.                         
+      126 +  const [r1, r2, r3] = await Promise.all([                    
+      127 +    app.request("/proposals", {                               
+      128 +      method: "POST",                                         
+      129 +      headers: { "Content-Type": "application/json", "X-Userna
+          +me": "Alice" },                                               
+      130 +      body,                                                   
+      131 +    }),                                                       
+      132 +    app.request("/proposals", {                               
+      133 +      method: "POST",                                         
+      134 +      headers: { "Content-Type": "application/json", "X-Userna
+          +me": "Alice" },                                               
+      135 +      body,                                                   
+      136 +    }),                                                       
+      137 +    app.request("/proposals", {                               
+      138 +      method: "POST",                                         
+      139 +      headers: { "Content-Type": "application/json", "X-Userna
+          +me": "Alice" },                                               
+      140 +      body,                                                   
+      141 +    }),                                                       
+      142 +  ]);                                                         
+      143 +  assert.equal(r1.status, 201);                               
+      144 +  assert.equal(r2.status, 201);                               
+      145 +  assert.equal(r3.status, 201);                               
+      146 +  const p1 = (await r1.json()) as { id: string; payload: { chi
+          +ldren: { changeId: string }[] } };                            
+      147 +  const p2 = (await r2.json()) as { id: string; payload: { chi
+          +ldren: { changeId: string }[] } };                            
+      148 +  const p3 = (await r3.json()) as { id: string; payload: { chi
+          +ldren: { changeId: string }[] } };                            
+      149 +  // Proposal ids monotonic.                                  
+      150 +  const pNums = [p1.id, p2.id, p3.id].map((s) => Number(s.slic
+          +e(1)));                                                       
+      151 +  assert.equal(pNums[0]! + 1, pNums[1]!);                     
+      152 +  assert.equal(pNums[1]! + 1, pNums[2]!);                     
+      153 +  // Change ids monotonic (and queue order matches).          
+      154 +  const cNums = [p1, p2, p3].map((p) => Number(p.payload.child
+          +ren[0]!.changeId.slice(1)));                                  
+      155 +  assert.equal(cNums[0]! + 1, cNums[1]!);                     
+      156 +  assert.equal(cNums[1]! + 1, cNums[2]!);                     
+      157 +});                                                           
+      158 +                                                              
+      159  test("write serialization: a parent-add and a follow-up read s
+           ee the consistent post-write state", async () => {
+      160    const app = await freshApp();
+      161    const root = (await (await postTaxa(app, "Alice", "Root")).j
+           son()) as TaxonRecord;
+
+⏺ All test files written. Marking task 5 done and moving to verification.
+
+⏺ Bash(npx tsc 2>&1 | head -100)
+  ⎿  (No output)
+
+⏺ Bash(node --test "dist/**/*.test.js" 2>&1 | tail -80)
+  ⎿        at TestContext.<anonymous> (file:///Users/joe/repos/sdd-cmp-cc-o
+     nly/dist/test/queueRead.test.js:30:12)
+           at async Test.run (node:internal/test_runner/test:1069:7)
+     … +76 lines (ctrl+o to expand)
+
+⏺ Two issues to fix: submitOk consumes the response body twice (text() then
+  json()), and several malformed-header tests use a regular space instead of
+  NBSP, which Hono strips. Fixing both.
+
+⏺ Update(test/proposalsTestHelpers.ts)
+  ⎿  Added 4 lines, removed 1 line
+      133   *  parsed response body. Most happy-path tests use this. */
+      134  export async function submitOk(app: App, caller: string, body:
+            unknown) {
+      135    const res = await postProposal(app, caller, body);
+      136 -  assert.equal(res.status, 201, `submitProposal failed: ${awai
+          -t res.text()}`);                                              
+      136 +  if (res.status !== 201) {                                   
+      137 +    const text = await res.text();                            
+      138 +    assert.fail(`submitProposal failed (${res.status}): ${text
+          +}`);                                                          
+      139 +  }                                                           
+      140    return (await res.json()) as ProposalResponse;
+      141  }
+      142  
+
+  Searched for 2 patterns (ctrl+o to expand)
+
+⏺ None of my files use NBSP yet. Fixing all four malformed-header sites.
+
+  Searched for 2 patterns, read 1 file (ctrl+o to expand)
+
+⏺ Task list is accurate — I'm mid-task-6 fixing failures. Patching all four
+  malformed-header sites to use NBSP:
+⏺ Bash(python3 -c "
+      import re…)
+  ⎿  /Users/joe/repos/sdd-cmp-cc-only/test/proposalsParse.test.ts no change
+     /Users/joe/repos/sdd-cmp-cc-only/test/proposalsList.test.ts patched
+     /Users/joe/repos/sdd-cmp-cc-only/test/proposalsStatusView.test.ts patc
+     … +2 lines (ctrl+o to expand)
+
+⏺ Bash(python3 -c "
+      import sys…)
+  ⎿  (No output)
+
+⏺ Bash(python3 << 'EOF'
+      files = ['/Users/joe/repos/sdd-cmp-cc-only/test/proposalsList.test.ts',…)
+  ⎿  /Users/joe/repos/sdd-cmp-cc-only/test/proposalsList.test.ts b'X-Userna
+     me \xe2\x86\x92 400", async () => {\n  const ap'
+     /Users/joe/repos/sdd-cmp-cc-only/test/proposalsList.test.ts b'X-Userna
+     … +13 lines (ctrl+o to expand)
+
+⏺ NBSP is correctly in place across all four files. Rebuilding and re-running:
+
+⏺ Bash(npx tsc 2>&1 | head -40 && echo "---BUILD DONE---" && node --test
+      "dist/**/*.test.js" 2>&1 | tail -30)
+  ⎿  ---BUILD DONE---
+     ✔ parseUsername: internal whitespace is allowed (0.105458ms)
+     ✔ parseUsername: leading space → malformed (not null) (0.101708ms)
+     … +28 lines (ctrl+o to expand)
+
+⏺ All 402 tests pass, 115 of them new in Phase 5. Marking task 6 done and
+  writing the final test plan.
+
+⏺ Bash(node --test "dist/**/*.test.js" 2>&1 | grep -E "^(test at|✔|✖)" | awk
+      -F'/' '{print $NF}' | awk -F'(' '{print $1}' | sort -u | wc -l; echo
+      "---per-file count---…)
+  ⎿  395
+     ---per-file count---
+     dist/test/proposalsParse.test.js: 49 tests
+     … +9 lines (ctrl+o to expand)
+
+⏺ Write(test-plans/phase-5-final.md)
+  ⎿  Wrote 353 lines to test-plans/phase-5-final.md
+       2 # Phase 5 — Final Test Plan
+       3 This supersedes `phase-5-initial.md` (frozen). It records what w
+         as actually
+         al plan andh a changelog of how it differs from the frozen initi
+       5 the reason for each change.
+       6 
+       8 ## Run command
+       9 ```
+      10 npm test                 # tsc && node --test "dist/**/*.test.js
+         "
+     … +403 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | tail -10)
+  ⎿  ✔ write serialization: two POST /proposals fired in the same tick prod
+     uce ordered proposal+change ids (1.2575ms)
+     ✔ write serialization: a parent-add and a follow-up read see the consi
+     … +9 lines (ctrl+o to expand)
+
+⏺ Phase 5 complete. All 402 tests pass (115 new); clean npx tsc build.
+
+  Deliverables:
+
+  - src/proposals.ts — payload parsing, validation, change derivation, §10.1
+  routing, §10.2 dependency classification, §11.3 initial disposition,
+  per-reviewer queue index, reset seam.
+  - src/routes/proposals.ts — POST /proposals (under the §11.1 lock), GET 
+  /proposals (optional ?proposer= filter), GET /proposals/{id} (§11.5 status
+  view).
+  - src/routes/queue.ts — GET /queue for the caller's queued changes.
+  - src/app.ts — both routers mounted.
+  - Ten Phase 5 test files plus one new test in writeSerialization.test.ts,
+  sharing helpers via test/proposalsTestHelpers.ts.
+  - test-plans/phase-5-initial.md (frozen) and test-plans/phase-5-final.md (with
+   the changelog of differences).
+
+  The phase stops at submission time as specified — no promotion, acceptance,
+  rejection, or invalidation; latent changes simply remain latent and the queue
+  surfaces only queued entries.
+
+✻ Sautéed for 14m 6s
+
+※ recap: Phase 5 (proposal submission, routing, and initial disposition) is implemented with all 402 tests passing and both the initial and final test plans written. Next: hand off for review or move on to Phase 6. (disable recaps in /config)
+
+❯ /usage 
+  ⎿  Settings dialog dismissed

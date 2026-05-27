@@ -1,0 +1,875 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-only
+
+❯ /clear                                                                        
+  ⎿  (no content)
+
+❯ We're building the system described in `prd/prd.md` (with                     
+  `prd/toolchain-supplement.md`, incorporated                                   
+  by reference and equally binding for toolchain/test mechanics). We work in    
+  sequential                                                                    
+  phases. This phase is Phase 2 — implement only what `prd/phase-2-users.md`    
+  puts in scope, and                                                            
+  respect its "explicitly deferred" list. `prd/prd.md` is authoritative; where  
+  the brief                                                                     
+  restates a requirement, the PRD's wording governs. `prd/sample-taxonomy.md`   
+  is                                                                            
+  non-normative naming data for tests only.                                     
+                                                                                
+  Read `prd/phase-2-users.md` and the PRD sections it cites, then tell me your  
+  plan for this                                                                 
+  phase before you start coding. Raise anything in the spec that's unclear or   
+  that you'd                                                                    
+  have to decide yourself.                                                      
+                                                                                
+
+  Searched for 1 pattern, read 16 files, listed 1 directory (ctrl+o to expand)
+
+⏺ I've read prd/phase-2-users.md and the cited PRD sections (§2, §4, §15.1,
+  §15.2, §15.6) plus the toolchain supplement, and I've reviewed what Phase 1
+  left behind. Below is my plan and a set of ambiguities I want to resolve with
+  you before coding, because how I resolve them changes the middleware's shape.
+
+  What's already in place (Phase 1)
+
+  - Hono app factory (src/app.ts) with /health and /reset. Reset goes through a
+  central registerReset(...) seam in src/state.ts — Phase 2's registry must plug
+   into that.
+  - ApiError / httpError / errorBody and the §15.6 status mapping.
+  - parseUsername(headerValue) returns {kind: "null" | "valid" | "malformed"} —
+  exactly the three-way distinction §4 draws (registry membership is left to
+  Phase 2 to layer on).
+  - Tests run via npm test (tsc && node --test "dist/**/*.test.js").
+
+  Plan
+
+  1. Registry (§15.1) — src/registry.ts
+
+  - In-memory store: Map<lowercase, canonical-form>. Lookups case-insensitive
+  (§4); store original casing for the listing.
+  - register(name), isRegistered(name), list(), clear().
+  - Wires into registerReset(clear) so POST /reset empties it (confirms the
+  phase brief's "reset clears the state this phase adds").
+
+  2. Routes (§15.1) — src/routes/users.ts
+
+  - POST /users — body { username }. Validates body with the existing
+  validateTaxonName-style approach but using parseUsername's valid rule (§4
+  format). Malformed body → 400 validation_error. Duplicate (case-insensitive) →
+   409 conflict. Success → 201 with the canonical form echoed back.
+  - GET /users — returns the registered list. Open to all including null.
+
+  3. Identity middleware (§4) — src/middleware/identity.ts
+
+  Per-request: parse X-Username, then resolve to one of:
+  - {kind: "null"} (absent/empty)
+  - 400 validation_error (malformed format)
+  - 403 forbidden (well-formed but not in registry)
+  - {kind: "registered", username: <canonical>}
+
+  Attached to c.set("identity", …) for downstream handlers. Two minor variants
+  needed:
+  - identity (default): applies format + registry check.
+  - identityFormatOnly: format check only, skipping registry check — used for
+  POST /users because the caller is by definition allowed to be unregistered
+  (otherwise no first user can ever register).
+  - POST /reset keeps its §15 exemption and gets neither.
+
+  4. Write gate (§4) — src/middleware/requireWriter.ts
+
+  Runs after identity. If identity is null → 403 forbidden. Otherwise pass
+  through. This is the reusable middleware Phases 4–7 will mount on write
+  endpoints. To "prove it in isolation" (per the brief), I'll exercise it in
+  tests via a tiny Hono app wired to a dummy route — I won't add a fake
+  production route.
+
+  5. Tests (node:test, node:assert/strict)
+
+  - test/registry.test.ts — POST /users & GET /users: success, malformed body
+  (multiple shapes), missing field, non-string field, duplicate
+  case-insensitive, leading/trailing-whitespace name, body containing extra
+  fields (ignored vs. rejected — see Q5), reset clears it.
+  - test/identityMiddleware.test.ts — all four outcomes against a stub route,
+  interplay with Phase 1 parseUsername and §15.6 envelope.
+  - test/requireWriter.test.ts — null rejected, registered accepted (chained on
+  top of identity).
+  - test/integration.test.ts — register Alice → call protected route as Alice →
+  2xx; call as Bob (unregistered) → 403; call as null → 403; call with malformed
+   → 400. End-to-end through the real createApp.
+  - Reset isolation: each state-touching test calls POST /reset first per the
+  supplement.
+
+  6. Artifacts
+
+  - test-plans/phase-2-initial.md — written before any implementation lands,
+  then frozen.
+  - test-plans/phase-2-final.md + changelog — written at end.
+
+  Questions I'd like to resolve with you before coding
+
+  The PRD is mostly unambiguous, but four points have real implementation-shape
+  consequences. I have a working interpretation for each — please confirm or
+  correct.
+
+⏺ User answered Claude's questions:
+  ⎿  · POST /users says "open to all (no authentication)" (§15.1) but §4 also 
+     says "the server confirms every non-null username on a request against the 
+     registry and rejects requests bearing an unregistered username." How should
+      I reconcile these on POST /users specifically when the caller's X-Username
+      is non-null but unregistered? → Skip registry check on POST /users 
+     (Recommended)
+     · §4 says a malformed X-Username "is rejected as a validation error." 
+     Should that format-check apply on every endpoint (including GET /users, 
+     which is otherwise available to all), or only on endpoints that actually 
+     need a non-null user? → Universal on all endpoints except /reset 
+     (Recommended)
+     · PRD doesn't pin the JSON response shapes for POST /users and GET /users. 
+     What shape do you want? → POST: {username: "Alice"}; GET: {users: ["Alice",
+      "Bob"]} (Recommended)
+     · How should the registry treat case for usernames being stored and listed?
+      (lookups are case-insensitive per §4 either way) → Preserve the casing as 
+     first registered (Recommended)
+
+⏺ All four resolutions confirmed. Let me set up task tracking and load the tools
+   I need.
+
+⏺ Tasks lined up. To recap before I start coding — confirmed decisions from your
+   answers:
+
+  1. POST /users skips the registry check for the caller's X-Username (bootstrap
+   carve-out). Format check still applies.
+  2. Malformed X-Username → 400 universally on every non-/reset endpoint.
+  3. Response shapes: POST /users → {username: "Alice"}; GET /users → {users: 
+  ["Alice", "Bob"]}.
+  4. Registry preserves first-registered casing. register("Alice") then
+  register("ALICE") → 409. Header X-Username: "ALICE" still matches Alice for
+  downstream code.
+
+  Ready for me to proceed in this order: write the frozen initial test plan
+  first → implement → test → write the final plan with changelog? The brief is
+  explicit that the initial plan must be written from the spec before
+  implementation begins.
+
+✻ Churned for 3m 6s
+
+❯ yes, go ahead                                                                 
+
+  Read 1 file (ctrl+o to expand)
+⏺ Now writing the initial test plan — from the spec only, before implementation.
+
+⏺ Write(test-plans/phase-2-initial.md)
+  ⎿  Wrote 198 lines to test-plans/phase-2-initial.md
+      2 # Phase 2 — Initial Test Plan (FROZEN)
+      3 This plan is written from the spec (`prd/prd.md` §2, §4, §15.1, §
+        15.2, §15.6
+        e anyprd/phase-2-users.md`) **before implementation begins**. Onc
+      5 implementation code lands, this file is frozen and must not be ed
+        ited. The
+        ually tested,e-2-final.md` supersedes it and records what was act
+      7 with a changelog of differences.
+      8 
+      9 ## Scope under test
+     … +272 lines (ctrl+o to expand)
+
+⏺ Initial plan is now frozen — I won't edit it after this point. Moving to
+  implementation.
+
+⏺ Write(src/registry.ts)
+  ⎿  Wrote 56 lines to src/registry.ts
+      2 // User registry from PRD §4, §15.1.
+      3 // In-memory store of registered usernames. Comparison is case-in
+      4 // (§4) but the first-registered casing is preserved as the canon
+        ical form
+      5 // returned by lookups and listings (resolved Phase-2 decision #4
+      6 //
+      7 // All state-mutating registry operations clear/insert against th
+      8 // the central registerReset() seam (src/state.ts) drains it on P
+        OST /reset
+      9 // per §15.
+     … +56 lines (ctrl+o to expand)
+
+⏺ Write(src/identity.ts)
+  ⎿  Wrote 13 lines to src/identity.ts
+        dlers.ntity types shared across the auth middleware and route han
+      2 //
+      3 // At the point a handler runs, the §4 identity has been resolved
+         to one of
+      4 // these two cases. The malformed and unregistered cases short-ci
+      5 // middleware with a §15.6 envelope and never reach a handler.
+      6 
+      7 export type Identity =
+      8   | { kind: "null" }
+      9   | { kind: "registered"; username: string };
+     … +6 lines (ctrl+o to expand)
+
+⏺ Write(src/middleware/identity.ts)
+  ⎿  Wrote 84 lines to src/middleware/identity.ts
+       2 // Identity-resolution middleware from PRD §4.
+       3 // Every non-/reset endpoint runs one of these middlewares befor
+       4 //its handler:
+       5 //   identityWithRegistry  — full §4 gate. Resolves X-Username i
+         nto:
+       7 //       malformed         → 400 validation_error, handler never
+          runs
+       9 //       registered        → handler runs, sees {kind: "register
+         ed", username: <canonical>}
+      10 //
+     … +93 lines (ctrl+o to expand)
+
+⏺ Write(src/middleware/requireWriter.ts)
+  ⎿  Wrote 28 lines to src/middleware/requireWriter.ts
+         s only. Anyte from PRD §4: "Null user may perform read operation
+       3 // write by the null user is forbidden."
+       4 // Applied AFTER `identityWithRegistry` on write endpoints. By t
+       5 // runs, the identity has already been resolved — malformed has 
+         400'd and
+         ecision istered has 403'd in the identity layer. The remaining d
+       8 // just: null → 403, registered → pass.
+       9 // Phase 2 has no production write endpoints (deferred to phases
+      10 // middleware is exercised against a stand-in protected route in
+          tests, per
+     … +25 lines (ctrl+o to expand)
+
+⏺ Write(src/routes/users.ts)
+  ⎿  Wrote 79 lines to src/routes/users.ts
+       2 // User registry routes from PRD §15.1.
+         ding theT /users  — body { username }. Open to all callers inclu
+       4 //                  null/unregistered cases per the registry's b
+       5 //                  carve-out (Phase-2 decision #1). Format-only
+          X-Username
+       7 //                  middleware is mounted by createApp.
+         t-registered)rs   — list registered usernames in canonical (firs
+       9 //                  casing. Available to all per §15.2; identity
+      10 //                  (with registry gate) is mounted by createApp
+         .
+     … +80 lines (ctrl+o to expand)
+
+⏺ Now wire it into createApp with the correct middleware chains.
+
+⏺ Write(src/app.ts)
+  ⎿  Added 21 lines, removed 6 lines
+       1  import { Hono } from "hono";
+       2  import { ApiError, errorBody, httpError, STATUS_BY_CODE } from 
+          "./errors.js";
+       3 +import type { AppEnv } from "./identity.js";                   
+       4 +import { identityFormatOnly, identityWithRegistry } from "./mid
+         +dleware/identity.js";                                          
+       5 +import { usersRouter } from "./routes/users.js";               
+       6  import { resetAllState } from "./state.js";
+       7  
+       5 -export function createApp(): Hono {                            
+       6 -  const app = new Hono();                                      
+       8 +export function createApp(): Hono<AppEnv> {                    
+       9 +  const app = new Hono<AppEnv>();                              
+      10  
+      11    // Trivial liveness probe — proves the server boots and route
+          s (phase-1 brief).
+       9 -  app.get("/health", (c) => c.json({ status: "ok" }));         
+      12 +  // §4 identity gate applies (malformed X-Username still 400s 
+         +per decision #2);                                              
+      13 +  // null and registered callers may probe it.                 
+      14 +  app.get("/health", identityWithRegistry, (c) => c.json({ stat
+         +us: "ok" }));                                                  
+      15  
+      11 -  // §15: fresh-boot state reset. Exempt from §4 — callable by 
+         -null and                                                       
+      12 -  // unregistered users; phase 1 has nothing to clear, later ph
+         -ases plug into                                                 
+      13 -  // resetAllState().                                          
+      16 +  // §15: fresh-boot state reset. Exempt from §4 — callable by 
+         +null,                                                          
+      17 +  // unregistered, AND malformed-header callers (decision #2 ex
+         +plicitly does                                                  
+      18 +  // not cover reset, per §15's exemption). Plug-in cleanups li
+         +ve in state.ts.                                                
+      19    app.post("/reset", (c) => {
+      20      resetAllState();
+      21      return c.body(null, 204);
+      22    });
+      23  
+      24 +  // §15.1 user registry. POST uses the format-only variant so 
+         +an unregistered                                                
+      25 +  // caller (the typical case) can bootstrap (decision #1). GET
+         + goes through                                                  
+      26 +  // the full §4 gate — reads are open to null but not to unreg
+         +istered or                                                     
+      27 +  // malformed callers.                                        
+      28 +  app.use("/users", async (c, next) => {                       
+      29 +    const mw = c.req.method === "POST" ? identityFormatOnly : i
+         +dentityWithRegistry;                                           
+      30 +    return mw(c, next);                                        
+      31 +  });                                                          
+      32 +  app.route("/", usersRouter);                                 
+      33 +                                                               
+      34    app.notFound((c) =>
+      35      httpError(c, "not_found", `no route matches ${c.req.method}
+           ${new URL(c.req.url).pathname}`),
+      36    );
+
+⏺ Cleaner: attach middleware per-route inside the users router rather than
+  method-dispatching in app.use.
+
+⏺ Write(src/routes/users.ts)  ⎿  Added 15 lines, removed 20 lines
+       1  // User registry routes from PRD §15.1.
+       2  //
+       3 -//   POST /users  — body { username }. Open to all callers incl
+         -uding the                                                      
+       4 -//                  null/unregistered cases per the registry's 
+         -bootstrap                                                      
+       5 -//                  carve-out (Phase-2 decision #1). Format-onl
+         -y X-Username                                                   
+       6 -//                  middleware is mounted by createApp.        
+       3 +//   POST /users  — body { username }. Mounted with identityFor
+         +matOnly so an                                                  
+       4 +//                  unregistered (or null) caller can bootstrap
+         +. Malformed                                                    
+       5 +//                  X-Username still 400s per Phase-2 decision 
+         +#2.                                                            
+       6  //
+       8 -//   GET /users   — list registered usernames in canonical (fir
+         -st-registered)                                                 
+       9 -//                  casing. Available to all per §15.2; identit
+         -y middleware                                                   
+      10 -//                  (with registry gate) is mounted by createAp
+         -p.                                                             
+       7 +//   GET /users   — list registered usernames in canonical casi
+         +ng. Mounted                                                    
+       8 +//                  with identityWithRegistry so a non-null cal
+         +ler must be                                                    
+       9 +//                  registered, matching §4 (decision #2). Null
+         + callers are                                                   
+      10 +//                  allowed per §15.2.                         
+      11  
+      12  import { Hono } from "hono";
+      13  
+      14  import { ApiError } from "../errors.js";
+      15 +import type { AppEnv } from "../identity.js";                  
+      16 +import { identityFormatOnly, identityWithRegistry } from "../mi
+         +ddleware/identity.js";                                         
+      17  import { list, register } from "../registry.js";
+      18  import { parseUsername } from "../validation/username.js";
+      17 -import type { AppEnv } from "../identity.js";                  
+      19  
+      20  export const usersRouter = new Hono<AppEnv>();
+      21  
+      21 -usersRouter.post("/users", async (c) => {                      
+      22 +usersRouter.post("/users", identityFormatOnly, async (c) => {  
+      23    let body: unknown;
+      24    try {
+      25      body = await c.req.json();
+      26    } catch {
+      26 -    throw new ApiError(                                        
+      27 -      "validation_error",                                      
+      28 -      "request body must be valid JSON",                       
+      29 -    );                                                         
+      27 +    throw new ApiError("validation_error", "request body must b
+         +e valid JSON");                                                
+      28    }
+      29  
+      30    if (body === null || typeof body !== "object" || Array.isArra
+          y(body)) {
+      33 -    throw new ApiError(                                        
+      34 -      "validation_error",                                      
+      35 -      "request body must be a JSON object",                    
+      36 -    );                                                         
+      31 +    throw new ApiError("validation_error", "request body must b
+         +e a JSON object");                                             
+      32    }
+      33  
+      34    const raw = (body as Record<string, unknown>).username;
+     ...
+      52      throw new ApiError("validation_error", parsed.reason);
+      53    }
+      54    if (parsed.kind === "null") {
+      60 -    // Should be unreachable given the empty-string guard above
+         -; keep for                                                     
+      61 -    // total coverage of parseUsername's return shape.         
+      55 +    // Unreachable given the empty-string guard above; keep tot
+         +al coverage                                                    
+      56 +    // of parseUsername's return shape.                        
+      57      throw new ApiError("validation_error", "username must not b
+          e empty");
+      58    }
+      59  
+     ...
+      69    return c.json({ username: result.canonical }, 201);
+      70  });
+      71  
+      77 -usersRouter.get("/users", (c) => {                             
+      72 +usersRouter.get("/users", identityWithRegistry, (c) => {       
+      73    return c.json({ users: list() });
+      74  });
+
+⏺ Write(src/app.ts)
+  ⎿  Added 10 lines, removed 16 lines
+       1  import { Hono } from "hono";
+       2 +                                                               
+       3  import { ApiError, errorBody, httpError, STATUS_BY_CODE } from 
+          "./errors.js";
+       4  import type { AppEnv } from "./identity.js";
+       4 -import { identityFormatOnly, identityWithRegistry } from "./mid
+         -dleware/identity.js";                                          
+       5 +import { identityWithRegistry } from "./middleware/identity.js"
+         +;                                                              
+       6  import { usersRouter } from "./routes/users.js";
+       7  import { resetAllState } from "./state.js";
+       8  
+       9  export function createApp(): Hono<AppEnv> {
+      10    const app = new Hono<AppEnv>();
+      11  
+      11 -  // Trivial liveness probe — proves the server boots and route
+         -s (phase-1 brief).                                             
+      12 -  // §4 identity gate applies (malformed X-Username still 400s 
+         -per decision #2);                                              
+      13 -  // null and registered callers may probe it.                 
+      12 +  // Trivial liveness probe — proves the server boots and route
+         +s (phase-1                                                     
+      13 +  // brief). §4 identity gate applies (malformed X-Username sti
+         +ll 400s per                                                    
+      14 +  // decision #2); null and registered callers may probe it.   
+      15    app.get("/health", identityWithRegistry, (c) => c.json({ stat
+          us: "ok" }));
+      16  
+      17    // §15: fresh-boot state reset. Exempt from §4 — callable by 
+          null,
+      17 -  // unregistered, AND malformed-header callers (decision #2 ex
+         -plicitly does                                                  
+      18 -  // not cover reset, per §15's exemption). Plug-in cleanups li
+         -ve in state.ts.                                                
+      18 +  // unregistered, AND malformed-header callers. Plug-in cleanu
+         +ps live in                                                     
+      19 +  // state.ts (the registry registers its clear() there).      
+      20    app.post("/reset", (c) => {
+      21      resetAllState();
+      22      return c.body(null, 204);
+      23    });
+      24  
+      24 -  // §15.1 user registry. POST uses the format-only variant so 
+         -an unregistered                                                
+      25 -  // caller (the typical case) can bootstrap (decision #1). GET
+         - goes through                                                  
+      26 -  // the full §4 gate — reads are open to null but not to unreg
+         -istered or                                                     
+      27 -  // malformed callers.                                        
+      28 -  app.use("/users", async (c, next) => {                       
+      29 -    const mw = c.req.method === "POST" ? identityFormatOnly : i
+         -dentityWithRegistry;                                           
+      30 -    return mw(c, next);                                        
+      31 -  });                                                          
+      25 +  // §15.1 user registry. Per-route middleware lives inside use
+         +rsRouter.                                                      
+      26    app.route("/", usersRouter);
+      27  
+      28    app.notFound((c) =>
+     ...
+      33      if (err instanceof ApiError) {
+      34        return c.json(errorBody(err.code, err.message, err.detail
+          s), STATUS_BY_CODE[err.code]);
+      35      }
+      42 -    // Unhandled exception — not a documented §15.6 code. Use t
+         -he same envelope                                               
+      43 -    // shape so clients always parse the same way.             
+      36 +    // Unhandled exception — not a documented §15.6 code. Use t
+         +he same                                                        
+      37 +    // envelope shape so clients always parse the same way.    
+      38      return c.json(
+      39        { error: { code: "internal_error", message: "internal ser
+          ver error" } },
+      40        500,
+
+⏺ Let me typecheck before writing tests, to catch any wiring issues early.
+
+⏺ Bash(npx tsc 2>&1)
+  ⎿  (No output)
+
+⏺ Clean typecheck. Now moving to tests.
+
+⏺ Write(test/registry.test.ts)
+  ⎿  Wrote 302 lines to test/registry.test.ts
+       2 // PRD §15.1 — POST /users and GET /users.
+       3 // Per the toolchain supplement, state-touching tests call POST 
+         /reset first.
+       4 
+       5 import { test } from "node:test";
+       7 import assert from "node:assert/strict";
+       8 import { createApp } from "../src/app.js";
+       9 
+      10 type ErrorBody = { error: { code: string; message: string; detai
+         ls?: Record<string, unknown> } };
+     … +351 lines (ctrl+o to expand)
+
+⏺ Write(test/identityMiddleware.test.ts)
+  ⎿  Wrote 165 lines to test/identityMiddleware.test.ts
+         gainst a4 — identity-resolution middleware tested in isolation a
+       2 // stand-in protected route, since Phase 2 ships no production w
+         rite
+       4 // endpoint (deferred to phases 4–7).
+       5 // Both middlewares are exercised:
+       6 //   - identityWithRegistry: the full §4 gate.
+          #1).- identityFormatOnly:   the POST /users carve-out (decision
+       8 
+       9 import { test } from "node:test";
+      10 import assert from "node:assert/strict";
+     … +190 lines (ctrl+o to expand)
+
+⏺ Write(test/requireWriter.test.ts)
+  ⎿  Wrote 112 lines to test/requireWriter.test.ts
+         only"),§4 — write gate ("null users may perform read operations 
+       2 // tested in isolation against a stand-in protected write route.
+       3 // ships no production write endpoint; phases 4–7 will mount thi
+         s on the
+       4 // real ones.
+       6 import { test } from "node:test";
+       7 import assert from "node:assert/strict";
+       9 import { Hono } from "hono";
+      10 import { ApiError, errorBody, STATUS_BY_CODE } from "../src/erro
+         rs.js";
+     … +125 lines (ctrl+o to expand)
+
+⏺ Write(test/usersIntegration.test.ts)
+  ⎿  Wrote 121 lines to test/usersIntegration.test.ts
+         n wiringo-end through createApp — exercises the actual productio
+       2 // (POST /users + GET /users + middleware + reset) rather than s
+         tand-in
+         s" dimension. cover the brief's "interactions with earlier phase
+       4 
+       5 import { test } from "node:test";
+       7 import assert from "node:assert/strict";
+       8 import { createApp } from "../src/app.js";
+       9 
+      10 type ErrorBody = { error: { code: string; message: string } };
+     … +134 lines (ctrl+o to expand)
+
+⏺ Now build and run the full test suite.
+
+⏺ Bash(npm test 2>&1 | tail -100)
+  ⎿      operator: 'strictEqual'
+       }
+     … +97 lines (ctrl+o to expand)
+
+⏺ The failures share one root cause: HTTP strips OWS (space and tab) from header
+   values automatically, so X-Username: " alice" arrives as "alice" server-side.
+   I'll switch HTTP-level malformed tests to use \u00A0 (non-breaking space) —
+  still whitespace per JS \s, but not HTTP OWS, so it survives transit.
+
+  Let me verify the assumption quickly before changing nine tests.
+
+⏺ Bash(cat > /tmp/header-check.mjs << 'EOF'
+      import { Hono } from "hono";…)
+  ⎿  Error: Exit code 1
+     node:internal/modules/package_json_reader:255
+       throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+             ^
+
+     Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'hono' imported from 
+     /private/tmp/header-check.mjs
+         at Object.getPackageJSONURL 
+     (node:internal/modules/package_json_reader:255:9)
+         at packageResolve (node:internal/modules/esm/resolve:767:81)
+         at moduleResolve (node:internal/modules/esm/resolve:853:18)
+         at defaultResolve (node:internal/modules/esm/resolve:983:11)
+     … +9 lines (ctrl+o to expand)
+
+⏺ Bash(cat > /Users/joe/repos/sdd-cmp-cc-only/.tmp-header-check.mjs << 'EOF'
+      import { Hono } from "hono";…)
+  ⎿  " alice" -> "alice"
+     "alice " -> "alice"
+     "   " -> ""
+     … +3 lines (ctrl+o to expand)
+
+⏺ Confirmed — OWS stripped, NBSP (\u00A0) survives. Updating malformed-header
+  tests across all files.
+
+⏺ Update(test/registry.test.ts)
+  ⎿  Added 4 lines, removed 1 line
+      198  });
+      199  
+      200  test("POST /users: malformed X-Username → 400 even with otherw
+           ise-valid body (decision #2)", async () => {
+      201 +  // NB: HTTP strips OWS (space/tab) from header values, so a 
+          +malformed                                                     
+      202 +  // X-Username must use a non-OWS whitespace char (NBSP,  ) t
+          +o actually                                                    
+      203 +  // reach the server malformed. NBSP matches JS \s so parseUs
+          +ername rejects it.                                            
+      204    const app = await freshApp();
+      202 -  const res = await post(app, "/users", { username: "Alice" },
+          - { "X-Username": " alice" });                                 
+      205 +  const res = await post(app, "/users", { username: "Alice" },
+          + { "X-Username": " alice" });                                 
+      206    assert.equal(res.status, 400);
+      207    const body = (await res.json()) as ErrorBody;
+      208    assert.equal(body.error.code, "validation_error");
+
+⏺ Update(test/registry.test.ts)  ⎿  Added 1 line
+      263  });
+      264  
+      265  test("GET /users: malformed X-Username → 400 validation_error"
+           , async () => {
+      266 +  // See note above re: NBSP for HTTP-survivable malformed hea
+          +ders.                                                         
+      267    const app = await freshApp();
+      268    const res = await app.request("/users", { headers: { "X-User
+           name": " alice" } });
+      269    assert.equal(res.status, 400);
+
+⏺ Update(test/identityMiddleware.test.ts)
+  ⎿  Added 5 lines, removed 1 line
+      57  });
+      58  
+      59  test("identityWithRegistry: malformed X-Username → 400 validati
+          on_error, handler never runs", async () => {
+      60 +  // HTTP strips OWS (space + horizontal tab) from header value
+         +s, and \n is                                                   
+      61 +  // not even a legal header byte. To send a malformed-X-Userna
+         +me that                                                        
+      62 +  // actually reaches the server malformed, use a non-OWS white
+         +space such as                                                  
+      63 +  // NBSP ( ) — it matches the parser's \s rule but survives HT
+         +TP transit.                                                    
+      64    clearRegistry();
+      65    const app = gatedApp("withRegistry");
+      66  
+      63 -  for (const value of [" alice", "alice ", "   ", "\t", "\nalic
+         -e"]) {                                                         
+      67 +  for (const value of [" alice", "alice ", "   ", " "]) {      
+      68      const res = await app.request("/echo", { headers: { "X-User
+          name": value } });
+      69      assert.equal(res.status, 400, `expected 400 for ${JSON.stri
+          ngify(value)}`);
+      70      const body = (await res.json()) as ErrorBody;
+
+⏺ Update(test/identityMiddleware.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      113    clearRegistry();
+      114    const app = gatedApp("withRegistry");
+      115    for (const { header, code } of [
+      116 -    { header: " alice", code: "validation_error" },           
+      116 +    { header: " alice", code: "validation_error" }, // NBSP-pr
+          +efixed, survives HTTP OWS-stripping                           
+      117      { header: "ghost", code: "forbidden" },
+      118    ]) {
+      119      const res = await app.request("/echo", { headers: { "X-Use
+           rname": header } });
+
+⏺ Update(test/identityMiddleware.test.ts)
+  ⎿  Added 1 line
+      138  });
+      139  
+      140  test("identityFormatOnly: malformed X-Username STILL 400s (for
+           mat check applies)", async () => {
+      141 +  // NBSP-prefixed — see note above.                          
+      142    clearRegistry();
+      143    const app = gatedApp("formatOnly");
+      144    const res = await app.request("/echo", { headers: { "X-Usern
+           ame": " alice" } });
+
+⏺ Task list is in good shape; continuing the test fixes.
+
+⏺ Update(test/requireWriter.test.ts)
+  ⎿  Added 1 line
+      72  // --- short-circuit cases (identity layer handles them before 
+          requireWriter) -
+      73  
+      74  test("chain: malformed X-Username short-circuits at identity la
+          yer → 400, never reaches write gate", async () => {
+      75 +  // NBSP-prefixed — HTTP strips OWS but not NBSP, so this arri
+         +ves malformed.                                                 
+      76    clearRegistry();
+      77    register("Alice");
+      78    const app = writeApp();
+
+⏺ Update(test/usersIntegration.test.ts)
+  ⎿  Added 1 line
+      52    assert.equal(((await listAsCarol.json()) as ErrorBody).error.
+          code, "forbidden");
+      53  
+      54    // GET with malformed header → 400 (decision #2 — universal f
+          ormat check).
+      55 +  // NBSP-prefixed so HTTP doesn't strip the leading whitespace
+         +.                                                              
+      56    const listMalformed = await app.request("/users", { headers: 
+          { "X-Username": " alice" } });
+      57    assert.equal(listMalformed.status, 400);
+      58    assert.equal(((await listMalformed.json()) as ErrorBody).erro
+          r.code, "validation_error");
+
+⏺ Update(test/usersIntegration.test.ts)
+  ⎿  Added 2 lines, removed 1 line
+      82  test("integration: POST /users error envelope codes round-trip 
+          through §15.6 helpers", async () => {
+      83    const app = await freshApp();
+      84  
+      85 -  // 400 path                                                  
+      85 +  // 400 path — body-side malformed (a body string keeps its le
+         +ading space;                                                   
+      86 +  // no HTTP OWS-stripping applies to JSON request bodies).    
+      87    const bad = await postJson(app, "/users", { username: " alice
+          " });
+      88    assert.equal(bad.status, 400);
+      89    const badBody = await bad.json() as { error: { code: string; 
+          message: string } };
+
+⏺ Update(test/usersIntegration.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      115      {},
+      116      { "X-Username": "" },
+      117      { "X-Username": "never-registered" },
+      118 -    { "X-Username": " malformed" },                           
+      118 +    { "X-Username": " malformed" }, // NBSP — actually malform
+          +ed at the server                                              
+      119    ]) {
+      120      const res = await app.request("/reset", { method: "POST", 
+           headers });
+      121      assert.equal(res.status, 204, `reset must be 204 for ${JSO
+           N.stringify(headers)}`);
+
+⏺ Bash(npm test 2>&1 | tail -60)
+  ⎿    200 !== 400
+
+           at TestContext.<anonymous> (file:///Users/joe/repos/sdd-cmp-cc-o
+     … +56 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(grep -P '\xc2\xa0' /Users/joe/repos/sdd-cmp-cc-only/test/registry.test.ts
+       | head -5 ; echo "---grep nbsp---"; python3 -c "
+      with open('/Users/joe/repos/sdd-cmp-c…)
+  ⎿  ---grep nbsp---
+     178:  '  const res = await post(app, "/users", { username: "Alice" },
+     { "X-Username": "" });'
+     … +14 lines (ctrl+o to expand)
+
+⏺ The Edit calls inadvertently kept regular spaces in some places. Let me use
+  explicit \u00A0 escapes — clearer and unambiguous.
+
+⏺ Update(test/registry.test.ts)
+  ⎿  Error editing file
+
+⏺ Task list is fine. Let me inspect the actual byte content of all my
+  malformed-header lines to see which still need NBSP fixing.
+
+⏺ Bash(python3 << 'EOF'
+      import re…)
+  ⎿  === /Users/joe/repos/sdd-cmp-cc-only/test/registry.test.ts ===
+       178: NBSP=NO     const res = await post(app, "/users", { username: "
+     Alice" }, { "X-Username": "" });
+     … +39 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test/identityMiddleware.test.ts)
+  ⎿  Error editing file
+
+⏺ I'll do this with a Python script that targets exact lines — Edit tool keeps
+  tripping on invisible-whitespace mismatches.
+
+⏺ Bash(python3 << 'PYEOF'
+      import re…)
+  ⎿  OK: /Users/joe/repos/sdd-cmp-cc-only/test/registry.test.ts
+     OK: /Users/joe/repos/sdd-cmp-cc-only/test/identityMiddleware.test.ts
+     SKIP (not found): /Users/joe/repos/sdd-cmp-cc-only/test/identityMiddle
+     … +6 lines (ctrl+o to expand)
+⏺ Bash(python3 << 'PYEOF'
+      # Check that NBSP substitutions actually landed.…)
+  ⎿  === /Users/joe/repos/sdd-cmp-cc-only/test/registry.test.ts ===
+       178 [SP  ]   const res = await post(app, "/users", { username: "Alic
+     e" }, { "X-Username": "" });
+     … +35 lines (ctrl+o to expand)
+
+⏺ All malformed-header tests now contain NBSP. Re-running.
+
+⏺ Bash(npm test 2>&1 | tail -50)
+  ⎿  ✔ GET /users: unregistered non-null X-Username → 403 forbidden (0.6783
+     75ms)
+     ✔ GET /users: malformed X-Username → 400 validation_error (0.280041ms)
+     … +47 lines (ctrl+o to expand)
+
+⏺ All 94 tests pass (43 from Phase 1 + 51 new). Writing the final test plan now.
+
+⏺ Write(test-plans/phase-2-final.md)
+  ⎿  Wrote 241 lines to test-plans/phase-2-final.md
+       2 # Phase 2 — Final Test Plan
+       3 This supersedes `phase-2-initial.md` (frozen). It records what w
+         as actually
+         al plan andh a changelog of how it differs from the frozen initi
+       5 the reason for each change.
+       6 
+       8 ## Run command
+       9 ```
+      10 npm test                 # tsc && node --test "dist/**/*.test.js
+         "
+     … +326 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | tail -10)
+  ⎿  ✔ integration: POST /users error envelope codes round-trip through §15
+     .6 helpers (0.995959ms)
+     ✔ integration: /reset remains §4-exempt for malformed AND unregistered
+     … +9 lines (ctrl+o to expand)
+
+⏺ Bash(git status)
+  ⎿  On branch main
+     Your branch is up to date with 'origin/main'.
+     … +20 lines (ctrl+o to expand)
+
+⏺ Phase 2 done. 94/94 tests pass.
+
+  Phase 2 deliverables
+
+  ┌─────────────────────────────────┬────────────────────────────────────────┐
+  │              File               │                Purpose                 │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │                                 │ In-memory user registry;               │
+  │ src/registry.ts                 │ case-insensitive lookup,               │
+  │                                 │ canonical-casing storage, plugs into   │
+  │                                 │ registerReset                          │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │ src/identity.ts                 │ Shared Identity type + Hono AppEnv     │
+  │                                 │ typing                                 │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │                                 │ identityWithRegistry (full §4 gate) +  │
+  │ src/middleware/identity.ts      │ identityFormatOnly (POST /users        │
+  │                                 │ carve-out)                             │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │ src/middleware/requireWriter.ts │ Write gate for phases 4–7; rejects     │
+  │                                 │ null users with 403                    │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │ src/routes/users.ts             │ POST /users (201/400/409) and GET      │
+  │                                 │ /users                                 │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │ src/app.ts                      │ Wires the above into createApp         │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │ test/registry.test.ts           │ 30 tests — routes + reset behavior     │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │ test/identityMiddleware.test.ts │ 11 tests — both middleware variants in │
+  │                                 │  isolation                             │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │ test/requireWriter.test.ts      │ 6 tests — write gate, chained with     │
+  │                                 │ identity                               │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │ test/usersIntegration.test.ts   │ 4 tests — end-to-end through createApp │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │ test-plans/phase-2-initial.md   │ Frozen at start; records spec          │
+  │                                 │ ambiguities resolved up front          │
+  ├─────────────────────────────────┼────────────────────────────────────────┤
+  │ test-plans/phase-2-final.md     │ Supersedes initial; changelog explains │
+  │                                 │  7 additions/refinements               │
+  └─────────────────────────────────┴────────────────────────────────────────┘
+
+  Notable discovery during testing
+
+  HTTP strips OWS (space/tab) from header values, so X-Username: " alice"
+  arrives as "alice" server-side — the malformed-header test path is unreachable
+   via HTTP with OWS. The HTTP-level tests use NBSP (\u00A0), which \s matches
+  but HTTP doesn't strip. Phase 1's parseUsername unit tests continue to cover
+  OWS directly. Documented in the final test plan.
+
+  Nothing committed — let me know when you want me to stage and commit.
+
+✻ Cooked for 11m 9s
+
+※ recap: Phase 2 (user registry, identity middleware, write gate) is implemented with all 94 tests passing and both test plans written. Next: stage and commit the changes when you're ready. (disable recaps in /config)
+
+❯ /usage 
+  ⎿  Settings dialog dismissed

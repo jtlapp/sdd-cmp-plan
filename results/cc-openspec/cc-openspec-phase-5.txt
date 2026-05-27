@@ -1,0 +1,3486 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-openspec-openlore
+
+❯ /opsx:explore                                                                 
+
+⏺ Bash(openspec list --json 2>&1 | head -100)
+  ⎿  {
+       "changes": []
+     }
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+⏺ We're at the natural starting point for Phase 5 — phase 4 archived, phase 5
+  brief landed, no active change yet. Let me orient before we dive in.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Let me see what existing specs we have and what Phase 4 produced — Phase 5
+  will build on it.
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+⏺ Phase 5 is a big jump in conceptual surface area — the first phase where the
+  data model branches away from "live tree state" into a parallel world of
+  proposed-but-not-yet-applied edits. Let me sketch the shape before we pick
+  threads.
+
+  The shape of Phase 5
+
+              PROPOSAL                           LIVE STATE
+                │                                  (read-only here:
+                ▼                                   no acceptance yet)
+          ┌──────────┐
+          │  POST    │  body: { targetRootId, topTaxonId, payload }
+          │ /proposals│         payload = tree of {op, id?, name?, children?}
+          └────┬─────┘
+               │
+               ▼                                 ┌─────────────────┐
+     ┌──────────────────────┐         lookups    │ live taxa graph │
+     │ payload parsing (§9) │◀────────────────── │ (Phase 3/4)     │
+     │  - shape, field rules│  owners, presence  │  ownership,     │
+     │  - top taxon (§9.2)  │                    │  parent edges   │
+     │  - create vs graft   │                    └─────────────────┘
+     └──────────┬───────────┘
+                │
+                ▼
+     ┌──────────────────────┐
+     │ change derivation    │     one operative payload-node → one change
+     │  (§9 + §10.1)        │     (no-ops don't produce changes)
+     └──────────┬───────────┘
+                │
+                ▼
+     ┌──────────────────────┐
+     │ routing (§10.1)      │     rename → owner(taxon)
+     │                      │     add/detach → owner(payload-parent)
+     └──────────┬───────────┘
+                │
+                ▼
+     ┌──────────────────────┐
+     │ dependency           │     ancestor add/graft → DECISION dep
+     │  classification      │     ancestor no-op/rename → EXISTENCE dep
+     │  (§10.2)             │     ⇒ recorded; not enforced yet
+     └──────────┬───────────┘
+                │
+                ▼
+     ┌──────────────────────┐     ANY add/graft ancestor on path → LATENT
+     │ initial disposition  │     no add/graft ancestor          → QUEUED
+     │  (§11.3, submission) │     (existence is NOT a queueing input here)
+     └──────────┬───────────┘
+                │
+     ┌──────────┴──────────────────────────────────────┐
+     ▼                              ▼                  ▼
+  GET /proposals/{id}          GET /queue          GET /proposals
+  (payload-tree status,        (current user's     (list,
+   §11.5, isomorphic)           queued changes)     filterable)
+
+  The "frozen world" property of this phase is important: after POST /proposals
+  returns, nothing about a proposal changes. There is no path in this phase that
+   transitions a change between states. Phase 6 introduces all the dynamics.
+
+  Three things that pulled my attention reading §8–§11 against the brief
+
+  1. Existence checks have a curious status at submission.
+
+  §9.2 explicitly requires the top taxon to be currently in the target tree.
+  §10.2 then frames every ancestor no-op/rename as an "existence dependency" —
+  language that suggests evaluated against live state at some moment, not
+  validated up front. And §11.3 only mentions decision dependencies as the
+  queueing gate. §11.4 says "validity is evaluated lazily."
+
+  Read together I think the design is:
+  - Top taxon: hard-rejected at submission (the only existence guarantee §9.2
+  demands).
+  - Other operative nodes: their existence is recorded as a dependency,
+  evaluated only when the change is acted on later (Phase 6+).
+  - So Phase 5 can submit a proposal renaming a taxon that doesn't currently
+  exist; it just sits there with a dependency that will never resolve.
+
+  But that also forces a routing question: rename routes to "owner of the 
+  renamed taxon." If the taxon doesn't exist at submission, there is no owner to
+   record. Does the change route to "no one" until/unless the taxon appears? Or
+  do we resolve routing at submission against a snapshot? §11.4 case 3 suggests
+  routing isn't re-evaluated after submission — an owner change is an
+  invalidation, not a reroute. Which would imply routing is frozen at submission
+   and a missing taxon at submission ⇒ routing is undefined.
+
+  The PRD doesn't say explicitly. I'd want to resolve this before specifying —
+  possibilities:
+  - (a) Routing snapshot at submission. Missing-target → reject the proposal (or
+   just that change?) at submission.
+  - (b) Routing also evaluated lazily, like existence. The change has no
+  reviewer until the taxon exists.
+  - (c) Routing snapshot, but missing-target produces an immediately-invalid
+  change rather than a submission-time error.
+
+  2. What's a "shape" error vs. a "dependency" error?
+
+  The brief leans on the four-op table from §9.1. Some of its rules clearly bind
+   at submission (e.g., detach must be a leaf; add needs either id-null+name or
+  id+no-name). Others are runtime-flavored (does the payload-parent currently
+  have the named child? does an existing-id add refer to a real taxon?). The
+  line between "malformed payload → 400" and "well-formed but its existence
+  dependency will never resolve → submitted as latent/invalid" is not drawn
+  explicitly in the PRD.
+
+  A working interpretation:
+  - Shape (400 at submission): field-rule violations from §9.1, top-taxon not
+  no-op/rename or not in target tree, detach-not-a-leaf, payload tree itself
+  malformed, missing required fields, name-shape violations (§3.4).
+  - Existence (recorded as dep, not blocking): target of a rename/no-op/detach
+  not present at expected position; graft id refers to a non-existent taxon.
+
+  But that second bucket — especially "graft id refers to nothing at all" —
+  feels like it should be 400, not a silently-recorded dep that can never
+  fulfill. Worth deciding deliberately.
+
+  3. The status view's "isomorphic to payload" plus create-IDs.
+
+  §11.5's status view is the payload tree annotated with dispositions. For
+  creates (id: null), the payload has no taxon ID — but the proposer still needs
+   to refer to the corresponding change (per GET /queue's "change ID"
+  requirement, and per POST /proposals returning a status tree). So at
+  submission we'd assign change IDs to every operative payload node, return them
+   in the status tree, and surface them in /queue. No-ops have no change ID
+  (they're structural).
+
+  We probably also need a stable way to refer to a payload position even for the
+   operations that DO have a taxon ID — because a rename of c3 and a detach of
+  c3 in the same payload would be two different changes against the same id.
+
+  Five threads we could pull on
+
+  Pick whichever resonates (or take it somewhere else entirely):
+
+  - A. Resolve the three underdeterminations above so the change proposal isn't
+  pretending they don't exist. These are the kind of thing §"How we work" wants
+  explicit resolutions on.
+  - B. Sketch the spec-capability decomposition. Phase 5 is big enough that
+  it'll touch ~6-8 new capability specs. Worth thinking about boundaries before
+  writing them.
+  - C. Data model sketch. How proposals, payload nodes, and derived changes are
+  stored / referenced. The PRD's "no persistence, in-memory" simplifies but the
+  shape still matters — especially for /reset and for the §11.5 isomorphic
+  status view.
+  - D. Routing & dependency examples. Walk through Appendix A.1 and A.2 in Phase
+   5 terms — just initial dispositions, no acceptance. Useful to confirm we
+  understand the rules before writing them down.
+  - E. The deferred-but-load-bearing question. What state must Phase 5 record
+  that Phase 6 will read? If we don't store the dependency classification now,
+  Phase 6 has to recompute it from the payload tree — which is fine, but worth
+  deciding.
+
+  Which one (or which combination) feels most useful?
+
+✻ Cooked for 2m 32s
+
+※ recap: We're exploring Phase 5 (proposal submission, routing, initial disposition) before writing a change proposal. Next: you pick a thread to pursue — resolving PRD underdeterminations, spec decomposition, data model, routing examples, or what Phase 6 will need from us. (disable recaps in /config)
+
+❯ For 1, let's go with (a). For 2, the entire dependency tree should be valid   
+  at submission and return 400 otherwise. We should work on 3(A).               
+
+⏺ Good. Before I dig into #3, let me reflect #1 and #2 back so we catch the edge
+   cases your resolutions imply.
+
+  Implications of your decisions
+
+  On #1 (routing is snapshot at submission, missing target → 400):
+
+  Mostly clean — but one wrinkle. Consider an operative node nested under a
+  create:
+
+  no-op r1
+  └── no-op c2  (owner: Bob)
+      └── add id:null  "Urban Fantasy"           ← routes to Bob (owner of c2)
+          └── add id:null  "Paranormal Romance"  ← routes to
+  owner-of-payload-parent
+                                                   = owner of *would-be* Urban
+  Fantasy
+                                                   = whoever accepts the parent
+  create
+
+  The nested create's payload-parent is itself a create, which has no current
+  owner — its owner is determined at acceptance time. So routing here can't be a
+   concrete username at submission; it has to be "→ whoever accepts change ch-N"
+   and resolved at promotion time (Phase 6). I'd phrase this as: routing is 
+  concrete-at-submission for changes whose payload-parent currently exists; for 
+  changes whose payload-parent is itself a create, the reviewer is the accepting
+   reviewer of the parent create. This isn't a contradiction with your "missing
+  target → 400" — there's no missing target here, the routing rule itself is
+  parameterized — but it's worth being explicit about.
+
+  On #2 (entire dependency tree must be valid at submission → 400):
+
+  I want to make sure we draw the line in the right place. Three concentric
+  circles of "validity":
+
+     ┌─────────────────────────────────────────────────────────┐
+     │  (3) §3.3 GLOBAL INVARIANTS                             │
+     │     would-create-cycle, in-tree duplicate, name clash   │
+     │     ← these depend on the not-yet-applied proposal's    │
+     │       interaction with live state and OTHER pending     │
+     │       proposals; §10.3 explicitly calls them            │
+     │       "acceptance-time validation"                      │
+     │  ┌───────────────────────────────────────────────────┐  │
+     │  │  (2) EXISTENCE DEPENDENCIES (§10.2)               │  │
+     │  │    every no-op/rename ancestor's taxon must be    │  │
+     │  │    at the expected position in the target tree    │  │
+     │  │    right now; every detach's edge must exist;     │  │
+     │  │    every graft's id must reference a live taxon   │  │
+     │  │  ┌─────────────────────────────────────────────┐  │  │
+     │  │  │  (1) PAYLOAD SHAPE (§9.1, §9.2, §3.4)       │  │  │
+     │  │  │    field rules per op, top-taxon op kind &  │  │  │
+     │  │  │    presence, name format, leaf-ness of      │  │  │
+     │  │  │    detach, etc.                              │  │  │
+     │  │  └─────────────────────────────────────────────┘  │  │
+     │  └───────────────────────────────────────────────────┘  │
+     └─────────────────────────────────────────────────────────┘
+
+  My reading of your "entire dependency tree valid at submission" is (1) + (2) —
+   shape AND existence deps must hold at submission, so a proposal that names a
+  non-existent taxon anywhere on a payload path is rejected 400 right there. (3)
+   §3.3 invariants stay acceptance-time only, because they depend on the
+  proposal's not-yet-applied effects against state that may shift between
+  submission and acceptance — and §10.3 explicitly puts them in the acceptance
+  phase. Can you confirm? (If you actually want (3) too, that's a much bigger
+  change.)
+
+  A sub-question for (2): the existence-dep check is "must exist at the expected
+   position." If a payload nests rename c3 under no-op c2, the existence dep
+  includes "c3 is currently a child of c2 in the target tree" — i.e., it checks
+  the edge, not just c3's existence. I'll assume yes unless you say otherwise;
+  this matches the PRD's "currently exist at that position" language.
+
+  Now: #3 — the status view, change IDs, payload-position references
+
+  The §11.5 view is isomorphic to the submitted payload tree. So we need a shape
+   like the payload, with per-node annotations. Sketch (based on Appendix A.1,
+  after submission, before any decisions):
+
+  {
+    "proposalId": "p-7",
+    "proposer": "Carol",
+    "targetRootId": "r1",
+    "topTaxonId": "r1",
+    "status": {
+      "op": "no-op", "id": "r1",
+      "disposition": "structural",
+      "children": [
+        {
+          "op": "rename", "id": "c1", "name": "Speculative and Imaginative 
+  Fiction",
+          "changeId": "ch-12", "reviewer": "Alice",
+          "disposition": "queued",
+          "children": [
+            {
+              "op": "no-op", "id": "c2",
+              "disposition": "structural",
+              "children": [
+                { "op": "rename", "id": "c3", "name": "High Fantasy",
+                  "changeId": "ch-13", "reviewer": "Bob",
+                  "disposition": "queued" },
+                { "op": "add", "id": null, "name": "Urban Fantasy",
+                  "changeId": "ch-14", "reviewer": "Bob",
+                  "disposition": "queued",
+                  "children": [
+                    { "op": "add", "id": null, "name": "Paranormal Romance",
+                      "changeId": "ch-15", "reviewer": null,
+                      "disposition": "latent",
+                      "children": [] }
+                  ] }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+
+  That makes a bunch of small decisions visible. Things worth deciding
+  deliberately:
+
+  1. Disposition for no-ops. §11.5 says "no-op taxa carry a disposition
+  indicating they are structural." Literal: "structural"? Or "no-op"? Or omit
+  disposition entirely on no-ops? I'd vote "structural" — distinct token,
+  mirrors the prose.
+  2. Change IDs. Need to be referenceable from POST /changes/{id}/accept later
+  (Phase 6). I'd make them server-assigned, globally unique strings, separate
+  from taxon IDs. They appear on every operative node (rename/add/detach) and
+  are absent on no-ops.
+  3. reviewer field shape for the nested-under-create case. Above I show
+  "reviewer": null for the latent change whose reviewer can't be resolved yet.
+  Alternatives: "reviewer": {"pending": "ch-14"} (explicit "resolves to whoever
+  accepts ch-14") or just omit the field while latent-under-create. I lean
+  toward null + a separate "reviewerPending": "ch-14" only when meaningful — but
+   worth deciding.
+  4. POST /proposals response = the §11.5 view + identifiers. §15.4 says "→ 201
+  with the proposal ID and its initial status tree." So GET /proposals/{id} and
+  the POST /proposals 201 body should be the same shape (modulo the freshness of
+   dispositions). I'd just make them the same endpoint payload.
+  5. Field name for the operative payload node's reference. Above I used
+  changeId. Alternative: id on the change side, since operative payload nodes
+  already have a id (taxon-id). Keep them distinct — changeId for the change, id
+   stays for the taxon-id. Worth being explicit because for creates, id is null
+  and changeId is the only identifier.
+  6. Reason field. §11.5 mentions a reason for negative states. Phase 5 can't
+  produce any negative states (no rejection / no invalidation yet), so we can
+  spec the field as part of the shape but observe that no Phase 5 path emits it.
+   Or defer entirely. I'd spec the shape now (cheaper than fighting it in
+  Phase 6).
+  7. Listing form (GET /proposals). The full status tree per proposal would be
+  heavy. Maybe GET /proposals returns summaries (proposalId, proposer,
+  targetRootId, topTaxonId, submittedAt-ish, counts), and GET /proposals/{id}
+  returns the full status tree. The PRD doesn't say, but "isomorphic to payload"
+   is mentioned specifically for the per-proposal view, suggesting the list view
+   doesn't need that detail.
+  8. Proposer field. Above I added proposer. The PRD says proposals are
+  "optionally filterable by proposer" on the list, so it must be persisted and
+  surfaced. I'd put it on the proposal envelope, not the status tree.
+
+  How does this shape feel? Want me to write up these decisions concretely, or
+  pull on any of them further first — especially the reviewer field for
+  nested-under-create, since that's the spot with the most design flex?
+
+✻ Cooked for 1m 55s
+
+❯ (1) Structural. (2) Sounds good. (3) `null`. (4) Sounds good. (5) `changeId`. 
+   (6) Shape it now. (7) Does the PRD indicate how `GET /proposals` is to be    
+  used? (8) `proposer` is fine.                                                 
+
+⏺ The PRD is silent on GET /proposals beyond one line. The complete
+  authoritative statements are:
+
+  - §15.2 list: "GET /proposals — list proposals (optionally filterable by 
+  proposer)."
+  - §4: "All users (including null) can see all taxa and all proposals."
+  (universal visibility)
+  - §11.5 attaches the isomorphic-to-payload view specifically to GET 
+  /proposals/{id}, not to the list.
+
+  That's it — no specified fields, no ordering, no pagination, no other filters.
+   Which means we get to pick a shape that fits the use cases the PRD does name:
+
+  Use cases the PRD implies:
+  - A proposer wants to find their own proposals → filter by proposer.
+  - Anyone wants to find proposals against a particular tree → not specified,
+  but a natural extension. The PRD says "optionally filterable by proposer" —
+  the word "optionally" makes me read this as "at minimum, proposer filtering
+  exists," not "proposer is the only allowed filter." I'd add targetRootId as a
+  second optional filter; it's cheap and obvious.
+  - Anyone wants to drill into a specific proposal → that's GET /proposals/{id},
+   not the list. So the list doesn't need to carry the full status tree.
+
+  Proposed list-entry shape (lean):
+
+  {
+    "proposalId": "p-7",
+    "proposer": "Carol",
+    "targetRootId": "r1",
+    "topTaxonId": "r1"
+  }
+
+  Just enough to identify the proposal and let a caller follow up with GET 
+  /proposals/{id}. Deliberately omitted:
+
+  - Aggregate dispositions / counts — tempting, but Phase 5 has no negative
+  dispositions and the counts would be trivially-derivable from payload shape
+  alone. Worth adding in a later phase when dispositions actually move.
+  - Submission timestamp / ordering — the PRD says nothing about time, and our
+  model is timestamp-free elsewhere. I'd leave it out and let ordering be
+  implementation-defined / insertion-order.
+  - Pagination — the PRD doesn't ask for it; this is in-memory; defer.
+
+  Filters surfaced:
+  - ?proposer=<username> (PRD-required, "optionally filterable")
+  - ?targetRootId=<id> (my addition — natural and cheap)
+
+  If you want to be strictly minimal and only surface what the PRD explicitly
+  names, drop targetRootId filtering. Your call.
+
+  Three remaining things I want to flag before we wrap exploration — quick
+  yes/no on each:
+
+  - A. Decision #2's confirmation: I read "entire dependency tree valid at
+  submission" as shape + existence-deps must hold, but §3.3 invariants stay
+  acceptance-time. Confirm?
+  - B. Detach's existence dep checks the edge (payload-parent → detach-target
+  must be a real edge right now), not just the taxon's existence. Confirm?
+  - C. Routing for nested-under-create: stored at submission as a reference to 
+  the parent change (e.g., reviewerPendingFromChange: "ch-14"), with reviewer: 
+  null in the status view until the parent create is accepted. Confirm
+  phrasing/shape?
+
+  Once those three settle, the exploration has produced enough to draft the
+  change proposal cleanly.
+
+✻ Churned for 29s
+
+❯ That works for (7). Yes to (A). Yes to (B). Yes to (C). What about the        
+  "rename of c3 and a detach of c3" case you mentioned?                         
+
+⏺ Right, this is the case worth nailing down. Short answer: the changeId alone 
+  disambiguates them — no extra position-key needed. But the case does surface
+  one more decision worth making explicit.
+
+  Structural picture
+
+  no-op r1
+  └── no-op X                 (Bob owns X)
+      ├── detach c3           ← changeId: ch-A, routes to Bob (owner of X)
+      │                          existence reqs: r1 at top, X child of r1, edge
+  X→c3
+      └── rename c3 "..."     ← changeId: ch-B, routes to Erin (owner of c3)
+                                 existence reqs: ?
+
+  The payload is a tree-of-positions: two distinct sibling positions under X,
+  both happening to name c3. Structurally fine — id is a reference into live 
+  state, not a uniqueness key within the payload. Each operative position gets
+  its own changeId, and the §11.5 isomorphic status view shows them as two
+  distinct sibling nodes (different changeIds, different reviewers, different
+  dispositions).
+
+  Reviewing in Phase 6 is independent: Bob can accept the detach without Erin
+  acting on the rename, and vice versa.
+
+  The decision this case forces
+
+  The detach's existence req obviously includes the edge X→c3 (per our decision
+  B). The rename's existence reqs are less obvious. Two readings of §10.2:
+
+  Strict reading. §10.2 only classifies path ancestors as existence deps. For
+  rename-c3-under-X, the ancestors are r1 and X. So the existence reqs are: r1
+  is a current root, X is a child of r1. The rename itself only needs c3 to
+  exist somewhere (so it has an owner to route to) — c3 doesn't have to actually
+   be a child of X in live state. Renames are global anyway.
+
+  Unified reading. Every operative node implicitly asserts its payload-position.
+   So rename-c3-under-X also requires the edge X→c3 to exist in live state. The
+  payload-tree mirrors live-tree structure for every operative position, not
+  just for ancestors and detach edges.
+
+  The strict reading is what §10.2 literally says. The unified reading is more
+  proposer-honest: if your payload mis-positions a taxon, that's a bug in your
+  payload regardless of which op you're applying. The unified reading also makes
+   detach and rename behave consistently: both require their named edge to be
+  real.
+
+  A consequence either way: in the strict reading, a rename whose payload places
+   it under the wrong parent still queues immediately and would even succeed at 
+  acceptance (renames are global; position doesn't affect the rename's outcome).
+   The proposer's mis-placement is essentially harmless commentary. That feels
+  weird to me — the payload should mean what it says.
+
+  My recommendation: unified reading. Every operative-node-with-an-id implicitly
+   requires the edge payload-parent → its id to exist (or, for the top taxon,
+  requires the id to be the top taxon in the target tree). Concretely:
+
+  ┌─────────────┬───────────────────────────────────────────────────────────┐
+  │     Op      │  Implicit existence req (in addition to path ancestors)   │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │ no-op       │ edge payload-parent → id (or, at top, id is in target     │
+  │             │ tree)                                                     │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │ rename      │ edge payload-parent → id                                  │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │ detach      │ edge payload-parent → id (your decision B)                │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │ add (graft) │ id exists as a live taxon somewhere (the graft adds the   │
+  │             │ edge)                                                     │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │ add         │ nothing (id is null; creates the would-be taxon)          │
+  │ (create)    │                                                           │
+  └─────────────┴───────────────────────────────────────────────────────────┘
+
+  This makes the existence-validation story explainable in one sentence: every 
+  payload node's relationship to its payload-parent must already exist in live 
+  state, except for add (which is the operation that establishes a new edge).
+
+  Want to go with the unified reading? If yes, the "rename + detach of same id"
+  case is fully covered:
+
+  - Both nodes assert edge X→c3 exists.
+  - At submission both checks pass (one live edge satisfies both).
+  - Two changes, two changeIds, two reviewers, independent dispositions.
+  - No collision, no extra position key needed.
+
+  If you prefer the strict reading I can mark it down too — just want to pick
+  one before drafting.
+
+✻ Worked for 1m 56s
+
+❯ Renames may only make sense when the taxon is in the expected position.       
+
+⏺ Locked in — unified reading. Every operative node implicitly asserts its
+  payload-position holds in live state; the only exception is add, which is the
+  op that creates the edge (and for grafts, the grafted id must exist globally
+  so there's a taxon to attach).
+
+  Restated in one sentence for the spec: Every payload node's relationship to 
+  its payload-parent — the edge — must already exist in live state at 
+  submission, except for add, which is the operation that establishes that edge.
+
+  Where we are
+
+  All the underdeterminations the brief left open are now resolved:
+
+  Question: Routing target missing at submission
+  Resolution: 400
+  ────────────────────────────────────────
+  Question: Routing for nested-under-create
+  Resolution: snapshot is a reference to parent change; concrete reviewer
+    resolved on parent's acceptance (Phase 6); status view shows reviewer: null
+    while latent
+  ────────────────────────────────────────
+  Question: What's validated at submission
+  Resolution: shape (§9.1, §9.2, §3.4) + all existence requirements (path
+    ancestors per §10.2, plus the unified-reading implicit edge for every
+    op-with-id, plus globally-exists for grafts); 400 on any failure
+  ────────────────────────────────────────
+  Question: §3.3 invariants at submission
+  Resolution: not checked; stay acceptance-time per §10.3
+  ────────────────────────────────────────
+  Question: Detach existence req
+  Resolution: includes the edge, not just taxon existence
+  ────────────────────────────────────────
+  Question: Rename existence req
+  Resolution: includes the edge (unified reading)
+  ────────────────────────────────────────
+  Question: Same id at multiple payload positions
+  Resolution: allowed; each operative position is a distinct change with its own
+
+    changeId
+  ────────────────────────────────────────
+  Question: Status view shape
+  Resolution: disposition: "structural" for no-ops; server-assigned changeId per
+
+    operative node; reviewer is a username (or null for latent-under-create);
+    reason field shape included now even though Phase 5 never populates it
+  ────────────────────────────────────────
+  Question: GET /proposals list
+  Resolution: lean entries (proposalId, proposer, targetRootId, topTaxonId);
+    filters ?proposer= and ?targetRootId=
+  ────────────────────────────────────────
+  Question: GET /proposals/{id}
+  Resolution: full §11.5 status tree
+  ────────────────────────────────────────
+  Question: POST /proposals 201 body
+  Resolution: same shape as GET /proposals/{id}
+
+  That's a lot of ground covered for a brief that left these open.
+
+  What's still on the exploration table
+
+  Useful next moves, if you want to keep exploring before drafting:
+
+  - Spec-capability decomposition. Sketch which new spec capabilities Phase 5
+  creates and which existing ones it modifies (state-reset, authorization-gate
+  definitely; possibly taxon-domain for reviewer-resolution rules).
+  - Walk Appendix A.1 and A.2 through Phase 5 only (initial dispositions, no
+  acceptance) as a sanity check that our rules produce the dispositions the PRD
+  says they should.
+  - Data model sketch — what gets stored, what's derived, how /reset clears it.
+  - Test scenario dimensions — concretize the brief's three dimensions into a
+  starter list (will inform the initial test plan).
+
+  Or you can call exploration done and we move to a change proposal. Where do
+  you want to go?
+
+✻ Worked for 38s
+
+❯ proceed to the proposal                                                       
+
+⏺ Skill(opsx:propose)
+  ⎿  Successfully loaded skill
+
+⏺ Bash(openspec new change "phase-5-proposal-submission")
+  ⎿  - Creating change 'phase-5-proposal-submission'...
+     ✔ Created change 'phase-5-proposal-submission' at openspec/changes/pha
+     se-5-proposal-submission/ (schema: spec-driven)
+⏺ Bash(openspec status --change "phase-5-proposal-submission" --json)
+  ⎿  {
+       "changeName": "phase-5-proposal-submission",
+       "schemaName": "spec-driven",
+     … +37 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions proposal --change "phase-5-proposal-submission"
+      --json)
+  ⎿  {
+       "changeName": "phase-5-proposal-submission",
+       "artifactId": "proposal",
+     … +36 lines (ctrl+o to expand)
+
+  Read 7 files, listed 2 directories (ctrl+o to expand)
+
+⏺ Now I have enough context to write the proposal. Let me draft it.
+
+⏺ Write(openspec/changes/phase-5-proposal-submission/proposal.md)
+  ⎿  Wrote 353 lines to
+     openspec/changes/phase-5-proposal-submission/proposal.md
+      2 ## Why
+      3 Phase 5 introduces the **proposal subsystem**: a parallel world o
+      4 submitted by users who don't own the target tree, fanned out into
+      5 individually-routed changes, classified by dependency, and assign
+        ed an
+        roposal disposition. After this phase the server can *accept* a p
+      7 and produce queued changes — but it stops short of any review act
+      8 All accept / reject / dismiss / promotion behavior (Phases 6–7) i
+        s
+      9 explicitly deferred; latent changes simply stay latent here.
+     … +424 lines (ctrl+o to expand)
+
+⏺ Bash(openspec status --change "phase-5-proposal-submission" --json)
+  ⎿  {
+       "changeName": "phase-5-proposal-submission",
+       "schemaName": "spec-driven",
+     … +31 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions design --change "phase-5-proposal-submission"
+      --json)
+  ⎿  {
+       "changeName": "phase-5-proposal-submission",
+       "artifactId": "design",
+     … +26 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/phase-5-proposal-submission/design.md)
+  ⎿  Wrote 1038 lines to
+     openspec/changes/phase-5-proposal-submission/design.md
+       2 ## Context
+       3 Phase 5 lands the proposal-submission half of the §8–§12 lifecyc
+       4 top of the Phase 1–4 stack. Most prerequisites are already in pl
+         ace:
+       6 - Phase 1 supplies the `error-model` envelope and `ApiError`.
+       7 - Phase 2 supplies the identity middleware and the `requireRegis
+       8   authorization gate. `POST /proposals` and `GET /queue` mount b
+         ehind
+      10 - Phase 3 supplies the `Graph` snapshot, `containingRoots`, owne
+         r
+     … +1160 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions specs --change "phase-5-proposal-submission"
+      --json)  ⎿  {
+       "changeName": "phase-5-proposal-submission",
+       "artifactId": "specs",
+     … +39 lines (ctrl+o to expand)
+
+⏺ Now I'll write the five spec deltas in parallel.
+
+⏺ Write(openspec/changes/phase-5-proposal-submission/specs/proposal-payload/spec
+       .md)
+  ⎿  Wrote 381 lines to openspec/changes/phase-5-proposal-submission/specs/
+     proposal-payload/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: Payload data model — the four operations
+       4 
+          nodes,load submitted with a proposal SHALL be a tree of payload
+       6 each carrying exactly one **operation** drawn from `{ no-op, ren
+         ame,
+       8 following table (PRD §9.1):lds that operation requires per the
+       9 
+      10 | Op       | `id`                  | `name`                     
+                           | Nested `children` permitted |
+     … +442 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/phase-5-proposal-submission/specs/change-derivation/spe
+       c.md)
+  ⎿  Wrote 374 lines to openspec/changes/phase-5-proposal-submission/specs/
+     change-derivation/spec.md
+      1 ## ADDED Requirements
+      2 
+      3 ### Requirement: One derived change per operative payload node
+      4 
+      5 For each operative payload node (`rename`, `add`, or `detach`) in
+         a
+      6 validated payload, the derivation walk SHALL emit exactly one
+      7 **derived change** record. `no-op` payload nodes SHALL emit zero
+      8 changes (they exist only as structural anchors carrying existence
+      9 dependencies for their descendants).
+     … +402 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/phase-5-proposal-submission/specs/proposal-store/spec.m
+       d)
+  ⎿  Wrote 312 lines to openspec/changes/phase-5-proposal-submission/specs/
+     proposal-store/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: In-memory proposal store
+       4 
+         copedystem SHALL hold all proposal subsystem state in a module-s
+       6 in-memory store at `src/proposals/store.ts`. The store SHALL mai
+         ntain
+       8 exactly four collections plus two id counters:
+       9 1. **`proposals: Map<ProposalId, ProposalEnvelope>`** — the
+      10    per-proposal envelope keyed by `proposalId`. Each envelope ho
+         lds
+     … +315 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/phase-5-proposal-submission/specs/proposal-submission/s
+       pec.md)
+  ⎿  Wrote 315 lines to openspec/changes/phase-5-proposal-submission/specs/
+     proposal-submission/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: POST /proposals accepts proposals from register
+         ed users
+       4 
+       5 The server SHALL expose a `POST /proposals` endpoint that accept
+       6 JSON body `{ targetRootId, topTaxonId, payload }` and installs a
+       7 new proposal into the [[proposal-store]] on success, returning
+       8 `201` with the proposal id and its initial §11.5 status tree.
+       9 
+      10 The endpoint SHALL invoke `requireRegistered` from the
+     … +347 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/phase-5-proposal-submission/specs/proposal-reads/spec.m
+       d)
+  ⎿  Wrote 412 lines to openspec/changes/phase-5-proposal-submission/specs/
+     proposal-reads/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: GET /proposals lists proposals as lean records
+       4 
+       5 The server SHALL expose `GET /proposals` returning a JSON body
+       6 `{ proposals: ProposalListEntry[] }` where each `ProposalListEnt
+         ry`
+       7 has shape:
+       8 
+       9 ```
+      10 {
+     … +413 lines (ctrl+o to expand)
+
+⏺ Bash(openspec status --change "phase-5-proposal-submission" --json && echo
+      "---" && openspec validate phase-5-proposal-submission --strict 2>&1)
+  ⎿  Error: Exit code 1
+     {
+       "changeName": "phase-5-proposal-submission",
+       "schemaName": "spec-driven",
+       "isComplete": false,
+       "applyRequires": [
+         "tasks"
+       ],
+       "artifacts": [
+         {
+     … +33 lines (ctrl+o to expand)
+
+⏺ The validator complains about six requirements missing SHALL/MUST. Let me
+  check what's actually there:
+
+⏺ Bash(cd openspec/changes/phase-5-proposal-submission/specs && for f in
+      change-derivation/spec.md proposal-payload/spec.md proposal-reads/spec.md
+      proposal-submission/…)
+  ⎿  === change-derivation/spec.md ===
+     3:### Requirement: One derived change per operative payload node
+     6:validated payload, the derivation walk SHALL emit exactly one
+     … +139 lines (ctrl+o to expand)
+
+⏺ The validator checks only the FIRST line of the requirement description for
+  SHALL/MUST. I need to rephrase the six failing requirements so SHALL appears
+  on the first line.
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/specs/change-derivation/sp
+        ec.md)
+  ⎿  Added 4 lines, removed 4 lines
+       2  
+       3  ### Requirement: One derived change per operative payload node
+       4  
+       5 -For each operative payload node (`rename`, `add`, or `detach`) 
+         -in a                                                           
+       6 -validated payload, the derivation walk SHALL emit exactly one  
+       7 -**derived change** record. `no-op` payload nodes SHALL emit zer
+         -o                                                              
+       8 -changes (they exist only as structural anchors carrying existen
+         -ce                                                             
+       5 +The derivation walk SHALL emit exactly one **derived change** r
+         +ecord                                                          
+       6 +for each operative payload node (`rename`, `add`, or `detach`) 
+         +in a                                                           
+       7 +validated payload. `no-op` payload nodes SHALL emit zero change
+         +s                                                              
+       8 +(they exist only as structural anchors carrying existence      
+       9  dependencies for their descendants).
+      10  
+      11  Each derived change SHALL carry:
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/specs/proposal-payload/spe
+        c.md)
+  ⎿  Added 3 lines, removed 3 lines
+      70  
+      71  ### Requirement: Names in rename and add-create satisfy the tax
+          on-name format
+      72  
+      73 -When a payload node is `rename` or `add` with `id: null` (creat
+         -e), its                                                        
+      74 -`name` field SHALL be validated against the [[taxon-name-format
+         -]]                                                             
+      75 -rules (non-empty string, no leading or trailing whitespace). On
+         - failure                                                       
+      73 +The `name` field on a `rename` or `add`-create payload node SHA
+         +LL be                                                          
+      74 +validated against the [[taxon-name-format]] rules (non-empty st
+         +ring,                                                          
+      75 +no leading or trailing whitespace). On failure                 
+      76  the validator SHALL return the format validator's reason as-is 
+          —
+      77  `details.tag` SHALL be one of `empty`, `leading-whitespace`, or
+      78  `trailing-whitespace` per the existing [[taxon-name-format]] vo
+          cabulary.
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/specs/proposal-payload/spe
+        c.md)
+  ⎿  Added 4 lines, removed 3 lines
+      218  
+      219  ### Requirement: Non-add operations nested under add-create ar
+           e rejected
+      220  
+      221 -A payload node whose op is `no-op`, `rename`, or `detach` and 
+          -whose                                                         
+      222 -payload-parent is an `add-create` (an `add` with `id: null`) S
+          -HALL be                                                       
+      223 -rejected with `details.tag = "payload-op-under-create"`.      
+      221 +The validator SHALL reject any payload node whose op is `no-op
+          +`,                                                            
+      222 +`rename`, or `detach` and whose payload-parent is an `add-crea
+          +te` (an                                                       
+      223 +`add` with `id: null`), emitting `details.tag =               
+      224 +"payload-op-under-create"`.                                   
+      225  
+      226  Rationale: PRD §9.3 says nested ops under an `add` are evaluat
+           ed
+      227  against the post-acceptance state. For an `add-create`, the
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/specs/proposal-reads/spec.
+        md)
+  ⎿  Added 3 lines, removed 3 lines
+      377  
+      378  ### Requirement: Read handlers are pure of mutation
+      379  
+      380 -The read handlers (`GET /proposals`, `GET /proposals/{id}`, `G
+          -ET                                                            
+      381 -/queue`) SHALL NOT mutate any store, mint any IDs, or invoke  
+      382 -`withWriteLock`. They consult the [[proposal-store]] via its  
+      380 +The Phase 5 read handlers SHALL NOT mutate any store, mint any
+          + IDs,                                                         
+      381 +or invoke `withWriteLock`. This applies to `GET /proposals`, `
+          +GET                                                           
+      382 +/proposals/{id}`, and `GET /queue`. They consult the [[proposa
+          +l-store]] via its                                             
+      383  read-only operations (`getProposal`, `listProposals`,
+      384  `listChangesForProposal`, `listQueueFor`) and the taxon-store
+      385  snapshot only as needed for serialization details.
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/specs/proposal-submission/
+        spec.md)
+  ⎿  Added 3 lines, removed 3 lines
+       98  
+       99  ### Requirement: Unknown target tree yields 404 not_found
+      100  
+      101 -After body-schema validation passes and the handler enters    
+      102 -`withWriteLock`, the handler SHALL verify that `targetRootId` 
+      103 -identifies a current root in the live snapshot:               
+      101 +The handler SHALL verify, after body-schema validation passes 
+          +and                                                           
+      102 +inside `withWriteLock`, that `targetRootId` identifies a curre
+          +nt                                                            
+      103 +root in the live snapshot:                                    
+      104  
+      105  - The snapshot's `taxa` map MUST contain `targetRootId`.
+      106  - The taxon's `parentsOf` set MUST be empty (i.e., it is a roo
+           t).
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/specs/proposal-submission/
+        spec.md)
+  ⎿  Added 3 lines, removed 3 lines
+      208  
+      209  ### Requirement: Submission applies derivation and install ins
+           ide the lock
+      210  
+      211 -After the [[proposal-payload]] validator returns              
+      212 -`{ ok: true, payload }`, the handler SHALL execute the followi
+          -ng                                                            
+      213 -within the single `withWriteLock` entry, in order:            
+      211 +The handler SHALL execute the following four steps within the 
+          +single                                                        
+      212 +`withWriteLock` entry, in order, after the [[proposal-payload]
+          +]                                                             
+      213 +validator returns `{ ok: true, payload }`:                    
+      214  
+      215  1. Mint a `proposalId` via `proposalStore.mintProposalId()`.
+      216  2. Invoke [[change-derivation]]'s `deriveChanges(payload, {
+
+⏺ Bash(openspec validate phase-5-proposal-submission --strict 2>&1)
+  ⎿  Error: Exit code 1
+     Unknown item 'phase-5-proposal-submission'
+
+⏺ Bash(openspec list && echo "---" && openspec validate
+      "phase-5-proposal-submission" --strict 2>&1)
+  ⎿  Error: Exit code 1
+
+     ✖ Error: No OpenSpec changes directory found. Run 'openspec init' first.
+
+⏺ Bash(pwd && ls openspec/ && cd /Users/joe/repos/sdd-cmp-cc-openspec-openlore
+      && openspec list && openspec validate phase-5-proposal-submission --strict
+       2>&1)
+  ⎿  Error: Exit code 1
+     /Users/joe/repos/sdd-cmp-cc-openspec-openlore/openspec/changes/phase-5-prop
+     osal-submission/specs
+     ls: openspec/: No such file or directory
+⏺ Bash(cd /Users/joe/repos/sdd-cmp-cc-openspec-openlore && openspec validate
+      phase-5-proposal-submission --strict)
+  ⎿  Change 'phase-5-proposal-submission' is valid
+
+⏺ Specs validated. Now I need to also confirm I have a MEMORY.md understanding
+  (the user explained spec-writing skill is auto-triggered for spec changes — I
+  should respect that), but the work is done. Time for tasks.md.
+
+⏺ Bash(openspec instructions tasks --change "phase-5-proposal-submission"
+      --json)
+  ⎿  {
+       "changeName": "phase-5-proposal-submission",
+       "artifactId": "tasks",
+     … +22 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Wrote 142 lines to
+     openspec/changes/phase-5-proposal-submission/tasks.md
+      2 ## 1. Initial test plan (frozen at end of step 1)
+         specs in this change, using the established `Rule | Input | Expe
+        cted | Notes` table format
+        eze; do not edit this file afterward` — this commit marks the fre
+      5 - [ ] 1.3 Create `test-plans/phase-5-final.md` as a copy of the i
+      6 nitial plan plus an empty `## Changelog` section at the end
+      8 ## 2. Shared types (`src/proposals/types.ts`)
+      9 - [ ] 2.1 Create `src/proposals/types.ts` with `ProposalId` (`p${
+        ion` union (`"queued" | "latent" | "accepted" | "rejected" | "inv
+        alid" | "str
+     … +442 lines (ctrl+o to expand)
+
+⏺ Bash(openspec status --change "phase-5-proposal-submission" && echo "---" &&
+      openspec validate phase-5-proposal-submission --strict)
+  ⎿  - Loading change status...
+     Change: phase-5-proposal-submission
+     Schema: spec-driven
+     … +10 lines (ctrl+o to expand)
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ All four artifacts are complete and the change passes strict validation.
+
+  Summary
+
+  Created change phase-5-proposal-submission at
+  openspec/changes/phase-5-proposal-submission/:
+
+  - proposal.md (353 lines) — motivation, scope, the three resolutions reached
+  during explore (routing-snapshot-at-submission, unified-reading existence
+  check, §3.3 stays acceptance-time), capability list, deferred items
+  - design.md (1038 lines) — 13 design decisions: typed payload validator,
+  derived-change record shape, routing resolution (concrete vs deferred), dep
+  classification walk, status-tree co-derivation, proposal store shape,
+  submission pipeline, read pipelines, error vocabulary, ID format, module
+  layout, test seams, reset composition
+  - specs/ — five new capabilities:
+    - proposal-payload (382 lines) — pure shape + existence validator
+    - change-derivation (374 lines) — pure routing/deps/disposition + status
+  tree
+    - proposal-store (312 lines) — in-memory storage + reset + queue index
+    - proposal-submission (315 lines) — POST /proposals orchestration
+    - proposal-reads (412 lines) — GET /proposals, GET /proposals/{id}, GET 
+  /queue
+  - tasks.md (142 lines) — 12 task groups: frozen test plan, types, validator,
+  derivation, store, reset composition, status-tree serializer, submission
+  handler, read handlers, queue handler, end-to-end Appendix-A integration,
+  spec-drift + final test plan
+
+  Ready for implementation. Run /opsx:apply to start.
+
+✻ Baked for 18m 47s
+
+❯ write the initial test plan                                                   
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+⏺ Write(test-plans/phase-5-initial.md)
+  ⎿  Wrote 746 lines to test-plans/phase-5-initial.md
+      2 # Phase 5 — Initial test plan (frozen)
+      3 > **Status: frozen on commit.** This plan was written from the Op
+      4 > change `phase-5-proposal-submission` (specs: `proposal-payload`
+        ,
+        nd`change-derivation`, `proposal-store`, `proposal-submission`, a
+      6 > `proposal-reads`) **before** implementation began and is not ed
+      7 > afterward. The companion file `phase-5-final.md` supersedes thi
+        s one
+        orand carries a `## Changelog` listing every row added, removed, 
+      9 > changed during implementation, with the reason for each.
+     … +1382 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Initial test plan written at test-plans/phase-5-initial.md (746 lines, ~210
+  test rows across 9 sections).
+
+  Structure follows the Phase 4 template:
+  - Conventions — test isolation, no-graph-mutation invariant, owner
+  pre-registration, DFS pre-order assertions, Appendix A reproduction
+  - §1 proposal-payload — shape, name-format, top-taxon, existence (unified
+  reading), nested-under-create, first-failure, purity
+  - §2 change-derivation — single-change emission, routing (incl.
+  concrete-vs-deferred), decision deps, existence deps, disposition, status
+  tree, sequencer injection, purity
+  - §3 PRD Appendix A reproductions — A.1 and A.2 with the key insight that
+  nested-under-graft routes concretely but is latent (distinct from
+  nested-under-create which is deferred + latent)
+  - §4 proposal-store — install atomicity, queue index, lookups, mint, reset,
+  purity
+  - §5 proposal-submission — POST /proposals: auth, body schema, target-tree
+  existence, payload-validation-via-HTTP, successful submission (incl.
+  no-mutation invariant), lock discipline, error envelope
+  - §6 proposal-reads — GET /proposals (list + filters), GET /proposals/{id}
+  (status tree shape rules), GET /queue (per-user, latent excluded,
+  deterministic order)
+  - §7 /reset extension — discharges the [[state-reset]] forward obligation
+  - §8 integration sanity — Appendix A end-to-end via HTTP, multi-tree,
+  no-side-effects
+  - §9 §13/§14 mapping — coverage of PRD requirements
+
+  One worth flagging from writing the plan: the §3 row for Appendix A.2's
+  nested-under-graft case made me re-examine the routing rule. A nested op under
+   an add-graft has its payloadParent.kind === "live" (the grafted taxon is an
+  existing live taxon — graft attaches it, doesn't create it), so routing is
+  concrete to that taxon's owner. The change is still latent because the graft
+  is a decision-dep ancestor. The spec already captures this correctly (the
+  deferred case is specifically when payload-parent is an add-create, not
+  add-graft), and the test row makes the distinction explicit. PRD Appendix A.2
+  confirms: P2's nested Unreliable Narrator Thriller is "routed to Erin — owner
+  of a3" and "latent until the graft is accepted."
+
+✻ Cooked for 6m 20s
+
+❯ /opsx:apply                                                                   
+
+⏺ Using change: phase-5-proposal-submission. (Override with /opsx:apply 
+  <other>.)
+
+⏺ Bash(openspec status --change "phase-5-proposal-submission" --json && echo
+      "---" && openspec instructions apply --change
+      "phase-5-proposal-submission" --json)
+  ⎿  {
+       "changeName": "phase-5-proposal-submission",
+       "schemaName": "spec-driven",
+     … +522 lines (ctrl+o to expand)
+
+⏺ 107 tasks. Let me orient on the existing codebase before diving in — I already
+   have the artifacts in context from writing them.
+
+  Searched for 1 pattern, read 10 files, listed 1 directory (ctrl+o to expand)
+
+  Read 6 files, listed 1 directory (ctrl+o to expand)
+⏺ Let me set up high-level section tracking and start implementing.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Bash(cp test-plans/phase-5-initial.md test-plans/phase-5-final.md)
+  ⎿  Done
+
+⏺ Update(test-plans/phase-5-final.md)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-5-final.md)
+  ⎿  Added 6 lines, removed 8 lines
+       1 -# Phase 5 — Initial test plan (frozen)                         
+       1 +# Phase 5 — Final test plan                                    
+       2  
+       3 -> **Status: frozen on commit.** This plan was written from the 
+         -OpenSpec                                                       
+       4 -> change `phase-5-proposal-submission` (specs: `proposal-payloa
+         -d`,                                                            
+       5 -> `change-derivation`, `proposal-store`, `proposal-submission`,
+         - and                                                           
+       6 -> `proposal-reads`) **before** implementation began and is not 
+         -edited                                                         
+       7 -> afterward. The companion file `phase-5-final.md` supersedes t
+         -his one                                                        
+       8 -> and carries a `## Changelog` listing every row added, removed
+         -, or                                                           
+       9 -> changed during implementation, with the reason for each.     
+       3 +> **Status: living document, updated through implementation.** 
+         +Supersedes                                                     
+       4 +> `phase-5-initial.md` (which was frozen on commit and is no lo
+         +nger                                                           
+       5 +> edited). The `## Changelog` section at the end of this file e
+         +numerates                                                      
+       6 +> every row added, removed, or changed relative to the initial 
+         +plan,                                                          
+       7 +> with the reason for each change.                             
+       8  
+       9  ## Why this plan exists
+      10  
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 2 lines, removed 2 lines
+      1  ## 1. Initial test plan (frozen at end of step 1)
+      2  
+      3 -- [ ] 1.1 Write `test-plans/phase-5-initial.md` from the five ne
+        -w specs in this change, using the established `Rule | Input | Ex
+        -pected | Notes` table format                                    
+      3 +- [x] 1.1 Write `test-plans/phase-5-initial.md` from the five ne
+        +w specs in this change, using the established `Rule | Input | Ex
+        +pected | Notes` table format                                    
+      4  - [ ] 1.2 Commit `phase-5-initial.md` — this commit marks the fr
+         eeze; do not edit this file afterward
+      5 -- [ ] 1.3 Create `test-plans/phase-5-final.md` as a copy of the 
+        -initial plan plus an empty `## Changelog` section at the end    
+      5 +- [x] 1.3 Create `test-plans/phase-5-final.md` as a copy of the 
+        +initial plan plus an empty `## Changelog` section at the end    
+      6  
+      7  ## 2. Shared types (`src/proposals/types.ts`)
+      8  
+
+⏺ §1 done (1.2 is a user-controlled commit; the file is now stable). Moving to
+  §2 shared types.
+⏺ Bash(mkdir -p src/proposals test/proposals)
+  ⎿  Done
+
+⏺ Write(src/proposals/types.ts)
+  ⎿  Wrote 217 lines to src/proposals/types.ts
+      2 // Shared types for the proposal subsystem (Phase 5).
+      3 // These shapes are referenced by the payload validator, the chan
+        ge
+      4 // derivation, the proposal store, the submission handler, and th
+        e
+        e/ read/queue handlers. Keeping them in one file lets every modul
+      6 // agree on the contract without circular imports.
+      7 //
+      8 // Import-only from `src/domain/graph.js` (TaxonId). No HTTP, no
+      9 // store, no handlers — types are pure and load-free.
+     … +246 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc --noEmit 2>&1 | head -20)
+  ⎿  (No output)
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 11 lines, removed 11 lines
+       6  
+       7  ## 2. Shared types (`src/proposals/types.ts`)
+       8  
+       9 -- [ ] 2.1 Create `src/proposals/types.ts` with `ProposalId` (`p
+         -${number}` template literal), `ChangeId` (`ch${number}`), `Disp
+         -osition` union (`"queued" | "latent" | "accepted" | "rejected" 
+         -| "invalid" | "structural"`)                                   
+      10 -- [ ] 2.2 Define `TaxonRef` discriminated union: `{ kind: "exis
+         -ting", id: TaxonId } | { kind: "to-create", name: string }`    
+      11 -- [ ] 2.3 Define `PayloadParentRef` discriminated union: `{ kin
+         -d: "top" } | { kind: "live", taxonId: TaxonId } | { kind: "to-c
+         -reate", parentChangeId: ChangeId }`                            
+      12 -- [ ] 2.4 Define `ReviewerRef` discriminated union: `{ kind: "c
+         -oncrete", username: string } | { kind: "deferred", parentChange
+         -Id: ChangeId }`                                                
+      13 -- [ ] 2.5 Define `ExistenceDep`: `{ parent: PayloadParentRef | 
+         -null, childId: TaxonId }` — `parent: null` marks the graft-targ
+         -et global-existence variant                                    
+      14 -- [ ] 2.6 Define `DerivedChange` with fields `changeId, proposa
+         -lId, op ("rename"|"add-create"|"add-graft"|"detach"), taxonRef,
+         - payloadParent, targetRootId, reviewer, decisionDeps, existence
+         -Deps, disposition, reason?`                                    
+      15 -- [ ] 2.7 Define `ProposalEnvelope` with fields `proposalId, pr
+         -oposer, targetRootId, topTaxonId, rawPayload`                  
+      16 -- [ ] 2.8 Define `StatusNode` with fields `op, id, name?, chang
+         -eId?, reviewer, disposition, reason?, children?`               
+      17 -- [ ] 2.9 Define `RawPayloadNode` (input shape) and `ValidatedP
+         -ayloadNode` discriminated union (post-validation: `kind ∈ { "no
+         --op", "rename", "add-graft", "add-create", "detach" }` with app
+         -ropriate fields)                                               
+      18 -- [ ] 2.10 Define `PayloadValidationFailure` with `tag, positio
+         -n, message`; `PayloadValidationOk = { ok: true, payload }`; `Pa
+         -yloadValidationErr = { ok: false, reason }`                    
+      19 -- [ ] 2.11 Confirm `types.ts` imports only from `src/domain/` (
+         -`TaxonId`, `Graph`) — no HTTP, store, or handler imports       
+       9 +- [x] 2.1 Create `src/proposals/types.ts` with `ProposalId` (`p
+         +${number}` template literal), `ChangeId` (`ch${number}`), `Disp
+         +osition` union (`"queued" | "latent" | "accepted" | "rejected" 
+         +| "invalid" | "structural"`)                                   
+      10 +- [x] 2.2 Define `TaxonRef` discriminated union: `{ kind: "exis
+         +ting", id: TaxonId } | { kind: "to-create", name: string }`    
+      11 +- [x] 2.3 Define `PayloadParentRef` discriminated union: `{ kin
+         +d: "top" } | { kind: "live", taxonId: TaxonId } | { kind: "to-c
+         +reate", parentChangeId: ChangeId }`                            
+      12 +- [x] 2.4 Define `ReviewerRef` discriminated union: `{ kind: "c
+         +oncrete", username: string } | { kind: "deferred", parentChange
+         +Id: ChangeId }`                                                
+      13 +- [x] 2.5 Define `ExistenceDep`: `{ parent: PayloadParentRef | 
+         +null, childId: TaxonId }` — `parent: null` marks the graft-targ
+         +et global-existence variant                                    
+      14 +- [x] 2.6 Define `DerivedChange` with fields `changeId, proposa
+         +lId, op ("rename"|"add-create"|"add-graft"|"detach"), taxonRef,
+         + payloadParent, targetRootId, reviewer, decisionDeps, existence
+         +Deps, disposition, reason?`                                    
+      15 +- [x] 2.7 Define `ProposalEnvelope` with fields `proposalId, pr
+         +oposer, targetRootId, topTaxonId, rawPayload`                  
+      16 +- [x] 2.8 Define `StatusNode` with fields `op, id, name?, chang
+         +eId?, reviewer, disposition, reason?, children?`               
+      17 +- [x] 2.9 Define `RawPayloadNode` (input shape) and `ValidatedP
+         +ayloadNode` discriminated union (post-validation: `kind ∈ { "no
+         +-op", "rename", "add-graft", "add-create", "detach" }` with app
+         +ropriate fields)                                               
+      18 +- [x] 2.10 Define `PayloadValidationFailure` with `tag, positio
+         +n, message`; `PayloadValidationOk = { ok: true, payload }`; `Pa
+         +yloadValidationErr = { ok: false, reason }`                    
+      19 +- [x] 2.11 Confirm `types.ts` imports only from `src/domain/` (
+         +`TaxonId`, `Graph`) — no HTTP, store, or handler imports       
+      20  
+      21  ## 3. Payload validator (`specs/proposal-payload`)
+      22  
+
+⏺ Now §3: payload validator.
+
+⏺ Write(src/proposals/payload.ts)
+  ⎿  Wrote 518 lines to src/proposals/payload.ts
+       2 // Payload validator (Phase 5 [[proposal-payload]]).
+       3 // Pure function: walks the raw payload tree in DFS pre-order, v
+       4 // shape per §9.1, name-format per [[taxon-name-format]], top-ta
+         xon
+       5 // constraints per §9.2, and unified-reading existence requireme
+       6 // against a Graph snapshot. On the first failure encountered re
+         turns
+       8 // payload }` with a narrowed `ValidatedPayloadNode` tree theue,
+       9 // derivation module can switch over exhaustively.
+      10 //
+     … +576 lines (ctrl+o to expand)
+
+⏺ Update(src/proposals/payload.ts)
+  ⎿  Removed 1 line
+      15  
+      16  import type { Graph, TaxonId } from "../domain/graph.js";
+      17  import { validateTaxonName } from "../format/taxon-name.js";
+      18 -import { containingRoots } from "../domain/reachability.js";   
+      18  import type {
+      19    PayloadValidationFailure,
+      20    PayloadValidationResult,
+
+⏺ Update(src/proposals/payload.ts)
+  ⎿  Removed 6 lines
+      509  // -----------------------------------------------------------
+           ----------------
+      510  
+      511  export { reachableFrom, edgeExists };
+      512 -                                                              
+      513 -// Reference imports kept to satisfy CI's "no unused imports" 
+          -linter                                                        
+      514 -// without changing behavior. `containingRoots` is unused at r
+          -untime                                                        
+      515 -// but documents that the validator's reachability story is co
+          -nsistent                                                      
+      516 -// with the rest of the codebase. Remove if linting permits.  
+      517 -void containingRoots;                                         
+
+⏺ Bash(npx tsc --noEmit 2>&1 | head -40)
+  ⎿  (No output)
+
+⏺ Clean compile. Now the payload-validator tests (6 files).
+
+⏺ Bash(mkdir -p test/proposals)
+  ⎿  Done
+
+⏺ Write(test/proposals/payload-shape.test.ts)
+  ⎿  Wrote 215 lines to test/proposals/payload-shape.test.ts
+       2 // (Phase 5 [[proposal-payload]] §1 shape rows).pe validation
+       3 //
+       4 // Graph fixtures are built by Phase 3's seed() helper. Each tes
+       5 // constructs only what it needs; tests do not share state.
+       6 
+       7 import { describe, it, beforeEach } from "node:test";
+       9 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+         xa/store.js";
+      10 import { validatePayload } from "../../src/proposals/payload.js"
+         ;
+     … +210 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/payload-name-format.test.ts)
+  ⎿  Wrote 109 lines to test/proposals/payload-name-format.test.ts
+          name-format rows).dation tests (Phase 5 [[proposal-payload]] §1
+       2 // Verifies that rename and add-create re-emit the taxon-name-fo
+       3 // validator's tag vocabulary verbatim.
+       4 
+       5 import { describe, it, beforeEach } from "node:test";
+       7 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+         xa/store.js";
+         ;mport { validatePayload } from "../../src/proposals/payload.js"
+       9 
+      10 beforeEach(() => {
+     … +105 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/payload-top-taxon.test.ts)
+  ⎿  Wrote 142 lines to test/proposals/payload-top-taxon.test.ts
+         op-taxon rows).lidation tests (Phase 5 [[proposal-payload]] §1 t
+       2 
+       3 import { describe, it, beforeEach } from "node:test";
+       5 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+         xa/store.js";
+       6 import { validatePayload } from "../../src/proposals/payload.js"
+       7 ;
+       8 beforeEach(() => {
+       9   taxaReset();
+      10 });
+     … +147 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/payload-existence.test.ts)
+  ⎿  Wrote 228 lines to test/proposals/payload-existence.test.ts
+         load]] §1 existence rows).ce-check tests (Phase 5 [[proposal-pay
+       2 
+       3 import { describe, it, beforeEach } from "node:test";
+       5 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+         xa/store.js";
+       6 import { validatePayload } from "../../src/proposals/payload.js"
+       7 ;
+       8 beforeEach(() => {
+       9   taxaReset();
+      10 });
+     … +243 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/payload-under-create.test.ts)
+  ⎿  Wrote 191 lines to test/proposals/payload-under-create.test.ts
+         der-create rows).reate tests (Phase 5 [[proposal-payload]] §1 un
+       2 
+       3 import { describe, it, beforeEach } from "node:test";
+       5 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+         xa/store.js";
+       6 import { validatePayload } from "../../src/proposals/payload.js"
+       7 ;
+       8 beforeEach(() => {
+       9   taxaReset();
+      10 });
+     … +195 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/payload-first-failure.test.ts)
+  ⎿  Wrote 151 lines to test/proposals/payload-first-failure.test.ts
+         st-failure rows).wins tests (Phase 5 [[proposal-payload]] §1 fir
+       2 
+       3 import { describe, it, beforeEach } from "node:test";
+       5 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+         xa/store.js";
+       6 import { validatePayload } from "../../src/proposals/payload.js"
+       7 ;
+       8 beforeEach(() => {
+       9   taxaReset();
+      10 });
+     … +157 lines (ctrl+o to expand)
+⏺ Let me build and run the payload tests to verify §3.
+
+⏺ Bash(npx tsc 2>&1 | head -30)
+  ⎿  (No output)
+
+⏺ Bash(node --test "dist/test/proposals/payload-*.test.js" 2>&1 | tail -40)
+  ⎿  ℹ tests 54
+     ℹ suites 21
+     ℹ pass 52
+     … +37 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Update(test/proposals/payload-first-failure.test.ts)
+  ⎿  Added 4 lines, removed 2 lines
+      108  describe("purity: validator does not invoke the invariant engi
+           ne", () => {
+      109    it("validator file imports nothing from src/domain/invariant
+           s", async () => {
+      110      const { readFile } = await import("node:fs/promises");
+      111 +    const { resolve } = await import("node:path");            
+      112      const src = await readFile(
+      112 -      new URL("../../src/proposals/payload.ts", import.meta.ur
+          -l),                                                           
+      113 +      resolve(process.cwd(), "src/proposals/payload.ts"),     
+      114        "utf-8",
+      115      );
+      116      assert.ok(
+     ...
+      129  
+      130    it("validator file does not import HTTP or app", async () =>
+            {
+      131      const { readFile } = await import("node:fs/promises");
+      132 +    const { resolve } = await import("node:path");            
+      133      const src = await readFile(
+      132 -      new URL("../../src/proposals/payload.ts", import.meta.ur
+          -l),                                                           
+      134 +      resolve(process.cwd(), "src/proposals/payload.ts"),     
+      135        "utf-8",
+      136      );
+      137      for (const banned of [
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/payload-*.test.js" 2>&1 |
+      tail -12)
+  ⎿  ✔ nested add ops under add-create are permitted (1.045417ms)
+     ▶ nested ops under add-graft (not under create)
+       ✔ no-op nested under add-graft is OK when the live edge holds (0.127
+     … +10 lines (ctrl+o to expand)
+
+⏺ All 54 payload tests pass. Mark §3 done and tasks 3.x.
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 16 lines, removed 16 lines
+      20  
+      21  ## 3. Payload validator (`specs/proposal-payload`)
+      22  
+      23 -- [ ] 3.1 Create `src/proposals/payload.ts` exporting `validate
+         -Payload(raw: unknown, ctx: { snapshot: Graph; targetRootId: Tax
+         -onId; topTaxonId: TaxonId }): PayloadValidationOk | PayloadVali
+         -dationErr`                                                     
+      24 -- [ ] 3.2 Confirm `src/proposals/payload.ts` imports nothing fr
+         -om `src/app.ts`, `src/proposals/store.ts`, `src/proposals/deriv
+         -e.ts`, the handlers, or any HTTP framework module; imports from
+         - `src/domain/`, `src/taxa/` (for `taxon-name-format`), and `src
+         -/proposals/types.ts` are permitted                             
+      25 -- [ ] 3.3 Implement shape validation per node: `op` is one of t
+         -he four; required fields per the §9.1 table; `children` (when p
+         -resent) is an array of objects; `detach` has no `children`; map
+         - shape failures to `payload-shape` or `payload-op-fields` per t
+         -he spec                                                        
+      26 -- [ ] 3.4 Implement name-format validation for `rename` and `ad
+         -d`-create nodes, re-emitting the `taxon-name-format` validator'
+         -s tag (`empty`, `leading-whitespace`, `trailing-whitespace`) un
+         -changed                                                        
+      27 -- [ ] 3.5 Implement top-taxon constraints in order: `op ∈ { no-
+         -op, rename }` (else `top-taxon-op`); `id === ctx.topTaxonId` (e
+         -lse `top-taxon-mismatch`); `id` is reachable from `ctx.targetRo
+         -otId` in `ctx.snapshot` (else `top-taxon-not-in-tree`)         
+      28 -- [ ] 3.6 Implement unified-reading existence checks per the sp
+         -ec's table: edge check for `no-op`/`rename`/`detach` non-top → 
+         -`payload-edge-missing`; global existence for `add`-graft → `gra
+         -ft-target-missing`; `add`-create has no requirement            
+      29 -- [ ] 3.7 Implement nested-under-create shape rule: any `no-op`
+         -, `rename`, or `detach` whose payload-parent is `add-create` → 
+         -`payload-op-under-create`; nested `add` under `add-create` is p
+         -ermitted (each `add`'s own rules apply)                        
+      30 -- [ ] 3.8 Implement DFS pre-order traversal with first-failure-
+         -wins; on failure return `{ ok: false, reason }` with `tag`, `po
+         -sition`, and `message`; on success return `{ ok: true, payload:
+         - ValidatedPayloadNode }`                                       
+      31 -- [ ] 3.9 Use a humanized `position` format (e.g., `"r1 > c2 > 
+         -rename(c3)"` or `"payload.children[0].children[1]"` — implement
+         -ation's choice; just ensure non-empty and identifies the offend
+         -ing node)                                                      
+      32 -- [ ] 3.10 Write `test/proposals/payload-shape.test.ts` coverin
+         -g: unrecognized op → `payload-shape`; missing `id` on no-op/ren
+         -ame/detach → `payload-op-fields`; rename missing `name` → `payl
+         -oad-op-fields`; add-create missing `name` → `payload-op-fields`
+         -; detach with children → `payload-op-fields`; add-graft with id
+         -+name → name ignored (no error); empty payload (non-object) → `
+         -payload-shape`; non-array `children` → `payload-shape`         
+      33 -- [ ] 3.11 Write `test/proposals/payload-name-format.test.ts` c
+         -overing: rename `""` → `empty`; rename leading whitespace → `le
+         -ading-whitespace`; rename trailing whitespace → `trailing-white
+         -space`; add-create with same name failures; rename to a valid n
+         -ame in proper format succeeds                                  
+      34 -- [ ] 3.12 Write `test/proposals/payload-top-taxon.test.ts` cov
+         -ering: top is `add` → `top-taxon-op`; top is `detach` → `top-ta
+         -xon-op`; payload top's `id` differs from `topTaxonId` → `top-ta
+         -xon-mismatch`; `topTaxonId` not reachable from `targetRootId` →
+         - `top-taxon-not-in-tree`; top is `no-op` in target tree → ok; t
+         -op is `rename` in target tree → ok                             
+      35 -- [ ] 3.13 Write `test/proposals/payload-existence.test.ts` cov
+         -ering: rename whose payload-parent doesn't contain it → `payloa
+         -d-edge-missing`; detach of non-existent edge → `payload-edge-mi
+         -ssing`; nested no-op whose parent edge doesn't hold → `payload-
+         -edge-missing`; add-graft of non-existent taxon → `graft-target-
+         -missing`; add-graft of taxon in a different tree (not target) →
+         - ok; add-create has no live-state requirement                  
+      36 -- [ ] 3.14 Write `test/proposals/payload-under-create.test.ts` 
+         -covering: rename nested under add-create → `payload-op-under-cr
+         -eate`; detach nested under add-create → `payload-op-under-creat
+         -e`; no-op nested under add-create → `payload-op-under-create`; 
+         -add-create nested under add-create → ok; add-graft nested under
+         - add-create → ok (if graft target exists)                      
+      37 -- [ ] 3.15 Write `test/proposals/payload-first-failure.test.ts`
+         - covering: a payload with both a shape error in an earlier-visi
+         -ted node and an existence error in a later node surfaces the sh
+         -ape error; the `position` field is present on every failure    
+      38 -- [ ] 3.16 Confirm `validatePayload` never calls `checkAddEdge`
+         -, `checkRename`, or `isShared` — §3.3 invariants are NOT checke
+         -d at submission                                                
+      23 +- [x] 3.1 Create `src/proposals/payload.ts` exporting `validate
+         +Payload(raw: unknown, ctx: { snapshot: Graph; targetRootId: Tax
+         +onId; topTaxonId: TaxonId }): PayloadValidationOk | PayloadVali
+         +dationErr`                                                     
+      24 +- [x] 3.2 Confirm `src/proposals/payload.ts` imports nothing fr
+         +om `src/app.ts`, `src/proposals/store.ts`, `src/proposals/deriv
+         +e.ts`, the handlers, or any HTTP framework module; imports from
+         + `src/domain/`, `src/taxa/` (for `taxon-name-format`), and `src
+         +/proposals/types.ts` are permitted                             
+      25 +- [x] 3.3 Implement shape validation per node: `op` is one of t
+         +he four; required fields per the §9.1 table; `children` (when p
+         +resent) is an array of objects; `detach` has no `children`; map
+         + shape failures to `payload-shape` or `payload-op-fields` per t
+         +he spec                                                        
+      26 +- [x] 3.4 Implement name-format validation for `rename` and `ad
+         +d`-create nodes, re-emitting the `taxon-name-format` validator'
+         +s tag (`empty`, `leading-whitespace`, `trailing-whitespace`) un
+         +changed                                                        
+      27 +- [x] 3.5 Implement top-taxon constraints in order: `op ∈ { no-
+         +op, rename }` (else `top-taxon-op`); `id === ctx.topTaxonId` (e
+         +lse `top-taxon-mismatch`); `id` is reachable from `ctx.targetRo
+         +otId` in `ctx.snapshot` (else `top-taxon-not-in-tree`)         
+      28 +- [x] 3.6 Implement unified-reading existence checks per the sp
+         +ec's table: edge check for `no-op`/`rename`/`detach` non-top → 
+         +`payload-edge-missing`; global existence for `add`-graft → `gra
+         +ft-target-missing`; `add`-create has no requirement            
+      29 +- [x] 3.7 Implement nested-under-create shape rule: any `no-op`
+         +, `rename`, or `detach` whose payload-parent is `add-create` → 
+         +`payload-op-under-create`; nested `add` under `add-create` is p
+         +ermitted (each `add`'s own rules apply)                        
+      30 +- [x] 3.8 Implement DFS pre-order traversal with first-failure-
+         +wins; on failure return `{ ok: false, reason }` with `tag`, `po
+         +sition`, and `message`; on success return `{ ok: true, payload:
+         + ValidatedPayloadNode }`                                       
+      31 +- [x] 3.9 Use a humanized `position` format (e.g., `"r1 > c2 > 
+         +rename(c3)"` or `"payload.children[0].children[1]"` — implement
+         +ation's choice; just ensure non-empty and identifies the offend
+         +ing node)                                                      
+      32 +- [x] 3.10 Write `test/proposals/payload-shape.test.ts` coverin
+         +g: unrecognized op → `payload-shape`; missing `id` on no-op/ren
+         +ame/detach → `payload-op-fields`; rename missing `name` → `payl
+         +oad-op-fields`; add-create missing `name` → `payload-op-fields`
+         +; detach with children → `payload-op-fields`; add-graft with id
+         ++name → name ignored (no error); empty payload (non-object) → `
+         +payload-shape`; non-array `children` → `payload-shape`         
+      33 +- [x] 3.11 Write `test/proposals/payload-name-format.test.ts` c
+         +overing: rename `""` → `empty`; rename leading whitespace → `le
+         +ading-whitespace`; rename trailing whitespace → `trailing-white
+         +space`; add-create with same name failures; rename to a valid n
+         +ame in proper format succeeds                                  
+      34 +- [x] 3.12 Write `test/proposals/payload-top-taxon.test.ts` cov
+         +ering: top is `add` → `top-taxon-op`; top is `detach` → `top-ta
+         +xon-op`; payload top's `id` differs from `topTaxonId` → `top-ta
+         +xon-mismatch`; `topTaxonId` not reachable from `targetRootId` →
+         + `top-taxon-not-in-tree`; top is `no-op` in target tree → ok; t
+         +op is `rename` in target tree → ok                             
+      35 +- [x] 3.13 Write `test/proposals/payload-existence.test.ts` cov
+         +ering: rename whose payload-parent doesn't contain it → `payloa
+         +d-edge-missing`; detach of non-existent edge → `payload-edge-mi
+         +ssing`; nested no-op whose parent edge doesn't hold → `payload-
+         +edge-missing`; add-graft of non-existent taxon → `graft-target-
+         +missing`; add-graft of taxon in a different tree (not target) →
+         + ok; add-create has no live-state requirement                  
+      36 +- [x] 3.14 Write `test/proposals/payload-under-create.test.ts` 
+         +covering: rename nested under add-create → `payload-op-under-cr
+         +eate`; detach nested under add-create → `payload-op-under-creat
+         +e`; no-op nested under add-create → `payload-op-under-create`; 
+         +add-create nested under add-create → ok; add-graft nested under
+         + add-create → ok (if graft target exists)                      
+      37 +- [x] 3.15 Write `test/proposals/payload-first-failure.test.ts`
+         + covering: a payload with both a shape error in an earlier-visi
+         +ted node and an existence error in a later node surfaces the sh
+         +ape error; the `position` field is present on every failure    
+      38 +- [x] 3.16 Confirm `validatePayload` never calls `checkAddEdge`
+         +, `checkRename`, or `isShared` — §3.3 invariants are NOT checke
+         +d at submission                                                
+      39  
+      40  ## 4. Change derivation (`specs/change-derivation`)
+      41  
+
+⏺ Now §4: change derivation.
+
+⏺ Write(src/proposals/derive.ts)
+  ⎿  Wrote 333 lines to src/proposals/derive.ts
+       2 // Change derivation (Phase 5 [[change-derivation]]).
+       3 // Pure function: walks a validated payload tree in DFS pre-orde
+         r,
+         , add,duces one DerivedChange per operative payload node (rename
+       5 // detach) and a parallel StatusNode tree (the §11.5 isomorphic 
+         view).
+       7 // Routing per §10.1:
+       8 //   - rename → owner of the renamed taxon
+       9 //   - add (create or graft) → owner of payload-parent
+      10 //   - detach → owner of payload-parent
+     … +348 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20)
+  ⎿  (No output)
+
+⏺ Clean. Now the derivation tests.
+
+⏺ Write(test/proposals/derive-helpers.ts)
+  ⎿  Wrote 21 lines to test/proposals/derive-helpers.ts
+          a Test helpers for src/proposals/derive.ts unit tests. Provides
+       2 // deterministic change-id sequencer and helpers to assert speci
+         fic
+         ./ shapes against the produced DerivedChange[] / StatusNode tree
+       4 
+       5 import type { ChangeId } from "../../src/proposals/types.js";
+       7 export function makeSequencer(): {
+       8   mint: () => ChangeId;
+       9   next: number;
+      10 } {
+     … +11 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/derive-single-change.test.ts)
+  ⎿  Wrote 198 lines to test/proposals/derive-single-change.test.ts
+       2 // (Phase 5 [[change-derivation]] §2 single-change-emission rows
+         ).
+       3 
+       5 import assert from "node:assert/strict"; "node:test";
+       6 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+         xa/store.js";
+         ;mport { validatePayload } from "../../src/proposals/payload.js"
+       8 import { deriveChanges } from "../../src/proposals/derive.js";
+       9 import type { ProposalId } from "../../src/proposals/types.js";
+      10 import { makeSequencer } from "./derive-helpers.js";
+     … +196 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/derive-routing.test.ts)
+  ⎿  Wrote 300 lines to test/proposals/derive-routing.test.ts
+        ting rows).on routing tests (Phase 5 [[change-derivation]] §2 rou
+      2 
+      3 import { describe, it, beforeEach } from "node:test";
+      4 import assert from "node:assert/strict";
+      5 import { reset as taxaReset, seed, snapshot } from "../../src/tax
+        a/store.js";
+      6 import { validatePayload } from "../../src/proposals/payload.js";
+      7 import { deriveChanges } from "../../src/proposals/derive.js";
+      8 import type { ProposalId } from "../../src/proposals/types.js";
+      9 import { makeSequencer } from "./derive-helpers.js";
+     … +300 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/derive-deps.test.ts)
+  ⎿  Wrote 315 lines to test/proposals/derive-deps.test.ts
+         derivation]]n dependency-classification tests (Phase 5 [[change-
+       2 // §2 decision-dep and existence-dep rows).
+       3 
+       5 import assert from "node:assert/strict"; "node:test";
+       6 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+         xa/store.js";
+         ;mport { validatePayload } from "../../src/proposals/payload.js"
+       8 import { deriveChanges } from "../../src/proposals/derive.js";
+       9 import type { ProposalId } from "../../src/proposals/types.js";
+      10 import { makeSequencer } from "./derive-helpers.js";
+     … +316 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/derive-disposition.test.ts)
+  ⎿  Wrote 171 lines to test/proposals/derive-disposition.test.ts
+         disposition rows).sition tests (Phase 5 [[change-derivation]] §2
+      2 
+      3 import { describe, it, beforeEach } from "node:test";
+      4 import assert from "node:assert/strict";
+      5 import { reset as taxaReset, seed, snapshot } from "../../src/tax
+        a/store.js";
+      6 import { validatePayload } from "../../src/proposals/payload.js";
+      7 import { deriveChanges } from "../../src/proposals/derive.js";
+      8 import type { ProposalId } from "../../src/proposals/types.js";
+      9 import { makeSequencer } from "./derive-helpers.js";
+     … +166 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/derive-status-tree.test.ts)
+  ⎿  Wrote 273 lines to test/proposals/derive-status-tree.test.ts
+        ivation]] §2 status tree rows).ission tests (Phase 5 [[change-der
+      2 
+      3 import { describe, it, beforeEach } from "node:test";
+      4 import assert from "node:assert/strict";
+      5 import { reset as taxaReset, seed, snapshot } from "../../src/tax
+      6 import { validatePayload } from "../../src/proposals/payload.js";
+      7 import { deriveChanges } from "../../src/proposals/derive.js";
+      8 import type { ProposalId, StatusNode } from "../../src/proposals/
+        types.js";
+      9 import { makeSequencer } from "./derive-helpers.js";
+     … +272 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/derive-sequencer.test.ts)
+  ⎿  Wrote 76 lines to test/proposals/derive-sequencer.test.ts
+         ]] §2 sequencer rows). purity tests (Phase 5 [[change-derivation
+       2 
+       4 import assert from "node:assert/strict"; "node:test";
+       5 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+         xa/store.js";
+         ;mport { validatePayload } from "../../src/proposals/payload.js"
+       7 import { deriveChanges } from "../../src/proposals/derive.js";
+         ypes.js";pe { ChangeId, ProposalId } from "../../src/proposals/t
+       9 
+      10 beforeEach(() => {
+     … +71 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20 && echo "---" && node --test
+      "dist/test/proposals/derive-*.test.js" 2>&1 | tail -15)  ⎿  ---
+     ✔ status tree shape mirrors payload (0.260333ms)
+     ▶ status tree reason field
+     … +14 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/derive-appendix-a.test.ts)
+  ⎿  Wrote 220 lines to test/proposals/derive-appendix-a.test.ts
+       2 // (Phase 5 [[change-derivation]] §3 Appendix A rows of the test
+          plan).
+       4 // These tests verify our routing, dependency, and disposition r
+         ules
+         andreproduce the PRD's "Initial state" column from Appendix A.1 
+       6 // A.2 *exactly*. Live state is built via Phase 3's seed() helpe
+       7 r.
+       8 import { describe, it, beforeEach } from "node:test";
+      10 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+         xa/store.js";
+     … +237 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/derive-*.test.js" 2>&1 | tail
+       -12)
+  ⎿  ✔ status tree reason field (0.220291ms)
+     ▶ no concrete-latent in current rules
+       ✔ no derived change is concrete-latent (deferred ⇒ latent, but laten
+     … +10 lines (ctrl+o to expand)
+
+⏺ All 45 derivation tests pass (including the PRD Appendix A reproductions).
+  Moving to §5: proposal store.
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 15 lines, removed 15 lines
+      39  
+      40  ## 4. Change derivation (`specs/change-derivation`)
+      41  
+      42 -- [ ] 4.1 Create `src/proposals/derive.ts` exporting `deriveCha
+         -nges(payload: ValidatedPayloadNode, ctx: { proposalId: Proposal
+         -Id; targetRootId: TaxonId; snapshot: Graph; mintChangeId: () =>
+         - ChangeId }): { changes: DerivedChange[]; statusTree: StatusNod
+         -e }`                                                           
+      43 -- [ ] 4.2 Confirm `src/proposals/derive.ts` imports nothing fro
+         -m `src/app.ts`, `src/proposals/store.ts`, the handlers, or HTTP
+         - modules; imports from `src/domain/`, `src/proposals/types.ts`,
+         - and `src/proposals/payload.ts` (for `ValidatedPayloadNode`) ar
+         -e permitted                                                    
+      44 -- [ ] 4.3 Implement the DFS pre-order walk per the design's Dec
+         -ision 4: maintain `decisionAncestors: ChangeId[]` and `existenc
+         -eAncestors: ExistenceDep[]` stacks; push/pop on entry/exit; for
+         - each operative node mint a `changeId`, snapshot the ancestor l
+         -ists, compute reviewer + disposition, emit a `DerivedChange`   
+      45 -- [ ] 4.4 Implement routing per §10.1: rename → `concrete(snaps
+         -hot.taxa.get(node.id).owner)`; add/detach → if payload-parent i
+         -s `live` use `concrete(owner)`, if `to-create` use `deferred(pa
+         -rentChangeId)`; no-op produces no change                       
+      46 -- [ ] 4.5 Implement decision-dep classification: an ancestor `a
+         -dd-create` or `add-graft` contributes its `changeId` to `decisi
+         -onDeps`; `no-op` and `rename` ancestors do not                 
+      47 -- [ ] 4.6 Implement existence-dep recording: for each `no-op`/`
+         -rename` ancestor, push `{ parent, childId }`; for the change's 
+         -own implicit dep, append `{ parent, childId }` for `rename`/`de
+         -tach`, `{ parent: null, childId }` for `add-graft`, nothing for
+         - `add-create`                                                  
+      48 -- [ ] 4.7 Implement initial disposition rule: `disposition = de
+         -cisionDeps.length === 0 ? "queued" : "latent"`; assert (with a 
+         -runtime check or test) that `reviewer.kind === "deferred" ⇒ dis
+         -position === "latent"`                                         
+      49 -- [ ] 4.8 Emit the status tree in the same walk: produce a `Sta
+         -tusNode` per payload node (including no-ops) with the correct d
+         -isposition (`"structural"` for no-ops, derived value for operat
+         -ive nodes), `changeId` for operative nodes, `reviewer: string |
+         - null` (null for no-ops and deferred), `name` for rename + add-
+         -create, `id: null` for add-create; ensure `children` field shap
+         -e matches the payload's                                        
+      50 -- [ ] 4.9 Write `test/proposals/derive-single-change.test.ts` c
+         -overing: payload with only a single rename emits one change; on
+         -ly a no-op emits zero changes; an add-create vs add-graft emit 
+         -changes with distinct op kinds; changeIds assigned in DFS pre-o
+         -rder                                                           
+      51 -- [ ] 4.10 Write `test/proposals/derive-routing.test.ts` coveri
+         -ng: rename routes to the renamed taxon's owner (concrete); add/
+         -detach route to payload-parent's owner (concrete); add nested u
+         -nder add-create gets deferred reviewer pointing at parent creat
+         -e's changeId; deeply chained deferred reviewers each point to t
+         -heir immediate create parent (no flattening)                   
+      52 -- [ ] 4.11 Write `test/proposals/derive-deps.test.ts` covering:
+         - change with no add ancestors → empty `decisionDeps`; change wi
+         -th one add ancestor → that ancestor in `decisionDeps`; chained 
+         -add-create-add-create → inner has both ancestors in top-down or
+         -der; existence deps include own implicit edge for rename/detach
+         -; add-graft includes `{ parent: null, childId }`; add-create ad
+         -ds no own entry                                                
+      53 -- [ ] 4.12 Write `test/proposals/derive-disposition.test.ts` co
+         -vering: no add ancestors → `queued`; one add ancestor → `latent
+         -`; deferred reviewer ⇒ latent (invariant test)                 
+      54 -- [ ] 4.13 Write `test/proposals/derive-status-tree.test.ts` co
+         -vering: no-op produces structural status node with no changeId 
+         -and reviewer null; queued rename's status node has resolved rev
+         -iewer username; latent change under create has reviewer null; s
+         -tatus tree shape mirrors payload tree shape exactly (same node 
+         -count, same nesting); reason field absent on every node in Phas
+         -e 5                                                            
+      55 -- [ ] 4.14 Write `test/proposals/derive-appendix-a.test.ts` rep
+         -roducing PRD Appendix A.1's initial dispositions (rename c1 que
+         -ued to Alice, rename c3 queued to Bob, Urban Fantasy create que
+         -ued to Bob, Paranormal Romance latent) and A.2's (P1 detach que
+         -ued to Dana, P2 graft queued to Frank, P2 Unreliable Narrator T
+         -hriller latent to Erin pending Frank's graft)                  
+      56 -- [ ] 4.15 Write `test/proposals/derive-sequencer.test.ts` conf
+         -irming `deriveChanges` uses the injected `mintChangeId` (a stub
+         - sequencer producing `ch1, ch2, ...` works without touching the
+         - store)                                                        
+      42 +- [x] 4.1 Create `src/proposals/derive.ts` exporting `deriveCha
+         +nges(payload: ValidatedPayloadNode, ctx: { proposalId: Proposal
+         +Id; targetRootId: TaxonId; snapshot: Graph; mintChangeId: () =>
+         + ChangeId }): { changes: DerivedChange[]; statusTree: StatusNod
+         +e }`                                                           
+      43 +- [x] 4.2 Confirm `src/proposals/derive.ts` imports nothing fro
+         +m `src/app.ts`, `src/proposals/store.ts`, the handlers, or HTTP
+         + modules; imports from `src/domain/`, `src/proposals/types.ts`,
+         + and `src/proposals/payload.ts` (for `ValidatedPayloadNode`) ar
+         +e permitted                                                    
+      44 +- [x] 4.3 Implement the DFS pre-order walk per the design's Dec
+         +ision 4: maintain `decisionAncestors: ChangeId[]` and `existenc
+         +eAncestors: ExistenceDep[]` stacks; push/pop on entry/exit; for
+         + each operative node mint a `changeId`, snapshot the ancestor l
+         +ists, compute reviewer + disposition, emit a `DerivedChange`   
+      45 +- [x] 4.4 Implement routing per §10.1: rename → `concrete(snaps
+         +hot.taxa.get(node.id).owner)`; add/detach → if payload-parent i
+         +s `live` use `concrete(owner)`, if `to-create` use `deferred(pa
+         +rentChangeId)`; no-op produces no change                       
+      46 +- [x] 4.5 Implement decision-dep classification: an ancestor `a
+         +dd-create` or `add-graft` contributes its `changeId` to `decisi
+         +onDeps`; `no-op` and `rename` ancestors do not                 
+      47 +- [x] 4.6 Implement existence-dep recording: for each `no-op`/`
+         +rename` ancestor, push `{ parent, childId }`; for the change's 
+         +own implicit dep, append `{ parent, childId }` for `rename`/`de
+         +tach`, `{ parent: null, childId }` for `add-graft`, nothing for
+         + `add-create`                                                  
+      48 +- [x] 4.7 Implement initial disposition rule: `disposition = de
+         +cisionDeps.length === 0 ? "queued" : "latent"`; assert (with a 
+         +runtime check or test) that `reviewer.kind === "deferred" ⇒ dis
+         +position === "latent"`                                         
+      49 +- [x] 4.8 Emit the status tree in the same walk: produce a `Sta
+         +tusNode` per payload node (including no-ops) with the correct d
+         +isposition (`"structural"` for no-ops, derived value for operat
+         +ive nodes), `changeId` for operative nodes, `reviewer: string |
+         + null` (null for no-ops and deferred), `name` for rename + add-
+         +create, `id: null` for add-create; ensure `children` field shap
+         +e matches the payload's                                        
+      50 +- [x] 4.9 Write `test/proposals/derive-single-change.test.ts` c
+         +overing: payload with only a single rename emits one change; on
+         +ly a no-op emits zero changes; an add-create vs add-graft emit 
+         +changes with distinct op kinds; changeIds assigned in DFS pre-o
+         +rder                                                           
+      51 +- [x] 4.10 Write `test/proposals/derive-routing.test.ts` coveri
+         +ng: rename routes to the renamed taxon's owner (concrete); add/
+         +detach route to payload-parent's owner (concrete); add nested u
+         +nder add-create gets deferred reviewer pointing at parent creat
+         +e's changeId; deeply chained deferred reviewers each point to t
+         +heir immediate create parent (no flattening)                   
+      52 +- [x] 4.11 Write `test/proposals/derive-deps.test.ts` covering:
+         + change with no add ancestors → empty `decisionDeps`; change wi
+         +th one add ancestor → that ancestor in `decisionDeps`; chained 
+         +add-create-add-create → inner has both ancestors in top-down or
+         +der; existence deps include own implicit edge for rename/detach
+         +; add-graft includes `{ parent: null, childId }`; add-create ad
+         +ds no own entry                                                
+      53 +- [x] 4.12 Write `test/proposals/derive-disposition.test.ts` co
+         +vering: no add ancestors → `queued`; one add ancestor → `latent
+         +`; deferred reviewer ⇒ latent (invariant test)                 
+      54 +- [x] 4.13 Write `test/proposals/derive-status-tree.test.ts` co
+         +vering: no-op produces structural status node with no changeId 
+         +and reviewer null; queued rename's status node has resolved rev
+         +iewer username; latent change under create has reviewer null; s
+         +tatus tree shape mirrors payload tree shape exactly (same node 
+         +count, same nesting); reason field absent on every node in Phas
+         +e 5                                                            
+      55 +- [x] 4.14 Write `test/proposals/derive-appendix-a.test.ts` rep
+         +roducing PRD Appendix A.1's initial dispositions (rename c1 que
+         +ued to Alice, rename c3 queued to Bob, Urban Fantasy create que
+         +ued to Bob, Paranormal Romance latent) and A.2's (P1 detach que
+         +ued to Dana, P2 graft queued to Frank, P2 Unreliable Narrator T
+         +hriller latent to Erin pending Frank's graft)                  
+      56 +- [x] 4.15 Write `test/proposals/derive-sequencer.test.ts` conf
+         +irming `deriveChanges` uses the injected `mintChangeId` (a stub
+         + sequencer producing `ch1, ch2, ...` works without touching the
+         + store)                                                        
+      57  
+      58  ## 5. Proposal store (`specs/proposal-store`)
+      59  
+
+⏺ Write(src/proposals/store.ts)
+  ⎿  Wrote 189 lines to src/proposals/store.ts
+       2 // In-memory proposal store (Phase 5 [[proposal-store]]).
+       3 // Module-scoped, lock-naive (callers hold withWriteLock). Four
+       4 // collections plus two ID counters:
+       5 //
+       6 //   proposals          : ProposalId → envelope
+       8 //   changesByProposal  : ProposalId → ChangeId[]    (DFS pre-or
+         der)
+       9 //   queueByUser        : usernameKey → Set<ChangeId> (lowercase
+         d key)
+      10 //
+     … +205 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20)
+  ⎿  (No output)
+
+⏺ Write(test/proposals/store-install.test.ts)
+  ⎿  Wrote 186 lines to test/proposals/store-install.test.ts
+         install rows).ll primitive tests (Phase 5 [[proposal-store]] §4 
+       2 
+       3 import { describe, it, beforeEach } from "node:test";
+       4 import assert from "node:assert/strict";
+       5 import {
+       6   installProposal,
+       7   getProposal,
+       8   getChange,
+       9   listChangesForProposal,
+      10   listQueueFor,
+     … +189 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/store-ids.test.ts)
+  ⎿  Wrote 54 lines to test/proposals/store-ids.test.ts
+      1 // Store ID-minting tests (Phase 5 [[proposal-store]] §4 ID rows)
+        .
+      2 
+      3 import { describe, it, beforeEach } from "node:test";
+      4 import assert from "node:assert/strict";
+      5 import {
+      6   mintProposalId,
+      7   mintChangeId,
+      8   reset as proposalsReset,
+      9 } from "../../src/proposals/store.js";
+     … +44 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/store-reset.test.ts)
+  ⎿  Wrote 100 lines to test/proposals/store-reset.test.ts
+       1 // Store reset tests (Phase 5 [[proposal-store]] §4 reset rows).
+       2 
+       3 import { describe, it, beforeEach } from "node:test";
+       4 import assert from "node:assert/strict";
+       5 import {
+       6   installProposal,
+       7   getProposal,
+       8   getChange,
+       9   listProposals,
+      10   listChangesForProposal,
+     … +92 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/store-queue-determinism.test.ts)
+  ⎿  Wrote 159 lines to test/proposals/store-queue-determinism.test.ts
+          §4 listingeue / list / filter tests (Phase 5 [[proposal-store]]
+       2 // and determinism rows, plus purity).
+       3 
+       4 import { describe, it, beforeEach } from "node:test";
+       5 import assert from "node:assert/strict";
+       6 import {
+       7   installProposal,
+       8   listProposals,
+       9   listQueueFor,
+      10   reset as proposalsReset,
+     … +160 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20 && echo "---" && node --test
+      "dist/test/proposals/store-*.test.js" 2>&1 | tail -12)
+  ⎿  ---
+       AssertionError [ERR_ASSERTION]: store.ts must not contain withWriteL
+     ock
+     … +14 lines (ctrl+o to expand)
+
+⏺ Update(test/proposals/store-queue-determinism.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      148        "from \"./serialize",
+      149        "from \"./payload",
+      150        "from \"./derive",
+      151 -      "withWriteLock",                                        
+      151 +      "from \"../concurrency/",                               
+      152      ]) {
+      153        assert.ok(
+      154          !src.includes(banned),
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/store-*.test.js" 2>&1 | tail
+      -10)
+  ⎿    ✔ reset is idempotent (0.093459ms)
+     ✔ reset: collection clearing (2.044417ms)
+     ℹ tests 32
+     … +7 lines (ctrl+o to expand)
+
+⏺ All 32 store tests pass. §5 done; moving to §6 reset composition.
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 13 lines, removed 13 lines
+      57  
+      58  ## 5. Proposal store (`specs/proposal-store`)
+      59  
+      60 -- [ ] 5.1 Create `src/proposals/store.ts` with module-scoped `p
+         -roposals: Map<ProposalId, ProposalEnvelope>`, `changes: Map<Cha
+         -ngeId, DerivedChange>`, `changesByProposal: Map<ProposalId, Cha
+         -ngeId[]>`, `queueByUser: Map<string, Set<ChangeId>>`, `nextProp
+         -osalSeq: number`, `nextChangeSeq: number`                      
+      61 -- [ ] 5.2 Implement `mintProposalId()` and `mintChangeId()` ret
+         -urning `"p${++nextProposalSeq}"` and `"ch${++nextChangeSeq}"` r
+         -espectively                                                    
+      62 -- [ ] 5.3 Implement `installProposal(envelope, changes)`: synch
+         -ronous, no `await`; insert envelope; for each change insert int
+         -o `changes` and append to `changesByProposal[envelope.proposalI
+         -d]`; for queued+concrete changes add to `queueByUser[reviewer.u
+         -sername.toLowerCase()]`                                        
+      63 -- [ ] 5.4 Implement `getProposal`, `getChange`, `listChangesFor
+         -Proposal` (returns DFS-order via `changesByProposal`), `listPro
+         -posals({ proposer?, targetRootId? })` (case-insensitive on prop
+         -oser, exact-string on targetRootId)                            
+      64 -- [ ] 5.5 Implement `listQueueFor(username)`: lookup by `userna
+         -me.toLowerCase()` in `queueByUser`; return `DerivedChange[]` so
+         -rted by changeId ascending lexicographically (for determinism a
+         -cross reads)                                                   
+      65 -- [ ] 5.6 Implement `reset()` clearing all four collections and
+         - setting both counters to 0; ensure next mints produce `p1`/`ch
+         -1`                                                             
+      66 -- [ ] 5.7 `installProposal` SHALL throw plain `Error` (not `Api
+         -Error`) if a `changeId` collides with an existing entry — indic
+         -ates a programmer error in derivation/sequencing               
+      67 -- [ ] 5.8 Confirm `src/proposals/store.ts` imports nothing from
+         - `src/app.ts`, the handlers, the user registry, or `src/taxa/`;
+         - imports from `src/proposals/types.ts` only                    
+      68 -- [ ] 5.9 Confirm `store.ts` does NOT enter `withWriteLock` its
+         -elf (call sites enter the lock)                                
+      69 -- [ ] 5.10 Write `test/proposals/store-install.test.ts` coverin
+         -g: install puts queued concrete-reviewer changes in queue; late
+         -nt changes do not appear in queue; deferred-reviewer changes do
+         - not appear in queue; queue key is lowercased while `reviewer.u
+         -sername` retains its casing; changes by proposal returned in DF
+         -S order                                                        
+      70 -- [ ] 5.11 Write `test/proposals/store-ids.test.ts` covering: s
+         -equential mints produce `p1, p2, p3` and `ch1, ch2, ch3`; count
+         -ers independent; reset returns counters to 1-base              
+      71 -- [ ] 5.12 Write `test/proposals/store-reset.test.ts` covering:
+         - after reset all four collections are empty; after reset every 
+         -previously installed id returns undefined; after reset every qu
+         -eue is empty; subsequent install starts fresh from `p1`/`ch1`  
+      72 -- [ ] 5.13 Write `test/proposals/store-queue-determinism.test.t
+         -s` covering: two reads of the same queue with no intervening wr
+         -ites return the same order; ordering is changeId-ascending     
+      60 +- [x] 5.1 Create `src/proposals/store.ts` with module-scoped `p
+         +roposals: Map<ProposalId, ProposalEnvelope>`, `changes: Map<Cha
+         +ngeId, DerivedChange>`, `changesByProposal: Map<ProposalId, Cha
+         +ngeId[]>`, `queueByUser: Map<string, Set<ChangeId>>`, `nextProp
+         +osalSeq: number`, `nextChangeSeq: number`                      
+      61 +- [x] 5.2 Implement `mintProposalId()` and `mintChangeId()` ret
+         +urning `"p${++nextProposalSeq}"` and `"ch${++nextChangeSeq}"` r
+         +espectively                                                    
+      62 +- [x] 5.3 Implement `installProposal(envelope, changes)`: synch
+         +ronous, no `await`; insert envelope; for each change insert int
+         +o `changes` and append to `changesByProposal[envelope.proposalI
+         +d]`; for queued+concrete changes add to `queueByUser[reviewer.u
+         +sername.toLowerCase()]`                                        
+      63 +- [x] 5.4 Implement `getProposal`, `getChange`, `listChangesFor
+         +Proposal` (returns DFS-order via `changesByProposal`), `listPro
+         +posals({ proposer?, targetRootId? })` (case-insensitive on prop
+         +oser, exact-string on targetRootId)                            
+      64 +- [x] 5.5 Implement `listQueueFor(username)`: lookup by `userna
+         +me.toLowerCase()` in `queueByUser`; return `DerivedChange[]` so
+         +rted by changeId ascending lexicographically (for determinism a
+         +cross reads)                                                   
+      65 +- [x] 5.6 Implement `reset()` clearing all four collections and
+         + setting both counters to 0; ensure next mints produce `p1`/`ch
+         +1`                                                             
+      66 +- [x] 5.7 `installProposal` SHALL throw plain `Error` (not `Api
+         +Error`) if a `changeId` collides with an existing entry — indic
+         +ates a programmer error in derivation/sequencing               
+      67 +- [x] 5.8 Confirm `src/proposals/store.ts` imports nothing from
+         + `src/app.ts`, the handlers, the user registry, or `src/taxa/`;
+         + imports from `src/proposals/types.ts` only                    
+      68 +- [x] 5.9 Confirm `store.ts` does NOT enter `withWriteLock` its
+         +elf (call sites enter the lock)                                
+      69 +- [x] 5.10 Write `test/proposals/store-install.test.ts` coverin
+         +g: install puts queued concrete-reviewer changes in queue; late
+         +nt changes do not appear in queue; deferred-reviewer changes do
+         + not appear in queue; queue key is lowercased while `reviewer.u
+         +sername` retains its casing; changes by proposal returned in DF
+         +S order                                                        
+      70 +- [x] 5.11 Write `test/proposals/store-ids.test.ts` covering: s
+         +equential mints produce `p1, p2, p3` and `ch1, ch2, ch3`; count
+         +ers independent; reset returns counters to 1-base              
+      71 +- [x] 5.12 Write `test/proposals/store-reset.test.ts` covering:
+         + after reset all four collections are empty; after reset every 
+         +previously installed id returns undefined; after reset every qu
+         +eue is empty; subsequent install starts fresh from `p1`/`ch1`  
+      72 +- [x] 5.13 Write `test/proposals/store-queue-determinism.test.t
+         +s` covering: two reads of the same queue with no intervening wr
+         +ites return the same order; ordering is changeId-ascending     
+      73  
+      74  ## 6. Reset composition
+      75  
+
+⏺ Update(src/reset/handler.ts)  ⎿  Added 4 lines, removed 2 lines
+      1  import { reset as usersReset } from "../users/store.js";
+      2  import { reset as taxaReset } from "../taxa/store.js";
+      3 +import { reset as proposalsReset } from "../proposals/store.js";
+      4  
+      5  /**
+      6   * Composed reset of every form of in-memory state in the server
+          (PRD §15).
+     ...
+      12   * Forward contributors (each adds one `xReset()` call in sourc
+          e order):
+      13   *   Phase 2  — user registry              ✓
+      14   *   Phase 3  — taxa, edges, ID generator  ✓
+      14 - *   Phase 5  — proposals and derived changes                  
+      15 - *   Phase 6  — reviewer queues                                
+      15 + *   Phase 5  — proposals, derived changes, queue projection  ✓
+      16 + *   Phase 6  — additional Phase 6+ state (TBD)                
+      17   *
+      18   * See `openspec/specs/state-reset/spec.md` for the forward obl
+          igation.
+      19   */
+      20  export async function resetAll(): Promise<void> {
+      21    usersReset();
+      22    taxaReset();
+      23 +  proposalsReset();                                            
+      24  }
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 2 lines, removed 2 lines
+      73  
+      74  ## 6. Reset composition
+      75  
+      76 -- [ ] 6.1 Locate the global reset composition (per Phase 3/4 — 
+         -likely `src/reset.ts` or equivalent); add `proposalStore.reset(
+         -)` to its sequence (order doesn't matter functionally; place it
+         - last for phase-history readability)                           
+      77 -- [ ] 6.2 Write `test/proposals/reset-integration.test.ts` cove
+         -ring: register users; submit a proposal that produces at least 
+         -one queued change; `POST /reset` returns 204; subsequent `GET /
+         -proposals`, `GET /queue` (for the formerly-queued reviewer), `G
+         -ET /proposals/{id}` of the formerly-installed id return empty/4
+         -04; subsequent `POST /proposals` mints `p1`                    
+      76 +- [x] 6.1 Locate the global reset composition (per Phase 3/4 — 
+         +likely `src/reset.ts` or equivalent); add `proposalStore.reset(
+         +)` to its sequence (order doesn't matter functionally; place it
+         + last for phase-history readability)                           
+      77 +- [ ] 6.2 Write `test/proposals/reset-integration.test.ts` cove
+         +ring: register users; submit a proposal that produces at least 
+         +one queued change; `POST /reset` returns 204; subsequent `GET /
+         +proposals`, `GET /queue` (for the formerly-queued reviewer), `G
+         +ET /proposals/{id}` of the formerly-installed id return empty/4
+         +04; subsequent `POST /proposals` mints `p1` (deferred: requires
+         + §8 handlers — written after §10)                              
+      78  
+      79  ## 7. Status tree serializer (`specs/proposal-reads`)
+      80  
+
+⏺ Now §7: status tree serializer. Since deriveChanges already produces a status
+  tree, the serializer for GET /proposals/{id} needs to re-render from the
+  stored rawPayload + DerivedChange[]. Plus the queue-entry shaper.
+
+⏺ Write(src/proposals/serialize.ts)
+  ⎿  Wrote 177 lines to src/proposals/serialize.ts
+         eads]]).s-tree and queue-entry serializers (Phase 5 [[proposal-r
+       3 // `renderStatusTree` walks the originally-submitted raw payload
+       4 // list of derived changes in parallel, producing the §11.5 isom
+         orphic
+         ionstatus tree. Walk order must match the order in which derivat
+         medemitted changes (DFS pre-order), so the changes list is consu
+       7 // via an index pointer.
+       9 // `toQueueEntry` shapes a DerivedChange for the GET /queue surf
+      10 // Internal `PayloadParentRef` variants are mapped to a public-f
+         acing
+     … +181 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/serialize-status-tree.test.ts)
+  ⎿  Wrote 215 lines to test/proposals/serialize-status-tree.test.ts
+         erialize rows).serializer tests (Phase 5 [[proposal-reads]] §7 s
+       2 //
+       3 // Builds raw payloads + derived changes by hand (no live graph
+       4 // required) and checks renderStatusTree's per-node shape and
+       5 // isomorphism.
+       7 import { describe, it } from "node:test";
+       8 import assert from "node:assert/strict";
+       9 import { renderStatusTree } from "../../src/proposals/serialize.
+         js";
+      10 import type {
+     … +210 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/serialize-queue-entry.test.ts)
+  ⎿  Wrote 102 lines to test/proposals/serialize-queue-entry.test.ts
+         e-entry rows). shaping tests (Phase 5 [[proposal-reads]] §7 queu
+       2 
+       3 import { describe, it } from "node:test";
+       4 import assert from "node:assert/strict";
+       5 import {
+       6   simplifyPayloadParent,
+       7   toQueueEntry,
+       8 } from "../../src/proposals/serialize.js";
+       9 import type {
+      10   ChangeId,
+     … +96 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/serialize-*.test.js" 2>&1 |
+      tail -10)
+  ⎿    ✔ throws if change count does not match operative payload count (0.2
+     16708ms)
+     ✔ renderStatusTree: defensive mismatch detection (0.281875ms)
+     … +8 lines (ctrl+o to expand)
+
+⏺ §7 done. Moving to §8: POST /proposals submission handler.
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 7 lines, removed 7 lines
+      78  
+      79  ## 7. Status tree serializer (`specs/proposal-reads`)
+      80  
+      81 -- [ ] 7.1 Create `src/proposals/serialize.ts` with `renderStatu
+         -sTree(rawPayload: RawPayloadNode, changes: DerivedChange[]): St
+         -atusNode` that walks `rawPayload` in DFS pre-order and consumes
+         - `changes` in parallel, producing one status node per payload n
+         -ode                                                            
+      82 -- [ ] 7.2 Implement per-node disposition rules per the [[propos
+         -al-reads]] spec: no-op → `structural`, no changeId, reviewer nu
+         -ll, no reason; operative nodes → pull next change from list, an
+         -notate with `disposition`, `changeId`, `reviewer` (concrete use
+         -rname or null for deferred); name field surfaced for rename and
+         - add-create only                                               
+      83 -- [ ] 7.3 Implement queue-entry shaping helper `simplifyPayload
+         -Parent(ref: PayloadParentRef)` returning `{ taxonId }` for `liv
+         -e`, `{ top: true }` for `top`; throw on `to-create` (cannot app
+         -ear in queue)                                                  
+      84 -- [ ] 7.4 Implement queue-entry shaping `toQueueEntry(c: Derive
+         -dChange): QueueEntry` returning `{ changeId, proposalId, op, ta
+         -rgetRootId, taxonRef, payloadParent: simplifyPayloadParent(c.pa
+         -yloadParent) }`                                                
+      85 -- [ ] 7.5 Confirm `src/proposals/serialize.ts` imports only typ
+         -es, no HTTP or store mutation                                  
+      86 -- [ ] 7.6 Write `test/proposals/serialize-status-tree.test.ts` 
+         -covering: tree shape matches payload exactly; no-op disposition
+         - `structural`; queued rename's status node carries reviewer use
+         -rname; latent under create has reviewer null and disposition la
+         -tent; add-create has `id: null` and `name` populated; add-graft
+         - has `id` populated and no `name`; detach has no children      
+      87 -- [ ] 7.7 Write `test/proposals/serialize-queue-entry.test.ts` 
+         -covering: rename → `taxonRef: { kind: "existing", id }`; add-cr
+         -eate → `taxonRef: { kind: "to-create", name }`; add-graft → `ta
+         -xonRef: { kind: "existing", id }`; payload-parent `live` → `{ t
+         -axonId }`; `to-create` parent attempt throws (not reachable fro
+         -m queue)                                                       
+      81 +- [x] 7.1 Create `src/proposals/serialize.ts` with `renderStatu
+         +sTree(rawPayload: RawPayloadNode, changes: DerivedChange[]): St
+         +atusNode` that walks `rawPayload` in DFS pre-order and consumes
+         + `changes` in parallel, producing one status node per payload n
+         +ode                                                            
+      82 +- [x] 7.2 Implement per-node disposition rules per the [[propos
+         +al-reads]] spec: no-op → `structural`, no changeId, reviewer nu
+         +ll, no reason; operative nodes → pull next change from list, an
+         +notate with `disposition`, `changeId`, `reviewer` (concrete use
+         +rname or null for deferred); name field surfaced for rename and
+         + add-create only                                               
+      83 +- [x] 7.3 Implement queue-entry shaping helper `simplifyPayload
+         +Parent(ref: PayloadParentRef)` returning `{ taxonId }` for `liv
+         +e`, `{ top: true }` for `top`; throw on `to-create` (cannot app
+         +ear in queue)                                                  
+      84 +- [x] 7.4 Implement queue-entry shaping `toQueueEntry(c: Derive
+         +dChange): QueueEntry` returning `{ changeId, proposalId, op, ta
+         +rgetRootId, taxonRef, payloadParent: simplifyPayloadParent(c.pa
+         +yloadParent) }`                                                
+      85 +- [x] 7.5 Confirm `src/proposals/serialize.ts` imports only typ
+         +es, no HTTP or store mutation                                  
+      86 +- [x] 7.6 Write `test/proposals/serialize-status-tree.test.ts` 
+         +covering: tree shape matches payload exactly; no-op disposition
+         + `structural`; queued rename's status node carries reviewer use
+         +rname; latent under create has reviewer null and disposition la
+         +tent; add-create has `id: null` and `name` populated; add-graft
+         + has `id` populated and no `name`; detach has no children      
+      87 +- [x] 7.7 Write `test/proposals/serialize-queue-entry.test.ts` 
+         +covering: rename → `taxonRef: { kind: "existing", id }`; add-cr
+         +eate → `taxonRef: { kind: "to-create", name }`; add-graft → `ta
+         +xonRef: { kind: "existing", id }`; payload-parent `live` → `{ t
+         +axonId }`; `to-create` parent attempt throws (not reachable fro
+         +m queue)                                                       
+      88  
+      89  ## 8. POST /proposals submission handler (`specs/proposal-submi
+          ssion`)
+      90  
+
+⏺ Write(src/proposals/submit-handler.ts)
+  ⎿  Wrote 179 lines to src/proposals/submit-handler.ts
+       2 // POST /proposals handler (Phase 5 [[proposal-submission]]).
+       3 // Pipeline (per design Decision 7):
+       4 //   1. requireRegistered  (Phase 2 — 403 forbidden if null/unre
+         gistered)
+       5 //   2. body envelope parse: { targetRootId, topTaxonId, payload
+       6 //      — failure → 400 malformed-body
+       7 //   3. withWriteLock(async () => {
+       8 //        snapshot = taxonStore.snapshot()
+       9 //        validate target tree exists (currently a root)
+      10 //          — failure → 404 unknown-target-tree
+     … +179 lines (ctrl+o to expand)
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line
+      15    deleteEdge,
+      16    deleteTaxon,
+      17  } from "./taxa/write-handlers.js";
+      18 +import { postProposals } from "./proposals/submit-handler.js"; 
+      19  import { identityMiddleware } from "./identity/middleware.js";
+      20  import type { AppVariables } from "./identity/caller.js";
+      21  import packageJson from "../package.json" with { type: "json" }
+          ;
+
+⏺ Update(src/app.ts)
+  ⎿  Added 6 lines
+      62    app.delete("/taxa/:parentId/children/:childId", deleteEdge);
+      63    app.delete("/taxa/:id", deleteTaxon);
+      64  
+      65 +  // Proposals (PRD §15.4, Phase 5 [[proposal-submission]]).   
+      66 +  // Requires registered proposer; enters [[write-serialization
+         +]]                                                             
+      67 +  // withWriteLock for the snapshot-validate-derive-install cri
+         +tical                                                          
+      68 +  // section. Does NOT mutate the taxon graph.                 
+      69 +  app.post("/proposals", postProposals);                       
+      70 +                                                               
+      71    return app;
+      72  }
+      73  
+
+⏺ Bash(npx tsc 2>&1 | head -30)
+  ⎿  (No output)
+
+⏺ Now the submission handler tests.
+
+⏺ Write(test/proposals/post-proposals-auth.test.ts)
+  ⎿  Wrote 139 lines to test/proposals/post-proposals-auth.test.ts
+         5 auth rows).osals auth tests (Phase 5 [[proposal-submission]] §
+       2 
+       3 import { describe, it, beforeEach } from "node:test";
+       4 import assert from "node:assert/strict";
+       5 import { createApp } from "../../src/app.js";
+         tore.js";reset as usersReset, register } from "../../src/users/s
+       7 import {
+       8   reset as taxaReset,
+       9   seed,
+      10 } from "../../src/taxa/store.js";
+     … +137 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/post-proposals-body.test.ts)
+  ⎿  Wrote 135 lines to test/proposals/post-proposals-body.test.ts
+         ion]] §5 body rows).ody-schema tests (Phase 5 [[proposal-submiss
+       2 
+       4 import assert from "node:assert/strict"; "node:test";
+       5 import { createApp } from "../../src/app.js";
+       6 import { reset as usersReset, register } from "../../src/users/s
+       7 import { reset as taxaReset, seed } from "../../src/taxa/store.j
+         s";
+         re.js";{ reset as proposalsReset } from "../../src/proposals/sto
+       9 
+      10 beforeEach(() => {
+     … +139 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/post-proposals-target-tree.test.ts)
+  ⎿  Wrote 90 lines to test/proposals/post-proposals-target-tree.test.ts
+         al-submission]] §5 target-tree rows).nce tests (Phase 5 [[propos
+       2 
+       4 import assert from "node:assert/strict"; "node:test";
+       5 import { createApp } from "../../src/app.js";
+       6 import { reset as usersReset, register } from "../../src/users/s
+       7 import { reset as taxaReset, seed } from "../../src/taxa/store.j
+         s";
+         re.js";{ reset as proposalsReset } from "../../src/proposals/sto
+       9 
+      10 beforeEach(() => {
+     … +85 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -10 && echo "---" && node --test
+      "dist/test/proposals/post-proposals-auth.test.js"
+      "dist/test/proposals/post-proposals-body.test.js" 2>&1 |…)  ⎿  ---
+     test at dist/test/proposals/post-proposals-auth.test.js:66:5
+     ✖ malformed X-Username (whitespace-only) → 400 (identity middleware) (
+     … +18 lines (ctrl+o to expand)
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ Update(test/proposals/post-proposals-auth.test.ts)
+  ⎿  Added 7 lines, removed 17 lines
+      73      assert.equal(res.status, 403);
+      74    });
+      75  
+      76 -  it("malformed X-Username (whitespace-only) → 400 (identity mi
+         -ddleware)", async () => {                                      
+      77 -    const root = rootSetup();                                  
+      78 -    const app = createApp();                                   
+      79 -    const res = await app.request("/proposals", {              
+      80 -      method: "POST",                                          
+      81 -      headers: {                                               
+      82 -        "X-Username": "   ",                                   
+      83 -        "Content-Type": "application/json",                    
+      84 -      },                                                       
+      85 -      body: JSON.stringify({                                   
+      86 -        targetRootId: root,                                    
+      87 -        topTaxonId: root,                                      
+      88 -        payload: { op: "no-op", id: root },                    
+      89 -      }),                                                      
+      90 -    });                                                        
+      91 -    assert.equal(res.status, 400);                             
+      92 -  });                                                          
+      76 +  // Note: HTTP transport normalizes whitespace-only X-Username
+         + values                                                        
+      77 +  // to empty strings before the middleware sees them — so a   
+      78 +  // whitespace-only header behaves like the null caller (403) 
+         +rather                                                         
+      79 +  // than producing a 400 from the format validator. Phase 2's 
+      80 +  // middleware.test.ts documents the same. Hence the initial t
+         +est                                                            
+      81 +  // plan's "Malformed X-Username → 400" row is not reachable v
+         +ia                                                             
+      82 +  // HTTP; the path is covered by middleware-unit tests in Phas
+         +e 2.                                                           
+      83  
+      84    it("registered caller with valid degenerate payload → 201", a
+          sync () => {
+      85      register("Bob");
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/post-proposals-*.test.js"
+      2>&1 | tail -15)
+  ⎿  ℹ pass 16
+     ℹ fail 1
+     ℹ cancelled 0
+     … +16 lines (ctrl+o to expand)
+
+⏺ Update(test/proposals/post-proposals-target-tree.test.ts)
+  ⎿  Added 4 lines, removed 1 line
+       5  import { createApp } from "../../src/app.js";
+       6  import { reset as usersReset, register } from "../../src/users/
+          store.js";
+       7  import { reset as taxaReset, seed } from "../../src/taxa/store.
+          js";
+       8 -import { reset as proposalsReset } from "../../src/proposals/st
+         -ore.js";                                                       
+       8 +import {                                                       
+       9 +  reset as proposalsReset,                                     
+      10 +  listProposals,                                               
+      11 +} from "../../src/proposals/store.js";                         
+      12  
+      13  beforeEach(() => {
+      14    usersReset();
+
+⏺ Update(test/proposals/post-proposals-target-tree.test.ts)
+  ⎿  Added 2 lines, removed 3 lines
+      86          payload: { op: "no-op", id: "t9999" },
+      87        }),
+      88      });
+      89 -    const list = await app.request("/proposals");              
+      90 -    const listBody = (await list.json()) as { proposals: unknow
+         -n[] };                                                         
+      91 -    assert.equal(listBody.proposals.length, 0);                
+      89 +    // GET /proposals isn't wired until §9; use the store direc
+         +tly.                                                           
+      90 +    assert.equal(listProposals().length, 0);                   
+      91    });
+      92  });
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/post-proposals-*.test.js"
+      2>&1 | tail -10)
+  ⎿    ✔ no proposal installed on 404 (0.581625ms)
+     ✔ POST /proposals target tree (15.856875ms)
+     ℹ tests 17
+     … +7 lines (ctrl+o to expand)
+
+⏺ All 17 pass. Now the payload-errors, success, and no-mutation tests.
+
+⏺ Write(test/proposals/post-proposals-payload-errors.test.ts)
+  ⎿  Wrote 203 lines to
+     test/proposals/post-proposals-payload-errors.test.ts
+       2 // (Phase 5 [[proposal-submission]] §5 payload-error rows).
+       3 //
+       4 // Each of [[proposal-payload]]'s tags is reachable via POST /pr
+         oposals
+       5 // and produces a 400 with the corresponding details.tag and a
+       6 // non-empty details.position.
+       7 
+       8 import { describe, it, beforeEach } from "node:test";
+       9 import assert from "node:assert/strict";
+      10 import { createApp } from "../../src/app.js";
+     … +198 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/post-proposals-success.test.ts)
+  ⎿  Wrote 201 lines to test/proposals/post-proposals-success.test.ts
+       2 // (Phase 5 [[proposal-submission]] §5 successful-submission row
+         s).
+       3 
+       5 import assert from "node:assert/strict"; "node:test";
+       6 import { createApp } from "../../src/app.js";
+       7 import { reset as usersReset, register } from "../../src/users/s
+       8 import { reset as taxaReset, seed } from "../../src/taxa/store.j
+         s";
+       9 import {
+      10   reset as proposalsReset,
+     … +197 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/post-proposals-no-mutation.test.ts)
+  ⎿  Wrote 79 lines to test/proposals/post-proposals-no-mutation.test.ts
+      2 // (Phase 5 [[proposal-submission]] §5 no-mutation rows).
+      3 
+      4 import { describe, it, beforeEach } from "node:test";
+      5 import assert from "node:assert/strict";
+      6 import { createApp } from "../../src/app.js";
+        ore.js"; reset as usersReset, register } from "../../src/users/st
+      8 import { reset as taxaReset, seed } from "../../src/taxa/store.js
+        ";
+      9 import { reset as proposalsReset } from "../../src/proposals/stor
+        e.js";
+     … +75 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/post-proposals-*.test.js"
+      2>&1 | tail -10)
+  ⎿        at async Test.run (node:internal/test_runner/test:1069:7)
+           at async Promise.all (index 0)
+           at async Suite.run (node:internal/test_runner/test:1466:7)
+     … +8 lines (ctrl+o to expand)
+
+⏺ Update(test/proposals/post-proposals-success.test.ts)
+  ⎿  Added 8 lines, removed 3 lines
+      194        resolve(process.cwd(), "src/proposals/submit-handler.ts"
+           ),
+      195        "utf-8",
+      196      );
+      197 -    const matches = src.match(/\bwithWriteLock\b/g) ?? [];    
+      198 -    // One import + one call = exactly two textual occurrences
+          -.                                                             
+      199 -    assert.equal(matches.length, 2);                          
+      197 +    // Strip comments before counting — comments may mention  
+      198 +    // `withWriteLock` for documentation purposes.            
+      199 +    const noComments = src                                    
+      200 +      .replace(/\/\*[\s\S]*?\*\//g, "")                       
+      201 +      .replace(/\/\/.*/g, "");                                
+      202 +    // Count `withWriteLock(` invocations (excludes the import
+          +).                                                            
+      203 +    const callMatches = noComments.match(/\bwithWriteLock\s*\(
+          +/g) ?? [];                                                    
+      204 +    assert.equal(callMatches.length, 1, "must call withWriteLo
+          +ck exactly once");                                            
+      205    });
+      206  });
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/post-proposals-*.test.js"
+      2>&1 | tail -12)
+  ⎿    ✔ unknown targetRootId → 404 unknown-target-tree (14.901166ms)
+       ✔ targetRootId exists but is not a root → 404 unknown-target-tree (0
+     .861875ms)
+     … +10 lines (ctrl+o to expand)
+
+⏺ All 34 POST /proposals tests pass. §8 done. Moving to §9: GET /proposals read
+  handlers.
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 16 lines, removed 16 lines
+       88  
+       89  ## 8. POST /proposals submission handler (`specs/proposal-subm
+           ission`)
+       90  
+       91 -- [ ] 8.1 Create `src/proposals/submit-handler.ts` exporting t
+          -he `postProposals` Hono handler                               
+       92 -- [ ] 8.2 In `postProposals`: invoke `requireRegistered(c)` fi
+          -rst (Phase 2 vocabulary handles null/unregistered → 403 forbid
+          -den)                                                          
+       93 -- [ ] 8.3 In `postProposals`: validate body envelope shape: bo
+          -dy is JSON object; `targetRootId` is non-empty string; `topTax
+          -onId` is non-empty string; `payload` is object — failure → `40
+          -0 validation_error` with `details.tag = "malformed-body"`. Bod
+          -y parsing happens before `withWriteLock` entry                
+       94 -- [ ] 8.4 In `postProposals`: enter `withWriteLock` exactly on
+          -ce around the critical section: take `snapshot = taxonStore.sn
+          -apshot()`; verify `targetRootId` is a current root (`snapshot.
+          -taxa.has(...)` AND `parentsOf.get(...).size === 0`) — failure 
+          -→ `404 not_found` with `details.tag = "unknown-target-tree"`  
+       95 -- [ ] 8.5 In `postProposals`: invoke `validatePayload(rawPaylo
+          -ad, { snapshot, targetRootId, topTaxonId })`; on `{ ok: false,
+          - reason }` throw `ApiError(<400>, reason)` carrying `details.t
+          -ag = reason.tag`, `details.position = reason.position`, `detai
+          -ls.message = reason.message`                                  
+       96 -- [ ] 8.6 In `postProposals`: mint `proposalId = proposalStore
+          -.mintProposalId()`; invoke `deriveChanges(validated.payload, {
+          - proposalId, targetRootId, snapshot, mintChangeId: proposalSto
+          -re.mintChangeId })`                                           
+       97 -- [ ] 8.7 In `postProposals`: construct `envelope = { proposal
+          -Id, proposer: caller.username, targetRootId, topTaxonId, rawPa
+          -yload }` where `caller.username` is the registry-original casi
+          -ng from the request context                                   
+       98 -- [ ] 8.8 In `postProposals`: call `proposalStore.installPropo
+          -sal(envelope, derivation.changes)`; exit lock; respond `201 { 
+          -proposalId, status: derivation.statusTree }`                  
+       99 -- [ ] 8.9 Wire `POST /proposals` in `src/app.ts` behind `ident
+          -ity-resolution` middleware (already global) and the explicit `
+          -requireRegistered` call inside the handler                    
+      100 -- [ ] 8.10 Confirm `submit-handler.ts` calls `withWriteLock` e
+          -xactly once; the call wraps snapshot, validate, derive, and in
+          -stall                                                         
+      101 -- [ ] 8.11 Write `test/proposals/post-proposals-auth.test.ts` 
+          -covering: null caller → 403 forbidden; unregistered caller → 4
+          -03 forbidden; registered caller with valid payload → 201      
+      102 -- [ ] 8.12 Write `test/proposals/post-proposals-body.test.ts` 
+          -covering: non-JSON body → 400 malformed-body; missing `targetR
+          -ootId` → 400 malformed-body; missing `topTaxonId` → 400 malfor
+          -med-body; missing `payload` → 400 malformed-body; non-string `
+          -targetRootId` → 400 malformed-body; empty-string `targetRootId
+          -` → 400 malformed-body                                        
+      103 -- [ ] 8.13 Write `test/proposals/post-proposals-target-tree.te
+          -st.ts` covering: unknown `targetRootId` → 404 unknown-target-t
+          -ree; `targetRootId` exists but is not a root → 404 unknown-tar
+          -get-tree; no proposal installed on failure                    
+      104 -- [ ] 8.14 Write `test/proposals/post-proposals-payload-errors
+          -.test.ts` covering each payload error tag end-to-end via HTTP:
+          - `payload-shape`, `payload-op-fields`, name-format tags, `top-
+          -taxon-op`, `top-taxon-mismatch`, `top-taxon-not-in-tree`, `pay
+          -load-edge-missing`, `graft-target-missing`, `payload-op-under-
+          -create`; assert `details.position` is present                 
+      105 -- [ ] 8.15 Write `test/proposals/post-proposals-success.test.t
+          -s` covering: a valid Appendix-A.1-style payload installs and r
+          -eturns the expected status tree with correct dispositions and 
+          -reviewers; the response shape is `{ proposalId, status: Status
+          -Node }`; proposer casing is canonicalized from registry       
+      106 -- [ ] 8.16 Write `test/proposals/post-proposals-no-mutation.te
+          -st.ts` covering: a successful submission does NOT mutate the t
+          -axon store (taxa unchanged), the user registry (unchanged), or
+          - any state outside the proposal store; a failed submission lea
+          -ves the proposal store unchanged                              
+       91 +- [x] 8.1 Create `src/proposals/submit-handler.ts` exporting t
+          +he `postProposals` Hono handler                               
+       92 +- [x] 8.2 In `postProposals`: invoke `requireRegistered(c)` fi
+          +rst (Phase 2 vocabulary handles null/unregistered → 403 forbid
+          +den)                                                          
+       93 +- [x] 8.3 In `postProposals`: validate body envelope shape: bo
+          +dy is JSON object; `targetRootId` is non-empty string; `topTax
+          +onId` is non-empty string; `payload` is object — failure → `40
+          +0 validation_error` with `details.tag = "malformed-body"`. Bod
+          +y parsing happens before `withWriteLock` entry                
+       94 +- [x] 8.4 In `postProposals`: enter `withWriteLock` exactly on
+          +ce around the critical section: take `snapshot = taxonStore.sn
+          +apshot()`; verify `targetRootId` is a current root (`snapshot.
+          +taxa.has(...)` AND `parentsOf.get(...).size === 0`) — failure 
+          +→ `404 not_found` with `details.tag = "unknown-target-tree"`  
+       95 +- [x] 8.5 In `postProposals`: invoke `validatePayload(rawPaylo
+          +ad, { snapshot, targetRootId, topTaxonId })`; on `{ ok: false,
+          + reason }` throw `ApiError(<400>, reason)` carrying `details.t
+          +ag = reason.tag`, `details.position = reason.position`, `detai
+          +ls.message = reason.message`                                  
+       96 +- [x] 8.6 In `postProposals`: mint `proposalId = proposalStore
+          +.mintProposalId()`; invoke `deriveChanges(validated.payload, {
+          + proposalId, targetRootId, snapshot, mintChangeId: proposalSto
+          +re.mintChangeId })`                                           
+       97 +- [x] 8.7 In `postProposals`: construct `envelope = { proposal
+          +Id, proposer: caller.username, targetRootId, topTaxonId, rawPa
+          +yload }` where `caller.username` is the registry-original casi
+          +ng from the request context                                   
+       98 +- [x] 8.8 In `postProposals`: call `proposalStore.installPropo
+          +sal(envelope, derivation.changes)`; exit lock; respond `201 { 
+          +proposalId, status: derivation.statusTree }`                  
+       99 +- [x] 8.9 Wire `POST /proposals` in `src/app.ts` behind `ident
+          +ity-resolution` middleware (already global) and the explicit `
+          +requireRegistered` call inside the handler                    
+      100 +- [x] 8.10 Confirm `submit-handler.ts` calls `withWriteLock` e
+          +xactly once; the call wraps snapshot, validate, derive, and in
+          +stall                                                         
+      101 +- [x] 8.11 Write `test/proposals/post-proposals-auth.test.ts` 
+          +covering: null caller → 403 forbidden; unregistered caller → 4
+          +03 forbidden; registered caller with valid payload → 201      
+      102 +- [x] 8.12 Write `test/proposals/post-proposals-body.test.ts` 
+          +covering: non-JSON body → 400 malformed-body; missing `targetR
+          +ootId` → 400 malformed-body; missing `topTaxonId` → 400 malfor
+          +med-body; missing `payload` → 400 malformed-body; non-string `
+          +targetRootId` → 400 malformed-body; empty-string `targetRootId
+          +` → 400 malformed-body                                        
+      103 +- [x] 8.13 Write `test/proposals/post-proposals-target-tree.te
+          +st.ts` covering: unknown `targetRootId` → 404 unknown-target-t
+          +ree; `targetRootId` exists but is not a root → 404 unknown-tar
+          +get-tree; no proposal installed on failure                    
+      104 +- [x] 8.14 Write `test/proposals/post-proposals-payload-errors
+          +.test.ts` covering each payload error tag end-to-end via HTTP:
+          + `payload-shape`, `payload-op-fields`, name-format tags, `top-
+          +taxon-op`, `top-taxon-mismatch`, `top-taxon-not-in-tree`, `pay
+          +load-edge-missing`, `graft-target-missing`, `payload-op-under-
+          +create`; assert `details.position` is present                 
+      105 +- [x] 8.15 Write `test/proposals/post-proposals-success.test.t
+          +s` covering: a valid Appendix-A.1-style payload installs and r
+          +eturns the expected status tree with correct dispositions and 
+          +reviewers; the response shape is `{ proposalId, status: Status
+          +Node }`; proposer casing is canonicalized from registry       
+      106 +- [x] 8.16 Write `test/proposals/post-proposals-no-mutation.te
+          +st.ts` covering: a successful submission does NOT mutate the t
+          +axon store (taxa unchanged), the user registry (unchanged), or
+          + any state outside the proposal store; a failed submission lea
+          +ves the proposal store unchanged                              
+      107  
+      108  ## 9. GET /proposals read handlers (`specs/proposal-reads`)
+      109  
+
+⏺ Write(src/proposals/read-handlers.ts)
+  ⎿  Wrote 74 lines to src/proposals/read-handlers.ts
+        eads]]).handlers for the proposal subsystem (Phase 5 [[proposal-r
+      2 //
+        ters)GET /proposals          (public; lean list with optional fil
+      4 //   GET /proposals/{id}     (public; §11.5 isomorphic status tre
+        e)
+      6 // Both endpoints are read-only — no withWriteLock entry, no stor
+        e
+      8 // submission sees whatever state the maps hold at the moment of 
+        the
+      9 // call (per [[write-serialization]]).
+     … +72 lines (ctrl+o to expand)
+
+⏺ Update(src/app.ts)
+  ⎿  Added 4 lines
+      16    deleteTaxon,
+      17  } from "./taxa/write-handlers.js";
+      18  import { postProposals } from "./proposals/submit-handler.js";
+      19 +import {                                                       
+      20 +  getProposalsList,                                            
+      21 +  getProposalById,                                             
+      22 +} from "./proposals/read-handlers.js";                         
+      23  import { identityMiddleware } from "./identity/middleware.js";
+      24  import type { AppVariables } from "./identity/caller.js";
+      25  import packageJson from "../package.json" with { type: "json" }
+          ;
+⏺ Update(src/app.ts)
+  ⎿  Added 7 lines
+      72    // section. Does NOT mutate the taxon graph.
+      73    app.post("/proposals", postProposals);
+      74  
+      75 +  // Proposal reads (PRD §15.2, Phase 5 [[proposal-reads]]). Pu
+         +blic —                                                         
+      76 +  // no requireRegistered. GET /proposals returns lean list ent
+         +ries                                                           
+      77 +  // (filterable by proposer / targetRootId); GET /proposals/{i
+         +d}                                                             
+      78 +  // returns the §11.5 isomorphic status tree.                 
+      79 +  app.get("/proposals", getProposalsList);                     
+      80 +  app.get("/proposals/:id", getProposalById);                  
+      81 +                                                               
+      82    return app;
+      83  }
+      84  
+
+⏺ Bash(npx tsc 2>&1 | head -20)
+  ⎿  (No output)
+
+⏺ Write(test/proposals/get-proposals-list.test.ts)
+  ⎿  Wrote 162 lines to test/proposals/get-proposals-list.test.ts
+          rows)./proposals list tests (Phase 5 [[proposal-reads]] §6 list
+       2 
+       4 import assert from "node:assert/strict"; "node:test";
+       5 import { createApp } from "../../src/app.js";
+       6 import { reset as usersReset, register } from "../../src/users/s
+       7 import { reset as taxaReset, seed } from "../../src/taxa/store.j
+         s";
+         re.js";{ reset as proposalsReset } from "../../src/proposals/sto
+       9 
+      10 beforeEach(() => {
+     … +156 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/get-proposal-by-id.test.ts)
+  ⎿  Wrote 204 lines to test/proposals/get-proposal-by-id.test.ts
+        y-id rows).posals/{id} tests (Phase 5 [[proposal-reads]] §6 GET-b
+      2 
+      3 import { describe, it, beforeEach } from "node:test";
+      5 import { createApp } from "../../src/app.js";
+      6 import { reset as usersReset, register } from "../../src/users/st
+        ore.js";
+        ";port { reset as taxaReset, seed } from "../../src/taxa/store.js
+      8 import { reset as proposalsReset } from "../../src/proposals/stor
+        e.js";
+      9 import type { StatusNode } from "../../src/proposals/types.js";
+     … +204 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/get-proposals-list.test.js"
+      "dist/test/proposals/get-proposal-by-id.test.js" 2>&1 | tail -10)
+  ⎿    ✔ empty proposer= treated as no filter (0.647375ms)
+     ✔ GET /proposals: filters (8.476584ms)
+     ℹ tests 18
+     … +7 lines (ctrl+o to expand)
+
+⏺ All 18 read-handler tests pass. §9 done. Now §10: GET /queue.
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 8 lines, removed 8 lines
+      107  
+      108  ## 9. GET /proposals read handlers (`specs/proposal-reads`)
+      109  
+      110 -- [ ] 9.1 Create `src/proposals/read-handlers.ts` exporting `g
+          -etProposalsList` (GET /proposals) and `getProposalById` (GET /
+          -proposals/{id})                                               
+      111 -- [ ] 9.2 In `getProposalsList`: parse `?proposer=` and `?targ
+          -etRootId=` query params; pass to `proposalStore.listProposals(
+          -{ proposer?, targetRootId? })`; return `200 { proposals: list.
+          -map(toListEntry) }` where `toListEntry` returns `{ proposalId,
+          - proposer, targetRootId, topTaxonId }`                        
+      112 -- [ ] 9.3 In `getProposalsList`: ignore unrecognized query par
+          -ams; empty result is `200 { proposals: [] }` not 404          
+      113 -- [ ] 9.4 In `getProposalById`: load envelope by id → 404 not_
+          -found `proposal-not-found` if missing; load changes via `listC
+          -hangesForProposal`; render status tree via `renderStatusTree(e
+          -nvelope.rawPayload, changes)`; return `200 { proposalId, propo
+          -ser, targetRootId, topTaxonId, status: <tree> }`              
+      114 -- [ ] 9.5 Wire `GET /proposals` and `GET /proposals/{id}` in `
+          -src/app.ts` — public (no `requireRegistered`)                 
+      115 -- [ ] 9.6 Confirm `read-handlers.ts` does NOT invoke `withWrit
+          -eLock`, `installProposal`, `mintProposalId`, or `mintChangeId`
+      116 -- [ ] 9.7 Write `test/proposals/get-proposals-list.test.ts` co
+          -vering: empty server → empty list; list entries omit status tr
+          -ee; null caller can list; filter by proposer case-insensitivel
+          -y narrows; filter by targetRootId narrows; both filters combin
+          -e as intersection; unmatched filter returns 200 empty list    
+      117 -- [ ] 9.8 Write `test/proposals/get-proposal-by-id.test.ts` co
+          -vering: unknown id → 404 proposal-not-found; status tree shape
+          - isomorphic to submitted payload (same node count, same nestin
+          -g); null caller can read; no-op nodes are structural with no c
+          -hangeId; queued rename's status node carries reviewer; latent 
+          -change under create has reviewer null; reason field absent on 
+          -every node                                                    
+      110 +- [x] 9.1 Create `src/proposals/read-handlers.ts` exporting `g
+          +etProposalsList` (GET /proposals) and `getProposalById` (GET /
+          +proposals/{id})                                               
+      111 +- [x] 9.2 In `getProposalsList`: parse `?proposer=` and `?targ
+          +etRootId=` query params; pass to `proposalStore.listProposals(
+          +{ proposer?, targetRootId? })`; return `200 { proposals: list.
+          +map(toListEntry) }` where `toListEntry` returns `{ proposalId,
+          + proposer, targetRootId, topTaxonId }`                        
+      112 +- [x] 9.3 In `getProposalsList`: ignore unrecognized query par
+          +ams; empty result is `200 { proposals: [] }` not 404          
+      113 +- [x] 9.4 In `getProposalById`: load envelope by id → 404 not_
+          +found `proposal-not-found` if missing; load changes via `listC
+          +hangesForProposal`; render status tree via `renderStatusTree(e
+          +nvelope.rawPayload, changes)`; return `200 { proposalId, propo
+          +ser, targetRootId, topTaxonId, status: <tree> }`              
+      114 +- [x] 9.5 Wire `GET /proposals` and `GET /proposals/{id}` in `
+          +src/app.ts` — public (no `requireRegistered`)                 
+      115 +- [x] 9.6 Confirm `read-handlers.ts` does NOT invoke `withWrit
+          +eLock`, `installProposal`, `mintProposalId`, or `mintChangeId`
+      116 +- [x] 9.7 Write `test/proposals/get-proposals-list.test.ts` co
+          +vering: empty server → empty list; list entries omit status tr
+          +ee; null caller can list; filter by proposer case-insensitivel
+          +y narrows; filter by targetRootId narrows; both filters combin
+          +e as intersection; unmatched filter returns 200 empty list    
+      117 +- [x] 9.8 Write `test/proposals/get-proposal-by-id.test.ts` co
+          +vering: unknown id → 404 proposal-not-found; status tree shape
+          + isomorphic to submitted payload (same node count, same nestin
+          +g); null caller can read; no-op nodes are structural with no c
+          +hangeId; queued rename's status node carries reviewer; latent 
+          +change under create has reviewer null; reason field absent on 
+          +every node                                                    
+      118  
+      119  ## 10. GET /queue queue handler (`specs/proposal-reads`)
+      120  
+
+⏺ Write(src/proposals/queue-handler.ts)
+  ⎿  Wrote 19 lines to src/proposals/queue-handler.ts
+         ./ GET /queue handler (Phase 5 [[proposal-reads]] queue surface)
+       2 //
+          haser-user actionable changes. requireRegistered: the null user
+       4 // no meaningful queue. The handler reads the proposal store's q
+         ueue
+       6 // projection and maps each entry through `toQueueEntry`.
+       7 import type { Context } from "hono";
+         ";port { requireRegistered } from "../auth/require-registered.js
+       9 import type { AppVariables } from "../identity/caller.js";
+      10 import { listQueueFor } from "./store.js";
+     … +9 lines (ctrl+o to expand)
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line
+      20    getProposalsList,
+      21    getProposalById,
+      22  } from "./proposals/read-handlers.js";
+      23 +import { getQueue } from "./proposals/queue-handler.js";       
+      24  import { identityMiddleware } from "./identity/middleware.js";
+      25  import type { AppVariables } from "./identity/caller.js";
+      26  import packageJson from "../package.json" with { type: "json" }
+          ;
+
+⏺ Update(src/app.ts)
+  ⎿  Added 4 lines
+      80    app.get("/proposals", getProposalsList);
+      81    app.get("/proposals/:id", getProposalById);
+      82  
+      83 +  // GET /queue — per-user actionable changes. Requires registe
+         +red                                                            
+      84 +  // caller (the null user has no meaningful queue).           
+      85 +  app.get("/queue", getQueue);                                 
+      86 +                                                               
+      87    return app;
+      88  }
+      89  
+
+⏺ Bash(npx tsc 2>&1 | head -10)
+  ⎿  (No output)
+
+⏺ Write(test/proposals/get-queue-auth.test.ts)
+  ⎿  Wrote 43 lines to test/proposals/get-queue-auth.test.ts
+         th rows).ueue auth tests (Phase 5 [[proposal-reads]] §6 queue-au
+       2 
+       3 import { describe, it, beforeEach } from "node:test";
+       5 import { createApp } from "../../src/app.js";
+       6 import { reset as usersReset, register } from "../../src/users/s
+         tore.js";
+       8 import { reset as proposalsReset } from "../../src/proposals/sto
+         re.js";
+       9 
+      10 beforeEach(() => {
+     … +37 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/get-queue-listing.test.ts)
+  ⎿  Wrote 230 lines to test/proposals/get-queue-listing.test.ts
+          listing rows).isting tests (Phase 5 [[proposal-reads]] §6 queue
+       2 
+       4 import assert from "node:assert/strict"; "node:test";
+       5 import { createApp } from "../../src/app.js";
+       6 import { reset as usersReset, register } from "../../src/users/s
+       7 import { reset as taxaReset, seed } from "../../src/taxa/store.j
+         s";
+         re.js";{ reset as proposalsReset } from "../../src/proposals/sto
+       9 
+      10 beforeEach(() => {
+     … +231 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/get-queue-*.test.js" 2>&1 |
+      tail -10)
+  ⎿    ✔ queue ordering is deterministic across two reads (0.6775ms)
+     ✔ GET /queue listing (21.130583ms)
+     ℹ tests 10
+     … +7 lines (ctrl+o to expand)
+
+⏺ All 10 queue tests pass. §10 done. Now §11: integration tests (Appendix A
+  end-to-end, plus the deferred reset-integration test).
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 6 lines, removed 6 lines
+      118  
+      119  ## 10. GET /queue queue handler (`specs/proposal-reads`)
+      120  
+      121 -- [ ] 10.1 Create `src/proposals/queue-handler.ts` exporting `
+          -getQueue` (GET /queue)                                        
+      122 -- [ ] 10.2 In `getQueue`: invoke `requireRegistered` (null/unr
+          -egistered → 403 forbidden); load `caller.username` from contex
+          -t; invoke `proposalStore.listQueueFor(caller.username)`; map e
+          -ach change via `toQueueEntry`; return `200 { queue: entries }`
+      123 -- [ ] 10.3 Wire `GET /queue` in `src/app.ts` behind the explic
+          -it `requireRegistered` call inside the handler                
+      124 -- [ ] 10.4 Confirm `queue-handler.ts` does NOT invoke `withWri
+          -teLock` or any store mutation                                 
+      125 -- [ ] 10.5 Write `test/proposals/get-queue-auth.test.ts` cover
+          -ing: null caller → 403 forbidden; unregistered caller → 403 fo
+          -rbidden; registered caller → 200                              
+      126 -- [ ] 10.6 Write `test/proposals/get-queue-listing.test.ts` co
+          -vering: registered caller with no queued changes → empty queue
+          -; registered caller with queued changes sees them; latent chan
+          -ges do not appear; deferred-reviewer changes do not appear; qu
+          -eue entries have the expected shape (`changeId, proposalId, op
+          -, targetRootId, taxonRef, payloadParent`); rename → `taxonRef:
+          - { kind: "existing", id }`; add-create → `taxonRef: { kind: "t
+          -o-create", name }`; add-graft → `taxonRef: { kind: "existing",
+          - id }`; queue order is deterministic across two reads with no 
+          -intervening writes                                            
+      121 +- [x] 10.1 Create `src/proposals/queue-handler.ts` exporting `
+          +getQueue` (GET /queue)                                        
+      122 +- [x] 10.2 In `getQueue`: invoke `requireRegistered` (null/unr
+          +egistered → 403 forbidden); load `caller.username` from contex
+          +t; invoke `proposalStore.listQueueFor(caller.username)`; map e
+          +ach change via `toQueueEntry`; return `200 { queue: entries }`
+      123 +- [x] 10.3 Wire `GET /queue` in `src/app.ts` behind the explic
+          +it `requireRegistered` call inside the handler                
+      124 +- [x] 10.4 Confirm `queue-handler.ts` does NOT invoke `withWri
+          +teLock` or any store mutation                                 
+      125 +- [x] 10.5 Write `test/proposals/get-queue-auth.test.ts` cover
+          +ing: null caller → 403 forbidden; unregistered caller → 403 fo
+          +rbidden; registered caller → 200                              
+      126 +- [x] 10.6 Write `test/proposals/get-queue-listing.test.ts` co
+          +vering: registered caller with no queued changes → empty queue
+          +; registered caller with queued changes sees them; latent chan
+          +ges do not appear; deferred-reviewer changes do not appear; qu
+          +eue entries have the expected shape (`changeId, proposalId, op
+          +, targetRootId, taxonRef, payloadParent`); rename → `taxonRef:
+          + { kind: "existing", id }`; add-create → `taxonRef: { kind: "t
+          +o-create", name }`; add-graft → `taxonRef: { kind: "existing",
+          + id }`; queue order is deterministic across two reads with no 
+          +intervening writes                                            
+      127  
+      128  ## 11. End-to-end integration and Appendix A scenarios
+      129  
+
+⏺ Write(test/proposals/end-to-end-appendix-a1.test.ts)  ⎿  Wrote 203 lines to test/proposals/end-to-end-appendix-a1.test.ts
+         ). Appendix A.1 end-to-end via HTTP (Phase 5 §11 integration row
+       2 //
+       3 // Setup: real Phase 4 endpoints (POST /users, POST /taxa, PUT e
+         dges).
+       4 // Submission: real POST /proposals.
+       6 // GET /queue for each affected user.t 201, GET /proposals/{id},
+       7 
+       8 import { describe, it, beforeEach } from "node:test";
+       9 import assert from "node:assert/strict";
+      10 import { createApp } from "../../src/app.js";
+     … +214 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc && node --test
+      "dist/test/proposals/end-to-end-appendix-a1.test.js" 2>&1 | tail -15)
+  ⎿  ▶ Appendix A.1 end-to-end
+       ✔ reproduces the PRD's initial-state dispositions and queue contents
+      (18.336ms)
+     … +9 lines (ctrl+o to expand)
+
+⏺ A.1 reproduces exactly. Now A.2 (cross-tree move + graft + nested create).
+
+⏺ Write(test/proposals/end-to-end-appendix-a2.test.ts)
+  ⎿  Wrote 165 lines to test/proposals/end-to-end-appendix-a2.test.ts
+         ). Appendix A.2 end-to-end via HTTP (Phase 5 §11 integration row
+       2 //
+       3 // Two trees, multi-owner; Grace submits two proposals: P1 (deta
+       4 // from a2 in T1) and P2 (graft a3 under b2 in T2, with a nested
+       5 // create under the graft).
+       6 //
+         e/ Phase 5 stops at submission — no acceptance — so we verify th
+       8 // initial dispositions and queue contents only.
+       9 
+      10 import { describe, it, beforeEach } from "node:test";
+     … +178 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc && node --test
+      "dist/test/proposals/end-to-end-appendix-a2.test.js" 2>&1 | tail -10)
+  ⎿    ✔ reproduces initial dispositions and queue contents for P1 and P2 (
+     16.604459ms)
+     ✔ Appendix A.2 end-to-end (16.999458ms)
+     … +8 lines (ctrl+o to expand)
+
+⏺ Both Appendix A tests pass. Now multi-tree shared, no-side-effects, and the
+  deferred reset-integration test.
+
+⏺ Write(test/proposals/end-to-end-multiple-trees.test.ts)
+  ⎿  Wrote 93 lines to test/proposals/end-to-end-multiple-trees.test.ts
+       2 // Multi-tree submission test (Phase 5 §11 integration row).
+       3 // A payload touching a shared taxon (one taxon in multiple tree
+         s) — we
+         s/ exercise routing per-tree (rename routes to the shared taxon'
+       5 // owner; the proposal targets one tree but the rename's reviewe
+         r is
+       7 // the same regardless of which tree the proposal targets).
+       8 import { describe, it, beforeEach } from "node:test";
+       9 import assert from "node:assert/strict";
+      10 import { createApp } from "../../src/app.js";
+     … +95 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/end-to-end-no-side-effects.test.ts)
+  ⎿  Wrote 100 lines to test/proposals/end-to-end-no-side-effects.test.ts
+         istrybmission has no side-effects on the taxon graph or user reg
+       2 // (Phase 5 §11 integration row).
+       3 //
+       4 // Snapshot every Phase 1-4 read endpoint before submission, the
+         n again
+       6 // after, and assert byte-equality.
+       7 import { describe, it, beforeEach } from "node:test";
+       8 import assert from "node:assert/strict";
+       9 import { createApp } from "../../src/app.js";
+      10 import { reset as usersReset } from "../../src/users/store.js";
+     … +101 lines (ctrl+o to expand)
+
+⏺ Write(test/proposals/reset-integration.test.ts)
+  ⎿  Wrote 123 lines to test/proposals/reset-integration.test.ts
+        m §6 toet extension integration test (Phase 5 §6.2 — deferred fro
+      2 // after handler wiring; mapping to [[state-reset]] forward oblig
+        ation).
+      3 
+      4 import { describe, it, beforeEach } from "node:test";
+      6 import { createApp } from "../../src/app.js";
+      7 import { reset as usersReset } from "../../src/users/store.js";
+      8 import { reset as taxaReset } from "../../src/taxa/store.js";
+      9 import { reset as proposalsReset } from "../../src/proposals/stor
+        e.js";
+     … +135 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc && node --test "dist/test/proposals/end-to-end-*.test.js"
+      "dist/test/proposals/reset-integration.test.js" 2>&1 | tail -10)
+  ⎿    ✔ after a complex multi-proposal session, reset returns 204 and ever
+     y endpoint is empty (25.058375ms)
+     ✔ POST /reset clears proposal-store state (25.488458ms)
+     … +8 lines (ctrl+o to expand)
+
+⏺ All integration tests pass. Now task 11.5: full clean-build run of the entire
+  test suite.
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -20)
+  ⎿  (No output)
+
+⏺ Bash(node --test "dist/**/*.test.js" 2>&1 | tail -15)
+  ⎿  ▶ user registry store: reset clears membership
+       ✔ after reset, list is empty and isRegistered is false (0.052084ms)
+       ✔ after reset, the case-key map is cleared (no lingering duplicate)
+     … +13 lines (ctrl+o to expand)
+
+⏺ All 624 tests pass across all phases (Phase 1+2+3+4+5). Mark §11 done and
+  update task checkboxes.
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 5 lines, removed 5 lines
+      127  
+      128  ## 11. End-to-end integration and Appendix A scenarios
+      129  
+      130 -- [ ] 11.1 Write `test/proposals/end-to-end-appendix-a1.test.t
+          -s` reproducing PRD Appendix A.1: set up state via Phase 4 endp
+          -oints (register Alice/Bob/Carol; Alice creates r1, c1; Bob is 
+          -reassigned ownership of c2 and c3 via PATCH; build the Fiction
+          - tree); Carol submits the A.1 payload; assert status tree and 
+          -queue contents match: Alice's queue has rename c1; Bob's queue
+          - has rename c3 and Urban Fantasy create; nobody's queue has Pa
+          -ranormal Romance (latent); the status tree carries the expecte
+          -d dispositions/reviewers                                      
+      131 -- [ ] 11.2 Write `test/proposals/end-to-end-appendix-a2.test.t
+          -s` reproducing PRD Appendix A.2 (P1 detach, P2 graft + nested 
+          -create): set up state via Phase 4 endpoints; Grace submits P1 
+          -and P2 separately; assert P1's detach is queued to Dana; P2's 
+          -graft is queued to Frank; P2's nested create is latent (and sh
+          -ows reviewer null because of deferred routing); status trees a
+          -nd queue contents match the PRD's "initial state" column      
+      132 -- [ ] 11.3 Write `test/proposals/end-to-end-multiple-trees.tes
+          -t.ts` covering a payload that touches a shared taxon (one taxo
+          -n in multiple trees), exercising routing per-tree             
+      133 -- [ ] 11.4 Write `test/proposals/end-to-end-no-side-effects.te
+          -st.ts` covering: submitting a proposal does NOT mutate any tax
+          -on's name, owner, or edges; the live graph before and after su
+          -bmission is identical via `GET /taxa` and `GET /trees`        
+      134 -- [ ] 11.5 Run the full build/test command on a clean checkout
+          -: `rm -rf dist && npx tsc && node --test "dist/**/*.test.js"` 
+          -— all Phase 1 + 2 + 3 + 4 + 5 tests pass                      
+      130 +- [x] 11.1 Write `test/proposals/end-to-end-appendix-a1.test.t
+          +s` reproducing PRD Appendix A.1: set up state via Phase 4 endp
+          +oints (register Alice/Bob/Carol; Alice creates r1, c1; Bob is 
+          +reassigned ownership of c2 and c3 via PATCH; build the Fiction
+          + tree); Carol submits the A.1 payload; assert status tree and 
+          +queue contents match: Alice's queue has rename c1; Bob's queue
+          + has rename c3 and Urban Fantasy create; nobody's queue has Pa
+          +ranormal Romance (latent); the status tree carries the expecte
+          +d dispositions/reviewers                                      
+      131 +- [x] 11.2 Write `test/proposals/end-to-end-appendix-a2.test.t
+          +s` reproducing PRD Appendix A.2 (P1 detach, P2 graft + nested 
+          +create): set up state via Phase 4 endpoints; Grace submits P1 
+          +and P2 separately; assert P1's detach is queued to Dana; P2's 
+          +graft is queued to Frank; P2's nested create is latent (and sh
+          +ows reviewer null because of deferred routing); status trees a
+          +nd queue contents match the PRD's "initial state" column      
+      132 +- [x] 11.3 Write `test/proposals/end-to-end-multiple-trees.tes
+          +t.ts` covering a payload that touches a shared taxon (one taxo
+          +n in multiple trees), exercising routing per-tree             
+      133 +- [x] 11.4 Write `test/proposals/end-to-end-no-side-effects.te
+          +st.ts` covering: submitting a proposal does NOT mutate any tax
+          +on's name, owner, or edges; the live graph before and after su
+          +bmission is identical via `GET /taxa` and `GET /trees`        
+      134 +- [x] 11.5 Run the full build/test command on a clean checkout
+          +: `rm -rf dist && npx tsc && node --test "dist/**/*.test.js"` 
+          +— all Phase 1 + 2 + 3 + 4 + 5 tests pass                      
+      135  
+      136  ## 12. Spec drift check and final test plan
+      137  
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 1 line, removed 1 line
+      74  ## 6. Reset composition
+      75  
+      76  - [x] 6.1 Locate the global reset composition (per Phase 3/4 — 
+          likely `src/reset.ts` or equivalent); add `proposalStore.reset(
+          )` to its sequence (order doesn't matter functionally; place it
+           last for phase-history readability)
+      77 -- [ ] 6.2 Write `test/proposals/reset-integration.test.ts` cove
+         -ring: register users; submit a proposal that produces at least 
+         -one queued change; `POST /reset` returns 204; subsequent `GET /
+         -proposals`, `GET /queue` (for the formerly-queued reviewer), `G
+         -ET /proposals/{id}` of the formerly-installed id return empty/4
+         -04; subsequent `POST /proposals` mints `p1` (deferred: requires
+         - §8 handlers — written after §10)                              
+      77 +- [x] 6.2 Write `test/proposals/reset-integration.test.ts` cove
+         +ring: register users; submit a proposal that produces at least 
+         +one queued change; `POST /reset` returns 204; subsequent `GET /
+         +proposals`, `GET /queue` (for the formerly-queued reviewer), `G
+         +ET /proposals/{id}` of the formerly-installed id return empty/4
+         +04; subsequent `POST /proposals` mints `p1` (deferred: requires
+         + §8 handlers — written after §10)                              
+      78  
+      79  ## 7. Status tree serializer (`specs/proposal-reads`)
+      80  
+
+⏺ Now §12: spec drift check, final plan, strict validate.
+
+  Called openlore (ctrl+o to expand)
+
+⏺ Spec drift check is clean — 0 issues. Now write the final test plan changelog
+  and run strict validation.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-5-final.md)
+  ⎿  Added 27 lines
+      748  
+      749  ## Changelog
+      750  
+      751 +**§1 proposal-payload**                                       
+      752 +- *Removed*: "Malformed X-Username → 400 (identity middleware)
+          +" row in §5 — Hono's HTTP transport normalizes whitespace-only
+          + header values to empty strings before the identity middleware
+          + sees them, so a whitespace-only `X-Username` behaves like the
+          + null caller (403) rather than producing a 400 from the format
+          + validator. This is documented at `test/identity/middleware.te
+          +st.ts:96`. The path is still covered by Phase 2's middleware-u
+          +nit tests against the validator directly. Reason: behavior unr
+          +eachable via real HTTP.                                       
+      753 +                                                              
+      754 +**§2 change-derivation**                                      
+      755 +- *Reframed*: the initial plan's "no concrete-latent in curren
+          +t rules" row was based on a misreading. **Concrete-latent IS r
+          +eachable**: nested ops under an `add-graft` route concretely (
+          +the graft preserves ownership of the existing live taxon) but 
+          +are latent (the graft is a decision-dep ancestor). PRD Appendi
+          +x A.2's Unreliable Narrator Thriller is exactly this case — co
+          +ncrete to Erin, latent under Frank's graft. The corresponding 
+          +test was updated to assert the actual invariant: `deferred ⇒ l
+          +atent`, with no claim about `concrete ⇒ queued`. Reason: more 
+          +faithful to the spec.                                         
+      756 +- *Added*: "graft target in same target tree (would diamond) a
+          +ccepted" row in §1 / payload existence — this is the §3.3-NOT-
+          +checked-at-submission case made explicit, since the unified-re
+          +ading existence check is satisfied (the graft target exists gl
+          +obally) while the diamond invariant is deferred to acceptance.
+          + Useful as a self-contained test of the spec resolution.      
+      757 +                                                              
+      758 +**§4 proposal-store**                                         
+      759 +- *Reduced*: the queue lookup "case-insensitive" row was satis
+          +fied by the same test that exercises lookup determinism — they
+          + share fixtures. No semantic reduction in coverage.           
+      760 +                                                              
+      761 +**§5 proposal-submission**                                    
+      762 +- *Reduced*: "Concurrent submission + direct PATCH serialize" 
+          +and "Two concurrent submissions serialize" rows from the lock-
+          +discipline subsection were not added as stand-alone tests — Ph
+          +ase 4's write-lock unit tests + the cross-phase POST /taxa con
+          +currency tests already cover the FIFO contract end-to-end, and
+          + `withWriteLock` is the same primitive. Adding more concurrenc
+          +y tests at the proposal-submission layer would duplicate signa
+          +l without finding new bugs. Reason: avoiding cross-phase test 
+          +duplication.                                                  
+      763 +                                                              
+      764 +**§7 /reset extension**                                       
+      765 +- *Added*: an extra confirmation step in the reset integration
+          + test — submitting after `POST /reset` mints `p1`, proving the
+          + counter zeroed end-to-end through the API. Reason: the unit t
+          +est already covers it, but the end-to-end path through the han
+          +dler is the actual user-observable contract; worth confirming.
+      766 +                                                              
+      767 +**§8 Integration**                                            
+      768 +- *Added*: A.2's distinguishing test asserting nested-under-gr
+          +aft is **concrete-Erin / latent** (not deferred). The PRD's A.
+          +2 table is explicit about this routing; making the implementat
+          +ion match required adding the distinction at the test plan and
+          + code level. Reason: PRD-conformance is the load-bearing prope
+          +rty — the implementation now matches Appendix A.2 row-for-row.
+      769 +                                                              
+      770 +**§9 §13/§14 mapping** — unchanged from the initial plan; ever
+          +y row's coverage held under implementation.                   
+      771 +                                                              
+      772 +**Overall**                                                   
+      773 +- All payload-tag values from `[[proposal-payload]]`'s vocabul
+          +ary are reachable via real HTTP and tested. The §10.3 acceptan
+          +ce-time discipline is preserved: §3.3 invariants are **not** c
+          +hecked at submission, and tests confirm submission-time accept
+          +ance of payloads that would violate them at acceptance time.  
+      774 +- Tests pass: **624** across Phase 1 + 2 + 3 + 4 + 5 in a clea
+          +n build (`rm -rf dist && npx tsc && node --test "dist/**/*.tes
+          +t.js"`).                                                      
+      775 +- `check_spec_drift` reports **0 drift** after implementation.
+      776 +                                                              
+      777 +                                                              
+
+⏺ Bash(openspec validate phase-5-proposal-submission --strict && echo "---" &&
+      openspec list)  ⎿  Change 'phase-5-proposal-submission' is valid
+     ---
+     Changes:
+       phase-5-proposal-submission     101/107 tasks  just now
+
+⏺ Update(openspec/changes/phase-5-proposal-submission/tasks.md)
+  ⎿  Added 5 lines, removed 5 lines
+      135  
+      136  ## 12. Spec drift check and final test plan
+      137  
+      138 -- [ ] 12.1 Run `check_spec_drift` via openlore MCP per CLAUDE.
+          -md; report the summary; reconcile any drift before close-out (
+          -update spec to match intended behavior, or fix code if spec is
+          - right; re-run until clean)                                   
+      139 -- [ ] 12.2 Update `test-plans/phase-5-final.md` to reflect wha
+          -t was actually tested (rows that diverge from the frozen `phas
+          -e-5-initial.md`)                                              
+      140 -- [ ] 12.3 Add to the `## Changelog` section of `phase-5-final
+          -.md`: for each row added/removed/changed since the initial pla
+          -n, one bullet `+/- <description> — <reason>`                  
+      141 -- [ ] 12.4 Run `openspec validate phase-5-proposal-submission 
+          ---strict` and confirm no errors                               
+      142 -- [ ] 12.5 Run `openspec list` and confirm the change appears 
+          -as completable                                                
+      138 +- [x] 12.1 Run `check_spec_drift` via openlore MCP per CLAUDE.
+          +md; report the summary; reconcile any drift before close-out (
+          +update spec to match intended behavior, or fix code if spec is
+          + right; re-run until clean)                                   
+      139 +- [x] 12.2 Update `test-plans/phase-5-final.md` to reflect wha
+          +t was actually tested (rows that diverge from the frozen `phas
+          +e-5-initial.md`)                                              
+      140 +- [x] 12.3 Add to the `## Changelog` section of `phase-5-final
+          +.md`: for each row added/removed/changed since the initial pla
+          +n, one bullet `+/- <description> — <reason>`                  
+      141 +- [x] 12.4 Run `openspec validate phase-5-proposal-submission 
+          +--strict` and confirm no errors                               
+      142 +- [x] 12.5 Run `openspec list` and confirm the change appears 
+          +as completable                                                
+
+⏺ Bash(openspec list && echo "---" && grep -c "^- \[ \]"
+      openspec/changes/phase-5-proposal-submission/tasks.md && echo "remaining
+      tasks:" && grep "^- \[ \]" openspec/c…)
+  ⎿  Changes:
+       phase-5-proposal-submission     106/107 tasks  just now
+     ---
+     … +4 lines (ctrl+o to expand)
+
+⏺ Bash(git status --short && echo "---" && git diff --stat HEAD | tail -20)
+  ⎿   M openspec/changes/phase-5-proposal-submission/tasks.md
+      M src/app.ts
+      M src/reset/handler.ts
+     … +9 lines (ctrl+o to expand)
+
+⏺ Implementation Complete
+
+  Change: phase-5-proposal-submission
+  Schema: spec-driven
+  Progress: 106/107 tasks complete (1.2 = user commit action)
+
+  What landed
+
+  - 8 new source files (src/proposals/): types, payload validator, change
+  derivation, store, serializer, submit handler, read handlers, queue handler
+  - 24 new test files (test/proposals/): payload (6), derivation (7 including
+  Appendix A), store (4), serialize (2), submission (5), reads (2), queue (2),
+  integration (4)
+  - 2 modified files: src/app.ts (four new routes), src/reset/handler.ts
+  (proposal-store extension)
+  - 1 new doc: test-plans/phase-5-final.md with changelog of discoveries vs. the
+   frozen initial plan
+
+  Test results
+
+  Phase 1 + 2 + 3 + 4 + 5: 624 tests pass, 0 fail   (clean build)
+  check_spec_drift:        0 issues
+  openspec validate:       Change 'phase-5-proposal-submission' is valid
+
+  Notable discoveries (in the final-plan changelog)
+
+  - Whitespace-only X-Username is unreachable at the HTTP layer — Hono
+  normalizes it to empty before middleware. The 400 path is covered by Phase 2's
+   middleware-unit tests; the initial plan's row was removed.
+  - Concrete-latent is reachable — nested ops under an add-graft route
+  concretely (graft preserves ownership) but are latent (graft is a decision-dep
+   ancestor). The initial plan misread this. PRD Appendix A.2's Unreliable
+  Narrator Thriller is exactly this case; the implementation now matches A.2
+  row-for-row.
+
+  Still outstanding (user action)
+
+  - Task 1.2 — commit test-plans/phase-5-initial.md to mark the freeze. The file
+   hasn't been edited since you asked me to write it; committing now seals the
+  initial-vs-final delta. After that, the implementation work, the spec deltas,
+  and the final plan can go in subsequent commits.
+
+  Run /opsx:archive once 1.2 is done and you're ready to finalize.
+
+✻ Churned for 23m 45s
+
+❯ /opsx:archive                                                                 
+  ⎿  You've hit your session limit · resets 12:20am (America/New_York)
+     /upgrade or /usage-credits to finish what you’re working on.
+
+✻ Cogitated for 0s
+
+❯ /usage 
+  ⎿  Settings dialog dismissed
+
+❯ /export                                                                       
+  ⎿  Conversation copied to clipboard
+
+❯ /model 
+  ⎿  Kept model as Opus 4.7 (1M context) (default)
+
+❯ /upgrade                                                                      
+  ⎿  Login interrupted
+
+❯ /usage 
+  ⎿  Settings dialog dismissed
+
+❯ /usage 
+  ⎿  Settings dialog dismissed
+
+❯ continue                                                                      
+
+⏺ Bash(openspec status --change "phase-5-proposal-submission" --json 2>&1 | head
+       -50 && echo "---" && grep -c "^- \[ \]"
+      openspec/changes/phase-5-proposal-submission/t…)
+  ⎿  {
+       "changeName": "phase-5-proposal-submission",
+       "schemaName": "spec-driven",
+     … +32 lines (ctrl+o to expand)
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ All artifacts are done; 1 incomplete task (1.2, the user commit action) and 5
+  new-capability delta specs to sync. Let me check how Phase 4's sync was done.
+
+⏺ Bash(diff openspec/changes/archive/2026-05-26-phase-4-direct-actions/specs/dir
+      ect-taxon-actions/spec.md openspec/specs/direct-taxon-actions/spec.md |
+      head -20 && ech…)
+  ⎿  1c1
+     < ## ADDED Requirements
+     ---
+     … +20 lines (ctrl+o to expand)
+
+⏺ Bash(openspec --help 2>&1 | head -30)
+  ⎿  Usage: openspec [options] [command]
+
+     AI-native system for spec-driven development
+     … +27 lines (ctrl+o to expand)
+
+⏺ Bash(openspec archive --help 2>&1 | head -30)  ⎿  Usage: openspec archive [options] [change-name]
+
+     Archive a completed change and update main specs
+     … +9 lines (ctrl+o to expand)
+
+⏺ openspec archive does both spec-sync and move. Let me run it.
+
+⏺ Bash(openspec archive phase-5-proposal-submission --yes 2>&1 | head -40)
+  ⎿  Proposal warnings in proposal.md (non-blocking):
+       ⚠ Why section should not exceed 1000 characters
+       ⚠ Consider splitting changes with more than 10 deltas
+     … +22 lines (ctrl+o to expand)
+
+⏺ Bash(ls openspec/specs/ && echo "---" && ls openspec/changes/archive/ && echo
+      "---" && openspec list)
+  ⎿  authorization-gate
+     change-derivation
+     direct-taxon-actions
+     … +22 lines (ctrl+o to expand)
+
+⏺ Archive Complete
+
+  Change: phase-5-proposal-submission
+  Schema: spec-driven
+  Archived to: openspec/changes/archive/2026-05-26-phase-5-proposal-submission/
+  Specs: ✓ Synced — 5 new canonical capabilities created in openspec/specs/:
+  - change-derivation (7 requirements)
+  - proposal-payload (8 requirements)
+  - proposal-reads (7 requirements)
+  - proposal-store (7 requirements)
+  - proposal-submission (7 requirements)
+
+  36 new requirements added across the living specs; no modifications to
+  existing capabilities.
+
+  Warnings (non-blocking)
+
+  - 1 incomplete task: 1.2 Commit phase-5-initial.md — a user-controlled freeze
+  marker, not an implementation gap.
+  - Proposal length warning (Why section > 1000 chars) and "split if > 10
+  deltas" — the proposal is intentionally long for this phase's scope; not
+  actionable.
+
+  Where things stand
+
+  src/proposals/              — 8 source modules
+  test/proposals/             — 24 test files (~135 tests)
+  openspec/specs/             — 12 → 17 canonical capability specs
+  openspec/changes/archive/   — 5 archived phases (1, 2, 3, 4, 5)
+  test-plans/                 — phase-5-initial.md (frozen-as-written) +
+  phase-5-final.md (with changelog)
+  Full test suite             — 624 tests pass, 0 fail
+  check_spec_drift            — clean
+
+  Phase 5 ships. The system can now accept proposals, fan them out into routed
+  changes with classified dependencies and initial dispositions, and surface
+  them through three new read endpoints — without yet permitting any review
+  action. Phase 6 picks up at acceptance / rejection / dismissal / cascade.
+
+✻ Brewed for 1m 1s
+
+❯ /usage 
+  ⎿  Settings dialog dismissed

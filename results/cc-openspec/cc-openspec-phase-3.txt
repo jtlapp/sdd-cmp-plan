@@ -1,0 +1,1582 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-openspec-openlore
+
+❯ /opsx:explore                                                                 
+
+  Read 2 files, listed 3 directories (ctrl+o to expand)
+
+⏺ Bash(for d in openspec/specs/*/; do echo "=== $d ==="; ls "$d"; done)
+  ⎿  === openspec/specs/authorization-gate/ ===
+     spec.md
+     === openspec/specs/error-model/ ===
+     … +11 lines (ctrl+o to expand)
+
+  Read 7 files, listed 2 directories (ctrl+o to expand)
+
+⏺ Ready to think through Phase 3. Let me lay out my read of the shape, then
+  surface where I see the interesting decisions, and you can point at whatever
+  you want to dig into.
+
+  What Phase 3 is asking for
+
+  ┌─────────────────────────────────────────────────────────┐
+  │  Phase 3 — the keystone phase                           │
+  │                                                         │
+  │   ┌────────────┐  ┌──────────────┐  ┌────────────────┐  │
+  │   │  store     │  │ reachability │  │  invariants    │  │
+  │   │ (taxa,     │─▶│  roots, in-  │─▶│  no-cycle      │  │
+  │   │  edges,    │  │  tree paths, │  │  no-duplicate  │  │
+  │   │  ID gen)   │  │  shared      │  │  name-unique   │  │
+  │   └────────────┘  └──────────────┘  │  (per tree,    │  │
+  │         │                            │   case-insens) │  │
+  │         ▼                            └────────┬───────┘  │
+  │   ┌─────────────────────────────────┐         │          │
+  │   │  read endpoints (§15.2)         │         │          │
+  │   │  GET /taxa, /taxa/{id},         │  ← used by every   │
+  │   │      /trees, /trees/{rootId}    │    later write     │
+  │   │  open to null user              │    path (Ph 4–7)   │
+  │   └─────────────────────────────────┘                    │
+  │                                                          │
+  │  No writes. No write serialization. State seeded by      │
+  │  tests via direct in-memory construction.                │
+  └──────────────────────────────────────────────────────────┘
+
+  The keystone framing is doing a lot of work in the brief — this module's API
+  is what Phases 4–7 will be coupled to for the next several thousand lines of
+  write code. So getting its shape right is the whole game here.
+
+  Where I see the interesting decisions
+
+  A handful of design questions that aren't obvious from the PRD and that I'd
+  want resolved before writing the spec:
+
+  1. Snapshot vs. delta API for the invariant module. The brief says "given a
+  candidate state or a proposed change" — those are quite different shapes.
+  Three plausible styles:
+
+  (a) snapshot:  check(state) -> Ok | Violations          # check a hypothetical
+   world
+  (b) delta:     check(state, op) -> Ok | Violations      # current + proposed
+  mutation
+  (c) both:      a thin (b) layered over (a)
+  1. Most write paths (add-edge, rename) are naturally deltas. But cascades and
+  grafts produce a sequence of deltas applied to evolving state, which is closer
+   to (a) on a recomputed snapshot. Choice here shapes everything downstream.
+  2. What counts as "the state"? The store could expose taxa-and-edges directly,
+   or hand the invariant module a read-only view. Pure-module discipline pushes
+  toward "module accepts a graph value, doesn't reach into the store" — which is
+   what makes hand-built test graphs work.
+  3. Cross-tree checks on rename. Invariant 3 requires "satisfies in every
+  containing tree." That means the invariant module needs reachability to
+  identify which roots contain the taxon — which is why reachability is item (2)
+   in the brief and not folded into invariants. The dependency direction
+  matters: invariants depend on reachability, reachability depends on the store
+  shape.
+  4. Per-tree uniqueness of occurrence (invariant 2). This is the trickiest of
+  the three to test cleanly. A diamond across trees is legal; a diamond within
+  one is not. The detection is "is there a taxon reachable by more than one path
+   from this root?" — distinct from cycle detection. Easy to muddle them in
+  code.
+  5. GET /trees/{rootId} for shared subtrees. If c2 is shared between trees T1
+  and T2, calling GET /trees/T1 expands c2's subtree under T1. Calling GET 
+  /trees/T2 expands it again under T2. The shape is per-tree expansion, not a
+  deduplicated graph — and the response surely needs to surface "this is shared"
+   somehow (the §15.2 fields don't say, but shared is a defined predicate in
+  §3.3).
+  6. State-seeding for tests. No write endpoints exist, so tests have to
+  construct graphs by calling store functions directly. That's a real surface —
+  it isn't just "an internal detail" — because every Phase 3 test depends on it.
+   Worth designing it deliberately rather than letting it grow ad-hoc.
+  7. ID generation + reset. Tiny but real: monotonic counter, reset zeros it.
+  The spec needs to say so so Phase 4+ can rely on it.
+  8. No requireRegistered calls anywhere in Phase 3. All four read endpoints are
+   open. The authorization-gate spec's forward obligation only fires for writes,
+   and there are none. Worth being explicit about that in the proposal so the
+  gate stays unblemished.
+
+  Where do you want to start?
+
+  A few natural threads:
+
+  - The invariant module's API shape (decision 1 + 2 above) — probably the
+  highest-leverage thing to nail down first.
+  - The data model and reachability layer — the substrate everything else stands
+   on.
+  - Read endpoint shape, especially how GET /trees/{rootId} handles shared taxa.
+  - Test-seeding strategy — what does a Phase 3 test look like when it needs to
+  assert "this graph violates invariant 2"?
+
+  Or somewhere else entirely — what's pulling at you?
+
+✻ Worked for 2m 8s
+
+❯ Make decisions on your own. Involve me if there are problems.                 
+
+  Read 4 files (ctrl+o to expand)
+
+⏺ Working through the design. Here are the calls I'm making.
+
+  Phase 3 design — decisions
+
+  Capability split: three new specs
+
+  ┌────────────────────────────────────────────────────────────┐
+  │ taxon-domain      Taxon entity, in-memory store, server-   │
+  │                   side ID generation, snapshot type,       │
+  │                   reachability primitives, /reset hook.    │
+  │                                                            │
+  │ invariant-engine  Pure module: cycle / in-tree-duplicate / │
+  │                   in-tree-name-clash checks, plus thin     │
+  │                   delta wrappers (checkAddEdge,            │
+  │                   checkRename). Sole owner of the rules.   │
+  │                                                            │
+  │ taxon-reads       GET /taxa, /taxa/{id}, /trees,           │
+  │                   /trees/{rootId}. Open to all callers.    │
+  └────────────────────────────────────────────────────────────┘
+
+  Reachability sits in taxon-domain (not its own capability) — both invariants
+  and reads consume it, and nothing else will.
+
+  1. Invariant module API — snapshot-based, with two delta wrappers
+
+  // Pure core
+  checkInvariants(g: Graph): { ok: true } | { ok: false; violations: Violation[]
+   }
+  // Submoves exposed for direct unit testing
+  checkNoCycles(g)
+  checkInTreeUniqueOccurrence(g)   // invariant 2
+  checkInTreeNameUniqueness(g)     // invariant 3 (uses equalsCI)
+
+  // Thin "would this op violate" wrappers — synthesize a candidate Graph, call 
+  core
+  checkAddEdge(g, parentId, childId)
+  checkRename(g, taxonId, newName)
+
+  Why snapshot-first: makes hand-built test graphs trivial; matches the "build
+  as a pure module" directive. Delta wrappers exist so Phase 4 doesn't have to
+  invent the API — and so the keystone discipline ("every write path calls this
+  module") is testable now. Delete and detach can't introduce invariant
+  violations, so they get no wrappers. Returns all violations (not
+  short-circuit) — Phase 4 may want full diagnostics.
+
+  2. Graph value — the contract between store, invariants, and reads
+
+  type TaxonId = string;            // server-assigned; opaque (`t1`, `t2`, …)
+  type Taxon = { id: TaxonId; name: string; owner: string };
+  type Graph = {
+    taxa: ReadonlyMap<TaxonId, Taxon>;
+    childrenOf: ReadonlyMap<TaxonId, ReadonlySet<TaxonId>>;
+    parentsOf:  ReadonlyMap<TaxonId, ReadonlySet<TaxonId>>;
+  };
+
+  Both child and parent indices in the value. Store maintains both atomically;
+  tests build either by hand or via a seed() helper. The invariant module
+  accepts Graph and never reaches into the store — that's what makes it pure.
+
+  3. Store and ID generation
+
+  src/taxa/store.ts holds byId, childrenOf, parentsOf, and nextId = 1. IDs are
+  t${n} strings, monotonic, reset to 1 on /reset. Exposes snapshot(): Graph,
+  lookups, and reset(). Also exposes a seed() for Phase 3 test fixtures,
+  documented as "Phase 3 only — Phase 4's mutation primitives supersede this for
+   non-test use." That keeps the spec talking about behavior given state, not
+  how the state got there.
+
+  4. Reachability primitives (in taxon-domain)
+
+  roots(g): Set<TaxonId>
+  containingRoots(g, t): Set<TaxonId>   // by walking parents up to root taxa
+  isShared(g, t): boolean                 // |containingRoots| > 1
+  reachableSubtree(g, top): Set<TaxonId>
+
+  shared is the predicate §3.3 defines; everything else falls out of standard
+  graph traversals.
+
+  5. Read endpoint shapes
+
+  All four endpoints are open (no requireRegistered). Response wrappers match
+  Phase 2's { users: [...] } style.
+
+  GET /taxa
+    → { taxa: [ { id, name, owner, children: [id], parents: [id], shared } ] }
+
+  GET /taxa/{id}
+    → { taxon: { id, name, owner, children, parents, shared } }    | 404
+
+  GET /trees
+    → { roots: [ { id, name } ] }
+
+  GET /trees/{rootId}
+    → { root: <id>, tree: { id, name, owner, shared, children: [...] } }   | 404
+
+  Adding shared to the per-taxon shape — defined in §3.3 and trivially
+  derivable; saves clients the math. Nested expansion in GET /trees/{rootId} is
+  unambiguous because invariant 2 forbids in-tree duplicates. Children order is
+  implementation-defined but stable within a snapshot (insertion order from
+  Set).
+
+  6. Forward obligations and reset
+
+  - State-reset forward obligation: discharged. resetAll() gains a taxaReset()
+  call that clears all three maps and zeros nextId. New test asserts this.
+  - Authorization-gate forward obligation: vacuous. Phase 3 introduces no
+  writes.
+  - New invariant-engine forward obligation: every later write path SHALL go
+  through the invariant module rather than reimplement any of the three §3.3
+  rules. Mirrors the authorization-gate pattern — gives Phase 4+ a spec-drift
+  signal if anyone reaches around it.
+
+  7. Testing topology
+
+  - test/invariants/ — unit tests against hand-built Graph values. Each
+  invariant exercised at boundary conditions (one-edge cycle, self-loop, diamond
+   within a tree, diamond across trees that is legal, name clash including
+  case-variant, three-deep paths).
+  - test/taxa/store.test.ts — ID monotonicity, snapshot purity (mutating
+  returned sets must not corrupt the store), reset zeros the counter.
+  - test/taxa/reads.test.ts — HTTP tests against seed()-installed graphs,
+  exercising each endpoint's shape and 404 paths.
+  - test/reset/taxa-reset.test.ts — seed → reset → empty + IDs restart at t1.
+
+  Initial test plan written from the three new specs in the Rule | Input | 
+  Expected | Notes table format Phase 2 established; frozen on commit; final
+  plan + changelog at phase close.
+
+  ---
+  Things I'm choosing not to escalate but want on the record
+
+  - Delta wrappers shipped before they have HTTP callers. Speculative but cheap;
+   Phase 4 may refine signatures. Captured as a design risk.
+  - shared in response bodies, beyond the brief's listed fields.
+  Forward-additive; the cost of removing it later is zero (omit it from the
+  response); the cost of adding it later means a behavior change.
+  - seed() lives in src/taxa/store.ts. A test-only surface in production source
+  is mildly uncomfortable but pragmatic. Marked clearly.
+
+  If any of these don't sit right, say so. Otherwise I'm ready to materialize
+  this as /opsx:propose add-phase-3-domain-invariants and you can review the
+  artifacts.
+
+✻ Sautéed for 3m 30s
+
+❯ /opsx:propose add-phase-3-domain-invariants                                   
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Bash(openspec new change "add-phase-3-domain-invariants")
+  ⎿  - Creating change 'add-phase-3-domain-invariants'...
+     ✔ Created change 'add-phase-3-domain-invariants' at openspec/changes/a
+     dd-phase-3-domain-invariants/ (schema: spec-driven)
+
+⏺ Bash(openspec status --change "add-phase-3-domain-invariants" --json)
+  ⎿  {
+       "changeName": "add-phase-3-domain-invariants",
+       "schemaName": "spec-driven",
+     … +37 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions proposal --change "add-phase-3-domain-invariants"
+      --json)
+  ⎿  {
+       "changeName": "add-phase-3-domain-invariants",
+       "artifactId": "proposal",
+     … +36 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-3-domain-invariants/proposal.md)
+  ⎿  Wrote 139 lines to
+     openspec/changes/add-phase-3-domain-invariants/proposal.md
+       2 ## Why
+         n (taxa, edges,**keystone phase**: it builds the in-memory domai
+         iant module**ed IDs) and — critically — a **pure, reusable invar
+       5 that every later write path in Phases 4–7 will call into instead
+       6 re-deriving the §3.3 rules. The phase also exposes the four §15.
+       7 endpoints so that fixture-seeded state becomes externally observ
+         able. With
+         ing writes,in place, the rest of the system is a matter of layer
+         d a settledand review actions on top of a settled rule engine an
+      10 data model — without ever re-implementing the rules themselves.
+     … +180 lines (ctrl+o to expand)
+
+⏺ Created proposal. Now design and specs (both unlocked by proposal).
+
+⏺ Bash(openspec instructions design --change "add-phase-3-domain-invariants"
+      --json)
+  ⎿  {
+       "changeName": "add-phase-3-domain-invariants",
+       "artifactId": "design",
+     … +26 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions specs --change "add-phase-3-domain-invariants"
+      --json)
+  ⎿  {
+       "changeName": "add-phase-3-domain-invariants",
+       "artifactId": "specs",
+     … +39 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-3-domain-invariants/design.md)
+  ⎿  Wrote 643 lines to
+     openspec/changes/add-phase-3-domain-invariants/design.md
+       2 ## Context
+         tity layer.s on top of the Phase 1 scaffold and the Phase 2 iden
+       4 Phase 1 froze `error-model`, `taxon-name-format`, `username-form
+       5 `state-reset`; Phase 2 added `user-registry`, `identity-resoluti
+         on`, and
+         ity domaintion-gate`. Phase 3 now introduces the first non-ident
+         very laterxa and their edges — and the **invariant module that e
+       8 write path will call into**.
+      10 The brief frames this as the **keystone** phase: most of the cod
+         e in
+     … +833 lines (ctrl+o to expand)
+⏺ Now the three spec files. I'll write them in parallel.
+
+⏺ Write(openspec/changes/add-phase-3-domain-invariants/specs/taxon-domain/spec.m
+       d)
+  ⎿  Wrote 307 lines to openspec/changes/add-phase-3-domain-invariants/spec
+     s/taxon-domain/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: Taxon entity shape and server-assigned ID
+       4 
+       6 The system SHALL model each taxon as a record carrying:
+       7 - a **unique, server-assigned ID** (an opaque string minted by t
+         he
+       9 - a **name** (a string satisfying the [[taxon-name-format]] rule
+         s),
+      10 - an **owner** (a non-null username string that is registered pe
+         r
+     … +325 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-3-domain-invariants/specs/invariant-engine/sp
+       ec.md)
+  ⎿  Wrote 458 lines to openspec/changes/add-phase-3-domain-invariants/spec
+     s/invariant-engine/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: Pure module — no I/O, no HTTP, no error envelop
+       4 es
+       5 The system SHALL expose an **invariant engine** as a pure module
+          that
+         fromuates the three PRD §3.3 invariants against a `Graph` value 
+       7 [[taxon-domain]]. The module SHALL NOT:
+       9 - read or write the taxa store directly (it accepts `Graph` argu
+         ments);
+      10 - read or write HTTP (no `Context`, no headers, no responses);
+     … +509 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-3-domain-invariants/specs/taxon-reads/spec.md
+       )
+  ⎿  Wrote 304 lines to openspec/changes/add-phase-3-domain-invariants/spec
+     s/taxon-reads/spec.md
+      2 ## ADDED Requirements
+      3 ### Requirement: All taxon-read endpoints are open to every calle
+        r
+      4 
+      5 `GET /taxa`, `GET /taxa/{id}`, `GET /trees`, and `GET /trees/{roo
+      6 SHALL be available to every caller — the null user, an unregister
+        ed
+      7 caller with a well-formed `X-Username`, and a registered caller —
+      8 without restriction. None of these handlers SHALL invoke
+      9 `requireRegistered` from [[authorization-gate]].
+     … +309 lines (ctrl+o to expand)
+
+⏺ Bash(openspec status --change "add-phase-3-domain-invariants" --json)
+  ⎿  {
+       "changeName": "add-phase-3-domain-invariants",
+       "schemaName": "spec-driven",
+     … +27 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions tasks --change "add-phase-3-domain-invariants"
+      --json)
+  ⎿  {
+       "changeName": "add-phase-3-domain-invariants",
+       "artifactId": "tasks",
+     … +22 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-3-domain-invariants/tasks.md)
+  ⎿  Wrote 63 lines to
+     openspec/changes/add-phase-3-domain-invariants/tasks.md
+      2 ## 1. Initial test plan (frozen at end of step 1)
+        w specs in this change, using the established `Rule | Input | Exp
+        ected | Notes` table format
+        eze; do not edit this file afterward` — this commit marks the fre
+      5 - [ ] 1.3 Create `test-plans/phase-3-final.md` as a copy of the i
+      6 nitial plan plus an empty `## Changelog` section at the end
+        `, value + reachability halves)ty primitives (`specs/taxon-domain
+      8 
+        n`, and `Graph` types (Graph as `{ taxa: ReadonlyMap, childrenOf:
+         ReadonlyMap<…, ReadonlyS
+     … +171 lines (ctrl+o to expand)
+
+⏺ Bash(openspec status --change "add-phase-3-domain-invariants" && echo "---" &&
+       openspec validate add-phase-3-domain-invariants --strict 2>&1)
+  ⎿  Error: Exit code 1
+     - Loading change status...
+     Change: add-phase-3-domain-invariants
+     Schema: spec-driven
+     Progress: 4/4 artifacts complete
+
+     [x] proposal
+     [x] design
+     [x] specs
+     [x] tasks
+     … +9 lines (ctrl+o to expand)
+
+⏺ Bash(openspec change show add-phase-3-domain-invariants --json --deltas-only
+      2>&1 | head -100)
+  ⎿  Warning: The "openspec change ..." commands are deprecated. Prefer ver
+     b-first commands (e.g., "openspec list", "openspec validate --changes"
+     ).
+     … +97 lines (ctrl+o to expand)
+
+⏺ The parser captures only the first line of requirement text. The first
+  requirement in taxon-reads has its SHALL on line 2. Fix:
+
+⏺ Update(openspec/changes/add-phase-3-domain-invariants/specs/taxon-reads/spec.m
+        d)
+  ⎿  Added 4 lines, removed 4 lines
+       2  
+       3  ### Requirement: All taxon-read endpoints are open to every cal
+          ler
+       4  
+       5 -`GET /taxa`, `GET /taxa/{id}`, `GET /trees`, and `GET /trees/{r
+         -ootId}`                                                        
+       6 -SHALL be available to every caller — the null user, an unregist
+         -ered                                                           
+       7 -caller with a well-formed `X-Username`, and a registered caller
+         - —                                                             
+       8 -without restriction. None of these handlers SHALL invoke       
+       5 +The system SHALL make `GET /taxa`, `GET /taxa/{id}`, `GET /tree
+         +s`, and                                                        
+       6 +`GET /trees/{rootId}` available to every caller — the null user
+         +, an                                                           
+       7 +unregistered caller with a well-formed `X-Username`, and a regi
+         +stered                                                         
+       8 +caller — without restriction. None of these handlers SHALL invo
+         +ke                                                             
+       9  `requireRegistered` from [[authorization-gate]].
+      10  
+      11  This realizes PRD §15.2's "available to all users including nul
+          l"
+
+⏺ Bash(openspec validate add-phase-3-domain-invariants --strict 2>&1 && echo
+      "---" && openspec status --change "add-phase-3-domain-invariants")
+  ⎿  Change 'add-phase-3-domain-invariants' is valid
+     ---
+     - Loading change status...
+     … +10 lines (ctrl+o to expand)
+
+⏺ All artifacts created and the change validates strict.
+
+  Created add-phase-3-domain-invariants
+
+  Location: openspec/changes/add-phase-3-domain-invariants/
+
+  Artifact: proposal.md
+  What it says: Why this is the keystone phase; three new capabilities
+    (taxon-domain, invariant-engine, taxon-reads); what's explicitly deferred to
+
+    Phases 4–7
+  ────────────────────────────────────────
+  Artifact: design.md
+  What it says: 14 decisions covering: snapshot-first invariant API with two
+    delta wrappers (checkAddEdge, checkRename); the Graph value type as the sole
+
+    contract; taxon-domain owning reachability; the keystone forward obligation;
+
+    nested tree expansion with shared exposure; the test-only seed() helper;
+  code
+     layout (src/taxa/, src/domain/)
+  ────────────────────────────────────────
+  Artifact: specs/taxon-domain/spec.md
+  What it says: 7 requirements: taxon entity shape, monotonic ID generation (t1,
+
+    t2, …), dual-index store, Graph snapshot type, reachability primitives, the
+    seed() helper, /reset participation
+  ────────────────────────────────────────
+  Artifact: specs/invariant-engine/spec.md
+  What it says: 9 requirements: purity contract, CheckResult/Violation shapes,
+    each of the three §3.3 invariants, the snapshot checker, the two delta
+    wrappers, and the forward obligation that every later write  path call into
+    this module
+  ────────────────────────────────────────
+  Artifact: specs/taxon-reads/spec.md
+  What it says: 7 requirements: open-to-all access, response shapes for each of
+    the four endpoints, 404 tags (taxon-not-found, root-not-found),
+    reads-don't-validate decoupling, single-snapshot consistency
+  ────────────────────────────────────────
+  Artifact: tasks.md
+  What it says: 8 task groups, 39 checkboxes, ordered: initial test plan →
+    graph+reachability → store → invariant engine → reads → reset extension →
+    integration → drift check + final plan
+
+  Ready for /opsx:apply when you want to start implementing.
+
+✻ Crunched for 10m 37s
+
+❯ /opsx:apply                                                                   
+
+⏺ Using change: add-phase-3-domain-invariants. Override with /opsx:apply 
+  <other>.
+
+⏺ Bash(openspec status --change "add-phase-3-domain-invariants" --json && echo
+      "---" && openspec instructions apply --change
+      "add-phase-3-domain-invariants" --json)
+  ⎿  {
+       "changeName": "add-phase-3-domain-invariants",
+       "schemaName": "spec-driven",
+     … +258 lines (ctrl+o to expand)
+
+  Read 9 files, listed 1 directory (ctrl+o to expand)
+
+⏺ Starting with the initial test plan. I'll write it now from the specs alone,
+  then move to implementation.
+
+⏺ Write(test-plans/phase-3-initial.md)
+  ⎿  Wrote 352 lines to test-plans/phase-3-initial.md
+      2 # Phase 3 — Initial test plan (frozen)
+      3 > **Status: frozen on commit.** This plan was written from the Op
+        enSpec
+      5 > `invariant-engine`, `taxon-reads`) **before** implementation be
+        gan and
+      6 > is not edited afterward. The companion file `phase-3-final.md`
+        rowupersedes this one and carries a `## Changelog` listing every 
+      8 > added, removed, or changed during implementation, with the reas
+        on for
+      9 > each.
+     … +632 lines (ctrl+o to expand)
+
+⏺ Bash(cp test-plans/phase-3-initial.md test-plans/phase-3-final.md)
+  ⎿  Done
+⏺ Update(test-plans/phase-3-final.md)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-3-final.md)
+  ⎿  Added 7 lines, removed 8 lines
+       1 -# Phase 3 — Initial test plan (frozen)                         
+       1 +# Phase 3 — Final test plan                                    
+       2  
+       3 -> **Status: frozen on commit.** This plan was written from the 
+         -OpenSpec                                                       
+       4 -> change `add-phase-3-domain-invariants` (specs: `taxon-domain`
+         -,                                                              
+       5 -> `invariant-engine`, `taxon-reads`) **before** implementation 
+         -began and                                                      
+       6 -> is not edited afterward. The companion file `phase-3-final.md
+         -`                                                              
+       7 -> supersedes this one and carries a `## Changelog` listing ever
+         -y row                                                          
+       8 -> added, removed, or changed during implementation, with the re
+         -ason for                                                       
+       9 -> each.                                                        
+       3 +> **Status: living document.** This plan supersedes            
+       4 +> `test-plans/phase-3-initial.md` (frozen on commit at the star
+         +t of                                                           
+       5 +> implementation). The `## Changelog` at the end lists every ro
+         +w added,                                                       
+       6 +> removed, or changed during implementation, with the reason fo
+         +r each.                                                        
+       7 +> The body otherwise tracks the initial plan exactly except whe
+         +re                                                             
+       8 +> implementation discovery required a revision.                
+       9  
+      10  ## Why this plan exists
+      11  
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(openspec/changes/add-phase-3-domain-invariants/tasks.md)
+  ⎿  Added 2 lines, removed 2 lines
+      1  ## 1. Initial test plan (frozen at end of step 1)
+      2  
+      3 -- [ ] 1.1 Write `test-plans/phase-3-initial.md` from the three n
+        -ew specs in this change, using the established `Rule | Input | E
+        -xpected | Notes` table format                                   
+      3 +- [x] 1.1 Write `test-plans/phase-3-initial.md` from the three n
+        +ew specs in this change, using the established `Rule | Input | E
+        +xpected | Notes` table format                                   
+      4  - [ ] 1.2 Commit `phase-3-initial.md` — this commit marks the fr
+         eeze; do not edit this file afterward
+      5 -- [ ] 1.3 Create `test-plans/phase-3-final.md` as a copy of the 
+        -initial plan plus an empty `## Changelog` section at the end    
+      5 +- [x] 1.3 Create `test-plans/phase-3-final.md` as a copy of the 
+        +initial plan plus an empty `## Changelog` section at the end    
+      6  
+      7  ## 2. Graph type and reachability primitives (`specs/taxon-domai
+         n`, value + reachability halves)
+      8  
+
+⏺ Initial plan written, final scaffold created. 1.2 (the commit-to-freeze) is
+  left unchecked — that's a user decision I won't take without instruction.
+
+  Now the source. Let me build graph types, reachability, store, invariants,
+  serializers, and handlers in dependency order.
+
+⏺ Bash(mkdir -p src/domain src/taxa test/domain test/taxa && ls src/ test/)
+  ⎿  src/:
+     app.ts
+     auth
+     … +21 lines (ctrl+o to expand)
+
+⏺ Write(src/domain/graph.ts)
+  ⎿  Wrote 24 lines to src/domain/graph.ts
+         in]]).e domain value types (PRD §3.1, §3.2; Phase 3 [[taxon-doma
+       2 //
+         e/ The Graph is the **sole contract** between the taxa store, th
+       4 // reachability primitives, the invariant engine, and the read
+         to serializer. Consumers receive Graph values and never reach in
+       6 // store internals — that's what makes the invariant engine pure
+       7 // the test graphs hand-buildable.
+       8 //
+         entsDs are opaque strings minted only by the store (PRD §2). Cli
+      10 // never mint IDs; the format `t<N>` is implementation-defined.
+     … +15 lines (ctrl+o to expand)
+
+⏺ Write(src/domain/reachability.ts)
+  ⎿  Wrote 65 lines to src/domain/reachability.ts
+       2 // [[taxon-domain]] reachability layer).(PRD §3.2, §3.3; Phase 3
+       3 //
+       4 // Pure functions only — no I/O, no store access, no mutation. S
+         afe to
+       5 // call on pathological graphs (cycles, diamonds): each function
+          ID.erminates because traversals use visited-sets keyed by taxon
+       7 
+       8 import type { Graph, TaxonId } from "./graph.js";
+       9 
+      10 // All parentless taxa — every root of the global DAG.
+     … +62 lines (ctrl+o to expand)
+
+⏺ Write(src/taxa/store.ts)
+  ⎿  Wrote 136 lines to src/taxa/store.ts
+         Phase 3emory taxa store (PRD §2 in-memory state, §3.1 entities; 
+       2 // [[taxon-domain]] store half).
+       4 // Storage discipline (Phase 3 design Decision 6):
+       5 //   - byId        — every taxon record, keyed by its server-ass
+         igned ID.
+       7 //   - parentsOf   — child  → set of parent IDs (the inverse ind
+         ex).
+          so aBoth indices are updated atomically by every edge insertion
+       9 //   parent/child mismatch is impossible (Decision 6).
+      10 //
+     … +138 lines (ctrl+o to expand)
+
+⏺ Now the invariant engine — the keystone.
+
+⏺ Write(src/domain/invariants.ts)
+  ⎿  Wrote 287 lines to src/domain/invariants.ts
+         t-engine]]). engine (PRD §3.3 invariants 1–3; Phase 3 [[invarian
+       3 // Pure module: no HTTP, no store mutation, no error envelopes. 
+       4 // public function accepts a Graph and returns a CheckResult. Th
+         e
+         nt;snapshot checker (checkInvariants) is the canonical entry poi
+         ingthe per-invariant checkers are exposed for targeted unit test
+       7 // and Phase 4 diagnostics; the two delta wrappers (checkAddEdge
+       8 // checkRename) synthesize candidate graphs around a proposed op
+       9 // delegate to the snapshot checker.
+      10 //
+     … +306 lines (ctrl+o to expand)
+
+⏺ Now the serializer and handlers for the read endpoints.
+
+⏺ Write(src/taxa/serialize.ts)
+  ⎿  Wrote 109 lines to src/taxa/serialize.ts
+         se 3ure serializers from Graph → response shapes (PRD §15.2; Pha
+       2 // [[taxon-reads]]).
+       4 // Each function takes a Graph (no store access, no HTTP) and re
+         turns a
+         Unitlain JSON-friendly object. Handlers wrap these in c.json(). 
+       6 // tests exercise the serializers against hand-built Graphs.
+       8 // Decoupling note: these serializers do NOT import the invarian
+         t
+         oreengine. Reads are observational and serialize whatever the st
+      10 // holds, even if it violates §3.3 (which only happens via the
+     … +107 lines (ctrl+o to expand)
+
+⏺ Write(src/taxa/handlers.ts)
+  ⎿  Wrote 47 lines to src/taxa/handlers.ts
+         3/ Read handlers for the four §15.2 taxa/trees endpoints (Phase 
+       2 // [[taxon-reads]]). All four are open to every caller — none in
+         voke
+       3 // requireRegistered. Each handler takes a single snapshot() and
+       4 // delegates to the pure serializer.
+       6 import type { Context } from "hono";
+       7 import { ApiError } from "../errors/api-error.js";
+       8 import { snapshot } from "./store.js";
+       9 import {
+      10   serializeAllTaxa,
+     … +39 lines (ctrl+o to expand)
+
+⏺ Wire the routes and the reset extension.
+
+⏺ Update(src/app.ts)
+  ⎿  Added 6 lines
+       2  import { onError, notFoundHandler, normalizeThrows } from "./er
+          rors/handler.js";
+       3  import { resetAll } from "./reset/handler.js";
+       4  import { postUsers, getUsers } from "./users/handlers.js";
+       5 +import {                                                       
+       6 +  getTaxa,                                                     
+       7 +  getTaxonById,                                                
+       8 +  getTrees,                                                    
+       9 +  getTreeByRoot,                                               
+      10 +} from "./taxa/handlers.js";                                   
+      11  import { identityMiddleware } from "./identity/middleware.js";
+      12  import type { AppVariables } from "./identity/caller.js";
+      13  import packageJson from "../package.json" with { type: "json" }
+          ;
+
+⏺ Update(src/app.ts)
+  ⎿  Added 7 lines
+      38    app.post("/users", postUsers);
+      39    app.get("/users", getUsers);
+      40  
+      41 +  // Taxon reads (PRD §15.2, Phase 3 [[taxon-reads]]). All four
+         + are                                                           
+      42 +  // open to every caller including null; no requireRegistered 
+         +gate.                                                          
+      43 +  app.get("/taxa", getTaxa);                                   
+      44 +  app.get("/taxa/:id", getTaxonById);                          
+      45 +  app.get("/trees", getTrees);                                 
+      46 +  app.get("/trees/:rootId", getTreeByRoot);                    
+      47 +                                                               
+      48    return app;
+      49  }
+      50  
+
+⏺ Update(src/reset/handler.ts)
+  ⎿  Added 4 lines, removed 2 lines
+      1  import { reset as usersReset } from "../users/store.js";
+      2 +import { reset as taxaReset } from "../taxa/store.js";          
+      3  
+      4  /**
+      5   * Composed reset of every form of in-memory state in the server
+          (PRD §15).
+     ...
+       9   * effects) so the set of cleared subsystems is visible at one 
+          site.
+      10   *
+      11   * Forward contributors (each adds one `xReset()` call in sourc
+          e order):
+      11 - *   Phase 2  — user registry          ✓                       
+      12 - *   Phase 3  — taxa, edges, ID generator                      
+      12 + *   Phase 2  — user registry              ✓                   
+      13 + *   Phase 3  — taxa, edges, ID generator  ✓                   
+      14   *   Phase 5  — proposals and derived changes
+      15   *   Phase 6  — reviewer queues
+      16   *
+     ...
+      18   */
+      19  export async function resetAll(): Promise<void> {
+      20    usersReset();
+      21 +  taxaReset();                                                 
+      22  }
+
+⏺ Let me check the build compiles before writing tests.
+
+⏺ Bash(npx tsc 2>&1 | head -60)
+  ⎿  src/taxa/handlers.ts(22,43): error TS2345: Argument of type 'string |
+     undefined' is not assignable to parameter of type 'string'.
+       Type 'undefined' is not assignable to type 'string'.
+     … +3 lines (ctrl+o to expand)
+
+⏺ Update(src/taxa/handlers.ts)
+  ⎿  Added 3 lines, removed 1 line
+      18  }
+      19  
+      20  export function getTaxonById(c: Context): Response {
+      21 -  const id = c.req.param("id");                                
+      21 +  // Hono's param typing is `string | undefined`; the route `:i
+         +d` is                                                          
+      22 +  // always populated when this handler runs.                  
+      23 +  const id = c.req.param("id")!;                               
+      24    const view = serializeTaxon(snapshot(), id);
+      25    if (view === undefined) {
+      26      throw new ApiError("not_found", `Taxon ${id} not found`, {
+
+⏺ Update(src/taxa/handlers.ts)  ⎿  Added 1 line, removed 1 line
+      38  // names "the tree rooted at rootId," and that resource doesn't
+           exist
+      39  // either when the ID names nothing OR when the ID names a non-
+          root.
+      40  export function getTreeByRoot(c: Context): Response {
+      41 -  const rootId = c.req.param("rootId");                        
+      41 +  const rootId = c.req.param("rootId")!;                       
+      42    const expansion = serializeTreeFrom(snapshot(), rootId);
+      43    if (expansion === undefined) {
+      44      throw new ApiError("not_found", `Tree rooted at ${rootId} n
+          ot found`, {
+
+⏺ Bash(npx tsc 2>&1 | head -40)
+  ⎿  (No output)
+
+⏺ Build clean. Now the tests — reachability first, then store, invariants,
+  wrappers, serializers, HTTP, reset, integration.
+
+⏺ Write(test/domain/reachability.test.ts)
+  ⎿  Wrote 236 lines to test/domain/reachability.test.ts
+      1 import { describe, it } from "node:test";
+      2 import assert from "node:assert/strict";
+      3 import {
+      4   containingRoots,
+      5   isShared,
+      6   reachableSubtree,
+      7   roots,
+      8 } from "../../src/domain/reachability.js";
+      9 import type { Graph, Taxon, TaxonId } from "../../src/domain/grap
+        h.js";
+     … +237 lines (ctrl+o to expand)
+
+⏺ Write(test/taxa/store.test.ts)
+  ⎿  Wrote 290 lines to test/taxa/store.test.ts
+      1 import { describe, it, beforeEach } from "node:test";
+      2 import assert from "node:assert/strict";
+      3 import {
+      4   getById,
+      5   listRoots,
+      6   reset,
+      7   seed,
+      8   snapshot,
+      9 } from "../../src/taxa/store.js";
+     … +287 lines (ctrl+o to expand)
+
+⏺ Write(test/domain/invariants.test.ts)
+  ⎿  Wrote 465 lines to test/domain/invariants.test.ts
+       2 import assert from "node:assert/strict";;
+       3 import {
+       4   checkInTreeNameUniqueness,
+       5   checkInTreeUniqueOccurrence,
+       6   checkInvariants,
+       7   checkNoCycles,
+       8   type Violation,
+       9 } from "../../src/domain/invariants.js";
+      10 import type { Graph, Taxon, TaxonId } from "../../src/domain/gra
+         ph.js";
+     … +475 lines (ctrl+o to expand)
+
+⏺ Write(test/domain/wrappers.test.ts)
+  ⎿  Wrote 233 lines to test/domain/wrappers.test.ts
+       2 import assert from "node:assert/strict";;
+       3 import {
+       4   checkAddEdge,
+       5   checkRename,
+       6   type Violation,
+       7 } from "../../src/domain/invariants.js";
+       8 import type { Graph, Taxon, TaxonId } from "../../src/domain/gra
+         ph.js";
+       9 
+      10 function tx(id: TaxonId, name = id, owner = "u"): Taxon {
+     … +237 lines (ctrl+o to expand)
+
+⏺ Write(test/taxa/serialize.test.ts)
+  ⎿  Wrote 227 lines to test/taxa/serialize.test.ts
+      1 import { describe, it } from "node:test";
+      2 import assert from "node:assert/strict";
+      3 import {
+      4   serializeAllTaxa,
+      5   serializeRootsList,
+      6   serializeTaxon,
+      7   serializeTreeFrom,
+      8 } from "../../src/taxa/serialize.js";
+      9 import type { Graph, Taxon, TaxonId } from "../../src/domain/grap
+        h.js";
+     … +227 lines (ctrl+o to expand)
+
+⏺ Write(test/taxa/http.test.ts)
+  ⎿  Wrote 385 lines to test/taxa/http.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset as usersReset, register } from "../../src/users/s
+         tore.js";
+       5 import { reset as taxaReset, seed } from "../../src/taxa/store.j
+       6 s";
+       7 beforeEach(() => {
+       8   usersReset();
+       9   taxaReset();
+      10 });
+     … +397 lines (ctrl+o to expand)
+
+⏺ Write(test/reset/taxa-reset.test.ts)
+  ⎿  Wrote 114 lines to test/reset/taxa-reset.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset as usersReset, register } from "../../src/users/s
+         tore.js";
+       5 import { reset as taxaReset, seed } from "../../src/taxa/store.j
+       6 s";
+       7 beforeEach(() => {
+       8   usersReset();
+       9   taxaReset();
+      10 });
+     … +116 lines (ctrl+o to expand)
+
+⏺ Now the integration test and a build/test run.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Write(test/app.phase3.integration.test.ts)
+  ⎿  Wrote 108 lines to test/app.phase3.integration.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../src/app.js";
+       4 import { reset as usersReset, register } from "../src/users/stor
+         e.js";
+       5 import { reset as taxaReset, seed } from "../src/taxa/store.js";
+       6 
+       7 beforeEach(() => {
+       8   usersReset();
+       9   taxaReset();
+      10 });
+     … +116 lines (ctrl+o to expand)
+
+⏺ Now build and run the tests.
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -40)
+  ⎿  test/taxa/store.test.ts(73,25): error TS2448: Block-scoped variable 'p
+     ' used before its declaration.
+     test/taxa/store.test.ts(73,36): error TS2448: Block-scoped variable 'c
+     ' used before its declaration.
+
+⏺ Update(test/taxa/store.test.ts)
+  ⎿  Error editing file
+
+⏺ Update(test/taxa/store.test.ts)
+  ⎿  Added 2 lines, removed 1 line
+      63  
+      64  describe("seed: edge installation", () => {
+      65    it("installs edges in both indices", () => {
+      66 +    // Mint first; seed again to install the edge using the kno
+         +wn IDs.                                                        
+      67      const {
+      68        ids: [p, c],
+      69      } = seed({
+     ...
+      71          { name: "P", owner: "u" },
+      72          { name: "C", owner: "u" },
+      73        ],
+      73 -      edges: [{ parent: p!, child: c! }],                      
+      74      });
+      75 +    seed({ taxa: [], edges: [{ parent: p!, child: c! }] });    
+      76      const g = snapshot();
+      77      assert.ok(g.childrenOf.get(p!)?.has(c!));
+      78      assert.ok(g.parentsOf.get(c!)?.has(p!));
+
+⏺ Bash(npx tsc 2>&1 | head -40)
+  ⎿  (No output)
+
+⏺ Bash(node --test "dist/**/*.test.js" 2>&1 | tail -80)
+  ⎿    ✔ reflects current store state (0.387833ms)
+       ✔ is a live view: post-snapshot mutations are visible through it (0.
+     07125ms)
+     … +77 lines (ctrl+o to expand)
+
+⏺ All 284 tests pass on the first run. Let me verify the source-level invariant
+  — no read handler imports the auth gate or the invariant engine.
+
+⏺ Bash(echo "=== handlers.ts imports ===" && grep -n "^import"
+      src/taxa/handlers.ts && echo "=== serialize.ts imports ===" && grep -n
+      "^import" src/taxa/serialize.ts &…)
+  ⎿  === handlers.ts imports ===
+     6:import type { Context } from "hono";
+     7:import { ApiError } from "../errors/api-error.js";
+     … +17 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+⏺ Purity holds. Now run spec-drift via openlore.
+
+  Called openlore (ctrl+o to expand)
+
+⏺ Spec drift check is clean — 0 gaps, 0 stale, 0 uncovered, 0 orphaned. Let me
+  update the task list and run the final validation.
+
+⏺ Bash(openspec validate add-phase-3-domain-invariants --strict && echo
+      "---list---" && openspec list)
+  ⎿  Change 'add-phase-3-domain-invariants' is valid
+     ---list---
+     Changes:
+       add-phase-3-domain-invariants     2/40 tasks    11m ago
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-3-domain-invariants/tasks.md)
+  ⎿  Added 37 lines, removed 37 lines
+       6  
+       7  ## 2. Graph type and reachability primitives (`specs/taxon-doma
+          in`, value + reachability halves)
+       8  
+       9 -- [ ] 2.1 Create `src/domain/graph.ts` exporting `TaxonId`, `Ta
+         -xon`, and `Graph` types (Graph as `{ taxa: ReadonlyMap, childre
+         -nOf: ReadonlyMap<…, ReadonlySet>, parentsOf: ReadonlyMap<…, Rea
+         -donlySet> }`)                                                  
+      10 -- [ ] 2.2 Create `src/domain/reachability.ts` exporting `roots(
+         -g)`, `containingRoots(g, t)`, `isShared(g, t)`, `reachableSubtr
+         -ee(g, top)` as pure functions with no I/O                      
+      11 -- [ ] 2.3 Write `test/domain/reachability.test.ts` covering: em
+         -pty graph → roots=∅; single root no children; multiple roots; c
+         -ontainingRoots on a root returns `{root}`; containingRoots on a
+         - shared taxon returns multiple roots; isShared correctly distin
+         -guishes shared vs unshared vs root; reachableSubtree includes t
+         -op + all descendants; reachableSubtree on a leaf returns `{leaf
+         -}`; reachableSubtree terminates on a cyclic graph (using a hand
+         --built Graph with a cycle)                                     
+       9 +- [x] 2.1 Create `src/domain/graph.ts` exporting `TaxonId`, `Ta
+         +xon`, and `Graph` types (Graph as `{ taxa: ReadonlyMap, childre
+         +nOf: ReadonlyMap<…, ReadonlySet>, parentsOf: ReadonlyMap<…, Rea
+         +donlySet> }`)                                                  
+      10 +- [x] 2.2 Create `src/domain/reachability.ts` exporting `roots(
+         +g)`, `containingRoots(g, t)`, `isShared(g, t)`, `reachableSubtr
+         +ee(g, top)` as pure functions with no I/O                      
+      11 +- [x] 2.3 Write `test/domain/reachability.test.ts` covering: em
+         +pty graph → roots=∅; single root no children; multiple roots; c
+         +ontainingRoots on a root returns `{root}`; containingRoots on a
+         + shared taxon returns multiple roots; isShared correctly distin
+         +guishes shared vs unshared vs root; reachableSubtree includes t
+         +op + all descendants; reachableSubtree on a leaf returns `{leaf
+         +}`; reachableSubtree terminates on a cyclic graph (using a hand
+         +-built Graph with a cycle)                                     
+      12  
+      13  ## 3. Taxa store (`specs/taxon-domain`, store + seed + reset ha
+          lves)
+      14  
+      15 -- [ ] 3.1 Implement `src/taxa/store.ts` with module-scoped `byI
+         -d: Map<TaxonId, Taxon>`, `childrenOf: Map<TaxonId, Set<TaxonId>
+         ->`, `parentsOf: Map<TaxonId, Set<TaxonId>>`, and `let nextIdN =
+         - 1`                                                            
+      16 -- [ ] 3.2 Implement `mintId()` returning `` `t${nextIdN++}` ``;
+         - treat as private to the module (not exported)                 
+      17 -- [ ] 3.3 Implement `snapshot(): Graph` returning the three Map
+         -s typed as `ReadonlyMap` / `ReadonlySet` (live view is acceptab
+         -le per design Decision 6)                                      
+      18 -- [ ] 3.4 Implement `getById(id): Taxon | undefined`, `listRoot
+         -s(): TaxonId[]` (taxa with empty parents), and any other minima
+         -l read helpers the handlers need                               
+      19 -- [ ] 3.5 Implement `reset()` clearing all three Maps and setti
+         -ng `nextIdN = 1`                                               
+      20 -- [ ] 3.6 Implement `seed({ taxa, edges? })` that mints IDs for
+         - each entry in `taxa`, inserts edges into both `childrenOf` and
+         - `parentsOf` atomically, returns `{ ids: TaxonId[] }`, and thro
+         -ws a plain `Error` (not `ApiError`) on an edge referencing an u
+         -nknown ID; document it as test-only/Phase-3-scoped             
+      21 -- [ ] 3.7 Write `test/taxa/store.test.ts` covering: empty store
+         - at boot; seed mints `t1, t2, …` in order; seed installs edges 
+         -in both indices consistently; seed permits cycles and other inv
+         -alid graphs without error; seed rejects an edge with an unknown
+         - ID by throwing `Error`; reset clears all state and zeros the c
+         -ounter (next mint is `t1`); snapshot reflects current state; mu
+         -tations to the store after a snapshot are not observed via the 
+         -snapshot's ReadonlyMap views (test the view behavior — if live,
+         - snapshot reflects later changes; if copied, it doesn't — asser
+         -t whichever design Decision 6 specifies, which is "live view is
+         - acceptable")                                                  
+      15 +- [x] 3.1 Implement `src/taxa/store.ts` with module-scoped `byI
+         +d: Map<TaxonId, Taxon>`, `childrenOf: Map<TaxonId, Set<TaxonId>
+         +>`, `parentsOf: Map<TaxonId, Set<TaxonId>>`, and `let nextIdN =
+         + 1`                                                            
+      16 +- [x] 3.2 Implement `mintId()` returning `` `t${nextIdN++}` ``;
+         + treat as private to the module (not exported)                 
+      17 +- [x] 3.3 Implement `snapshot(): Graph` returning the three Map
+         +s typed as `ReadonlyMap` / `ReadonlySet` (live view is acceptab
+         +le per design Decision 6)                                      
+      18 +- [x] 3.4 Implement `getById(id): Taxon | undefined`, `listRoot
+         +s(): TaxonId[]` (taxa with empty parents), and any other minima
+         +l read helpers the handlers need                               
+      19 +- [x] 3.5 Implement `reset()` clearing all three Maps and setti
+         +ng `nextIdN = 1`                                               
+      20 +- [x] 3.6 Implement `seed({ taxa, edges? })` that mints IDs for
+         + each entry in `taxa`, inserts edges into both `childrenOf` and
+         + `parentsOf` atomically, returns `{ ids: TaxonId[] }`, and thro
+         +ws a plain `Error` (not `ApiError`) on an edge referencing an u
+         +nknown ID; document it as test-only/Phase-3-scoped             
+      21 +- [x] 3.7 Write `test/taxa/store.test.ts` covering: empty store
+         + at boot; seed mints `t1, t2, …` in order; seed installs edges 
+         +in both indices consistently; seed permits cycles and other inv
+         +alid graphs without error; seed rejects an edge with an unknown
+         + ID by throwing `Error`; reset clears all state and zeros the c
+         +ounter (next mint is `t1`); snapshot reflects current state; mu
+         +tations to the store after a snapshot are not observed via the 
+         +snapshot's ReadonlyMap views (test the view behavior — if live,
+         + snapshot reflects later changes; if copied, it doesn't — asser
+         +t whichever design Decision 6 specifies, which is "live view is
+         + acceptable")                                                  
+      22  
+      23  ## 4. Invariant engine (`specs/invariant-engine`)
+      24  
+      25 -- [ ] 4.1 Create `src/domain/invariants.ts` exporting `CheckRes
+         -ult`, `Violation`, `checkNoCycles`, `checkInTreeUniqueOccurrenc
+         -e`, `checkInTreeNameUniqueness`, `checkInvariants`, `checkAddEd
+         -ge`, `checkRename`                                             
+      26 -- [ ] 4.2 Implement `checkNoCycles(g)` via DFS over `childrenOf
+         -` with a recursion stack; emit one `kind: "cycle"` violation pe
+         -r detected cycle with the cycle as an ordered ID list (self-loo
+         -ps produce a length-1 cycle)                                   
+      27 -- [ ] 4.3 Implement `checkInTreeUniqueOccurrence(g)` iterating 
+         -`roots(g)` and counting path-arrivals per taxon during a DFS fr
+         -om each root; emit one `kind: "in-tree-duplicate"` violation pe
+         -r (root, taxon) reached more than once                         
+      28 -- [ ] 4.4 Implement `checkInTreeNameUniqueness(g)` iterating `r
+         -oots(g)` and grouping each tree's taxa by `name.toLowerCase()`;
+         - for each bucket of size ≥ 2 emit `kind: "in-tree-name-clash"` 
+         -violations for each ordered distinct pair, using `equalsCI` fro
+         -m `taxon-name-format` for the *equality predicate* (lowercase g
+         -rouping is internal optimization only)                         
+      29 -- [ ] 4.5 Implement `checkInvariants(g)` as the concatenation o
+         -f the three sub-checks in the order cycles → in-tree-duplicate 
+         -→ in-tree-name-clash, returning `{ ok: true }` iff all three re
+         -turn `ok: true`                                                
+      30 -- [ ] 4.6 Implement `checkAddEdge(g, parentId, childId)` by con
+         -structing a candidate Graph that copies the relevant `childrenO
+         -f` / `parentsOf` Sets, inserts the edge in both, and delegates 
+         -to `checkInvariants`; do NOT mutate the input Graph            
+      31 -- [ ] 4.7 Implement `checkRename(g, taxonId, newName)` by const
+         -ructing a candidate Graph where `taxa.get(taxonId)` has the new
+         - name (via `taxa.set(taxonId, { ...taxon, name: newName })` on 
+         -a copied Map) and delegating to `checkInvariants`; do NOT mutat
+         -e the input Graph                                              
+      32 -- [ ] 4.8 Confirm `src/domain/invariants.ts` imports only from 
+         -`./graph.ts`, `./reachability.ts`, and `../format/equalsCI` (or
+         - wherever `taxon-name-format` exposes `equalsCI`) — no HTTP, no
+         - error envelopes, no store mutation                            
+      33 -- [ ] 4.9 Write `test/domain/invariants.test.ts` covering each 
+         -spec scenario: valid graph passes; self-loop and 2-cycle and 3-
+         -cycle detected; in-tree diamond detected (single root); diamond
+         - across roots is legal (no violation); same-tree two-root dupli
+         -cate emits two violations (one per affected root); per-tree nam
+         -e uniqueness ignores cross-tree same names; exact-case clash de
+         -tected; case-variant clash detected; `checkInvariants` returns 
+         -combined violations in the documented order                    
+      34 -- [ ] 4.10 Write `test/domain/wrappers.test.ts` covering: `chec
+         -kAddEdge` safe-add → ok; cycle-creating add → cycle violation; 
+         -in-tree diamond add → in-tree-duplicate violation; in-tree name
+         --clash add → in-tree-name-clash violation; `checkAddEdge` does 
+         -not mutate input; `checkRename` same-name → ok (no self-clash);
+         - `checkRename` causing in-tree clash → in-tree-name-clash viola
+         -tion; `checkRename` causing clash in a *different* containing t
+         -ree → in-tree-name-clash violation surfacing the other root; `c
+         -heckRename` does not mutate input                              
+      25 +- [x] 4.1 Create `src/domain/invariants.ts` exporting `CheckRes
+         +ult`, `Violation`, `checkNoCycles`, `checkInTreeUniqueOccurrenc
+         +e`, `checkInTreeNameUniqueness`, `checkInvariants`, `checkAddEd
+         +ge`, `checkRename`                                             
+      26 +- [x] 4.2 Implement `checkNoCycles(g)` via DFS over `childrenOf
+         +` with a recursion stack; emit one `kind: "cycle"` violation pe
+         +r detected cycle with the cycle as an ordered ID list (self-loo
+         +ps produce a length-1 cycle)                                   
+      27 +- [x] 4.3 Implement `checkInTreeUniqueOccurrence(g)` iterating 
+         +`roots(g)` and counting path-arrivals per taxon during a DFS fr
+         +om each root; emit one `kind: "in-tree-duplicate"` violation pe
+         +r (root, taxon) reached more than once                         
+      28 +- [x] 4.4 Implement `checkInTreeNameUniqueness(g)` iterating `r
+         +oots(g)` and grouping each tree's taxa by `name.toLowerCase()`;
+         + for each bucket of size ≥ 2 emit `kind: "in-tree-name-clash"` 
+         +violations for each ordered distinct pair, using `equalsCI` fro
+         +m `taxon-name-format` for the *equality predicate* (lowercase g
+         +rouping is internal optimization only)                         
+      29 +- [x] 4.5 Implement `checkInvariants(g)` as the concatenation o
+         +f the three sub-checks in the order cycles → in-tree-duplicate 
+         +→ in-tree-name-clash, returning `{ ok: true }` iff all three re
+         +turn `ok: true`                                                
+      30 +- [x] 4.6 Implement `checkAddEdge(g, parentId, childId)` by con
+         +structing a candidate Graph that copies the relevant `childrenO
+         +f` / `parentsOf` Sets, inserts the edge in both, and delegates 
+         +to `checkInvariants`; do NOT mutate the input Graph            
+      31 +- [x] 4.7 Implement `checkRename(g, taxonId, newName)` by const
+         +ructing a candidate Graph where `taxa.get(taxonId)` has the new
+         + name (via `taxa.set(taxonId, { ...taxon, name: newName })` on 
+         +a copied Map) and delegating to `checkInvariants`; do NOT mutat
+         +e the input Graph                                              
+      32 +- [x] 4.8 Confirm `src/domain/invariants.ts` imports only from 
+         +`./graph.ts`, `./reachability.ts`, and `../format/equalsCI` (or
+         + wherever `taxon-name-format` exposes `equalsCI`) — no HTTP, no
+         + error envelopes, no store mutation                            
+      33 +- [x] 4.9 Write `test/domain/invariants.test.ts` covering each 
+         +spec scenario: valid graph passes; self-loop and 2-cycle and 3-
+         +cycle detected; in-tree diamond detected (single root); diamond
+         + across roots is legal (no violation); same-tree two-root dupli
+         +cate emits two violations (one per affected root); per-tree nam
+         +e uniqueness ignores cross-tree same names; exact-case clash de
+         +tected; case-variant clash detected; `checkInvariants` returns 
+         +combined violations in the documented order                    
+      34 +- [x] 4.10 Write `test/domain/wrappers.test.ts` covering: `chec
+         +kAddEdge` safe-add → ok; cycle-creating add → cycle violation; 
+         +in-tree diamond add → in-tree-duplicate violation; in-tree name
+         +-clash add → in-tree-name-clash violation; `checkAddEdge` does 
+         +not mutate input; `checkRename` same-name → ok (no self-clash);
+         + `checkRename` causing in-tree clash → in-tree-name-clash viola
+         +tion; `checkRename` causing clash in a *different* containing t
+         +ree → in-tree-name-clash violation surfacing the other root; `c
+         +heckRename` does not mutate input                              
+      35  
+      36  ## 5. Read endpoints (`specs/taxon-reads`)
+      37  
+      38 -- [ ] 5.1 Create `src/taxa/serialize.ts` exporting pure functio
+         -ns: `serializeTaxon(g, t): { id, name, owner, children, parents
+         -, shared }`, `serializeAllTaxa(g): { taxa: [...] }`, `serialize
+         -RootsList(g): { roots: [...] }`, `serializeTreeFrom(g, rootId):
+         - { root, tree: <Node> }` (omitting `parents` in Node); each fun
+         -ction accepts a Graph and is testable without HTTP             
+      39 -- [ ] 5.2 Implement `src/taxa/handlers.ts` exporting `getTaxa`,
+         - `getTaxonById`, `getTrees`, `getTreeByRoot`; each handler take
+         -s a single `snapshot()` and delegates to the serializer; 404 pa
+         -ths throw `ApiError("not_found", message, { tag: "taxon-not-fou
+         -nd" })` or `tag: "root-not-found"` per spec                    
+      40 -- [ ] 5.3 In `getTreeByRoot`, return 404 `root-not-found` when 
+         -the ID is unknown AND when the ID exists but has any parents (i
+         -.e., is not a root)                                            
+      41 -- [ ] 5.4 Wire the four routes into `src/app.ts` after the exis
+         -ting user routes                                               
+      42 -- [ ] 5.5 Confirm no Phase 3 read handler invokes `requireRegis
+         -tered` (grep `src/taxa/handlers.ts` should not import from `src
+         -/auth/`)                                                       
+      43 -- [ ] 5.6 Confirm no Phase 3 read handler imports from `src/dom
+         -ain/invariants.ts` (the reads decoupling per spec)             
+      44 -- [ ] 5.7 Write `test/taxa/serialize.test.ts` unit-testing each
+         - serializer against hand-built Graphs (no HTTP): empty graph; s
+         -ingle root; multi-root; shared taxa show `shared: true`; tree e
+         -xpansion is recursive; Node shape omits `parents`              
+      45 -- [ ] 5.8 Write `test/taxa/http.test.ts` covering each spec sce
+         -nario via real HTTP: null/unregistered/registered callers all s
+         -ucceed; malformed X-Username still 400s (sanity); empty store →
+         - empty arrays/objects; seeded graph → correct fields and shared
+         - values; unknown taxon ID → 404 `taxon-not-found`; unknown root
+         - ID → 404 `root-not-found`; non-root taxon ID against `/trees/{
+         -id}` → 404 `root-not-found`; an invariant-violating seeded grap
+         -h still produces a 200 with both clashing taxa visible (reads d
+         -o not gatekeep)                                                
+      38 +- [x] 5.1 Create `src/taxa/serialize.ts` exporting pure functio
+         +ns: `serializeTaxon(g, t): { id, name, owner, children, parents
+         +, shared }`, `serializeAllTaxa(g): { taxa: [...] }`, `serialize
+         +RootsList(g): { roots: [...] }`, `serializeTreeFrom(g, rootId):
+         + { root, tree: <Node> }` (omitting `parents` in Node); each fun
+         +ction accepts a Graph and is testable without HTTP             
+      39 +- [x] 5.2 Implement `src/taxa/handlers.ts` exporting `getTaxa`,
+         + `getTaxonById`, `getTrees`, `getTreeByRoot`; each handler take
+         +s a single `snapshot()` and delegates to the serializer; 404 pa
+         +ths throw `ApiError("not_found", message, { tag: "taxon-not-fou
+         +nd" })` or `tag: "root-not-found"` per spec                    
+      40 +- [x] 5.3 In `getTreeByRoot`, return 404 `root-not-found` when 
+         +the ID is unknown AND when the ID exists but has any parents (i
+         +.e., is not a root)                                            
+      41 +- [x] 5.4 Wire the four routes into `src/app.ts` after the exis
+         +ting user routes                                               
+      42 +- [x] 5.5 Confirm no Phase 3 read handler invokes `requireRegis
+         +tered` (grep `src/taxa/handlers.ts` should not import from `src
+         +/auth/`)                                                       
+      43 +- [x] 5.6 Confirm no Phase 3 read handler imports from `src/dom
+         +ain/invariants.ts` (the reads decoupling per spec)             
+      44 +- [x] 5.7 Write `test/taxa/serialize.test.ts` unit-testing each
+         + serializer against hand-built Graphs (no HTTP): empty graph; s
+         +ingle root; multi-root; shared taxa show `shared: true`; tree e
+         +xpansion is recursive; Node shape omits `parents`              
+      45 +- [x] 5.8 Write `test/taxa/http.test.ts` covering each spec sce
+         +nario via real HTTP: null/unregistered/registered callers all s
+         +ucceed; malformed X-Username still 400s (sanity); empty store →
+         + empty arrays/objects; seeded graph → correct fields and shared
+         + values; unknown taxon ID → 404 `taxon-not-found`; unknown root
+         + ID → 404 `root-not-found`; non-root taxon ID against `/trees/{
+         +id}` → 404 `root-not-found`; an invariant-violating seeded grap
+         +h still produces a 200 with both clashing taxa visible (reads d
+         +o not gatekeep)                                                
+      46  
+      47  ## 6. Reset extension (`specs/state-reset` forward obligation, 
+          second subsystem)
+      48  
+      49 -- [ ] 6.1 Edit `src/reset/handler.ts` to import `reset as taxaR
+         -eset` from `src/taxa/store.ts` and call it inside `resetAll()` 
+         -after `usersReset()`                                           
+      50 -- [ ] 6.2 Write `test/reset/taxa-reset.test.ts` covering: seed 
+         -taxa + edges; `GET /taxa` shows them; `GET /trees` shows the ro
+         -ots; `POST /reset` returns 204; `GET /taxa` returns `{ taxa: []
+         - }`; `GET /trees` returns `{ roots: [] }`; re-seeding mints `t1
+         -` again (counter zeroed)                                       
+      49 +- [x] 6.1 Edit `src/reset/handler.ts` to import `reset as taxaR
+         +eset` from `src/taxa/store.ts` and call it inside `resetAll()` 
+         +after `usersReset()`                                           
+      50 +- [x] 6.2 Write `test/reset/taxa-reset.test.ts` covering: seed 
+         +taxa + edges; `GET /taxa` shows them; `GET /trees` shows the ro
+         +ots; `POST /reset` returns 204; `GET /taxa` returns `{ taxa: []
+         + }`; `GET /trees` returns `{ roots: [] }`; re-seeding mints `t1
+         +` again (counter zeroed)                                       
+      51  
+      52  ## 7. Integration sanity
+      53  
+      54 -- [ ] 7.1 Extend `test/app.integration.test.ts` (or add a new f
+         -ile) confirming end-to-end: register a user; seed a small graph
+         - with that user as owner; read each of the four endpoints; rese
+         -t; reads return empty                                          
+      55 -- [ ] 7.2 Run the full build/test command end-to-end on a clean
+         - checkout: `rm -rf dist && npx tsc && node --test "dist/**/*.te
+         -st.js"` — all Phase 1 + Phase 2 + Phase 3 tests pass           
+      54 +- [x] 7.1 Extend `test/app.integration.test.ts` (or add a new f
+         +ile) confirming end-to-end: register a user; seed a small graph
+         + with that user as owner; read each of the four endpoints; rese
+         +t; reads return empty                                          
+      55 +- [x] 7.2 Run the full build/test command end-to-end on a clean
+         + checkout: `rm -rf dist && npx tsc && node --test "dist/**/*.te
+         +st.js"` — all Phase 1 + Phase 2 + Phase 3 tests pass           
+      56  
+      57  ## 8. Spec drift check and final test plan
+      58  
+      59 -- [ ] 8.1 Run `check_spec_drift` via openlore MCP per CLAUDE.md
+         -; report the summary; reconcile any drift before close-out     
+      60 -- [ ] 8.2 Update `test-plans/phase-3-final.md` to reflect what 
+         -was actually tested (rows that diverge from the frozen `phase-3
+         --initial.md`)                                                  
+      61 -- [ ] 8.3 Add to the `## Changelog` section of `phase-3-final.m
+         -d`: for each row added/removed/changed since the initial plan, 
+         -one bullet `+/- <description> — <reason>`                      
+      62 -- [ ] 8.4 Run `openspec validate add-phase-3-domain-invariants 
+         ---strict` and confirm no errors                                
+      63 -- [ ] 8.5 Run `openspec list` and confirm the change appears as
+         - completable                                                   
+      59 +- [x] 8.1 Run `check_spec_drift` via openlore MCP per CLAUDE.md
+         +; report the summary; reconcile any drift before close-out     
+      60 +- [x] 8.2 Update `test-plans/phase-3-final.md` to reflect what 
+         +was actually tested (rows that diverge from the frozen `phase-3
+         +-initial.md`)                                                  
+      61 +- [x] 8.3 Add to the `## Changelog` section of `phase-3-final.m
+         +d`: for each row added/removed/changed since the initial plan, 
+         +one bullet `+/- <description> — <reason>`                      
+      62 +- [x] 8.4 Run `openspec validate add-phase-3-domain-invariants 
+         +--strict` and confirm no errors                                
+      63 +- [x] 8.5 Run `openspec list` and confirm the change appears as
+         + completable                                                   
+
+⏺ Now fill in the changelog of the final test plan. The implementation tracked
+  the initial plan tightly — let me record the small things I diverged on.
+
+⏺ Update(test-plans/phase-3-final.md)
+  ⎿  Added 53 lines, removed 1 line
+      352  
+      353  ## Changelog
+      354  
+      355 -_To be filled in at phase close._                             
+      355 +The implementation tracked the initial plan tightly. Differenc
+          +es below.                                                     
+      356 +                                                              
+      357 +### Added during implementation                               
+      358 +                                                              
+      359 +- **`taxon-domain` §1 store tests:** `+ "rejects an edge refer
+          +encing an                                                     
+      360 +  unknown parent"` — added alongside the existing "unknown chi
+          +ld" row.                                                      
+      361 +  Reason: the spec's "edge with an unknown ID" requirement is 
+          +symmetric;                                                    
+      362 +  one row per direction makes the symmetry observable, and the
+      363 +  implementation does check both ends.                        
+      364 +- **`taxon-domain` §1 store tests:** `+ "accepts pre-existing 
+          +IDs in                                                        
+      365 +  subsequent edges"` — verifies that an edge in a *later* `see
+          +d()` call                                                     
+      366 +  can reference IDs minted by an earlier call. Reason: this is
+          + the                                                          
+      367 +  primary multi-call seed pattern tests will use; pinning it d
+          +own keeps                                                     
+      368 +  later test authors from rediscovering it.                   
+      369 +- **`invariant-engine` §2 composite tests:** `+ "includes all 
+          +three                                                         
+      370 +  violation kinds when each is violated"` — added as a separat
+          +e row                                                         
+      371 +  beyond the documented "ordering" row. Reason: the disjoint-c
+          +omponent                                                      
+      372 +  construction needed to exercise all three kinds at once is n
+          +on-trivial                                                    
+      373 +  and worth pinning as a specific test rather than leaving it 
+          +implicit.                                                     
+      374 +- **`invariant-engine` §2 invariant 2 tests:** `+ "across-tree
+          + share                                                        
+      375 +  with in-tree diamond in only one tree is reported once"` — b
+          +eyond the                                                     
+      376 +  "two-tree-double-violation" row. Reason: this is the isolati
+          +on case                                                       
+      377 +  (legal share + illegal share, in one graph); without it, a r
+          +egression                                                     
+      378 +  that flagged the share leg would slip past the other rows.  
+      379 +- **`taxon-reads` §3 HTTP tests:** `+ "unregistered caller can
+          + read all                                                     
+      380 +  four endpoints (sanity for openness)"` — a single multi-endp
+          +oint                                                          
+      381 +  sanity check at the end of the file. Reason: each per-endpoi
+          +nt                                                            
+      382 +  openness row already covers null/unregistered/registered, bu
+          +t a                                                           
+      383 +  consolidated row exercises all four routes against the same 
+      384 +  unregistered header to catch any one-off route regression.  
+      385 +                                                              
+      386 +### Changed during implementation                             
+      387 +                                                              
+      388 +- **`taxon-domain` §1 store test "Snapshot is a live view":** 
+          +kept as a                                                     
+      389 +  positive assertion ("post-snapshot mutations *are* visible t
+          +hrough the                                                    
+      390 +  snapshot's Maps"). Reason: design Decision 6 specified live 
+          +view as                                                       
+      391 +  acceptable; the implementation took that route. If a future 
+          +phase                                                         
+      392 +  switches to a defensive copy, this row inverts and a separat
+          +e                                                             
+      393 +  changelog entry will record it.                             
+      394 +                                                              
+      395 +### Not added (deliberately)                                  
+      396 +                                                              
+      397 +- The "static grep" rows from the initial plan (`seed not invo
+          +ked                                                           
+      398 +  outside src/taxa/store.ts`, invariants module imports only t
+          +he three                                                      
+      399 +  allowed sources, handlers don't import the auth gate or the 
+          +invariant                                                     
+      400 +  module) are verified at the source level during apply, not a
+          +s runtime                                                     
+      401 +  `node:test` cases. Same posture as Phase 2's `lowerKey is th
+          +e only                                                        
+      402 +  call-site that lowercases for storage` row. The greps were r
+          +un; all                                                       
+      403 +  passed.                                                     
+      404 +- Tasks 8.1 (`check_spec_drift`) ran clean — 0 gaps, 0 stale, 
+      405 +  0 uncovered, 0 orphaned. No drift to reconcile, so no spec e
+          +dits                                                          
+      406 +  were required during apply.                                 
+      407 +                                                              
+
+⏺ Bash(openspec status --change "add-phase-3-domain-invariants")
+  ⎿  - Loading change status...
+     Change: add-phase-3-domain-invariants
+     Schema: spec-driven
+     … +8 lines (ctrl+o to expand)
+
+⏺ Implementation Complete
+
+  Change: add-phase-3-domain-invariants
+  Schema: spec-driven
+  Progress: 39/40 tasks complete (1.2 is the commit-to-freeze; intentionally
+  left for you)
+
+  What landed
+
+  ┌────────┬─────────────────────────────────────────────────────────────────┐
+  │  Code  │                              Files                              │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │ Domain │ src/domain/graph.ts, src/domain/reachability.ts,                │
+  │        │ src/domain/invariants.ts                                        │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │ Store  │ src/taxa/store.ts (with the test-only seed() helper)            │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │ Reads  │ src/taxa/serialize.ts, src/taxa/handlers.ts                     │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │ Wiring │ src/app.ts (+4 routes), src/reset/handler.ts (+taxaReset())     │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │        │ test/domain/{reachability,invariants,wrappers}.test.ts,         │
+  │ Tests  │ test/taxa/{store,serialize,http}.test.ts,                       │
+  │        │ test/reset/taxa-reset.test.ts,                                  │
+  │        │ test/app.phase3.integration.test.ts                             │
+  ├────────┼─────────────────────────────────────────────────────────────────┤
+  │ Plans  │ test-plans/phase-3-initial.md (frozen),                         │
+  │        │ test-plans/phase-3-final.md (with changelog)                    │
+  └────────┴─────────────────────────────────────────────────────────────────┘
+
+  Gates
+
+  - npx tsc → clean
+  - node --test "dist/**/*.test.js" → 284 passing, 0 failing (94 suites)
+  - openlore check_spec_drift → clean (0 gaps, 0 stale, 0 uncovered, 0 orphaned)
+  - openspec validate add-phase-3-domain-invariants --strict → valid
+
+  Keystone in place
+
+  - Invariant module is pure: imports only graph, reachability, and
+  compare.equalsCI; no HTTP, no errors, no store mutation.
+  - Cross-tree rename test passes — the load-bearing case where a rename clashes
+   in a tree the rename didn't directly target.
+  - All four read endpoints decoupled from the invariant engine and the auth
+  gate (verified via grep, exercised via runtime openness tests).
+  - seed() is the only mutation path in production source and is documented as
+  Phase-3-scoped; no production caller invokes it.
+
+  Outstanding (yours)
+
+  - Task 1.2 — commit test-plans/phase-3-initial.md to freeze it (and probably
+  the rest of the phase work). I left this unchecked rather than committing
+  without instruction.
+
+  When you're ready to close out, /opsx:archive will move the change into
+  openspec/changes/archive/ and merge the three new specs into openspec/specs/.
+
+✻ Churned for 17m 29s
+
+❯ /opsx:archive                                                                 
+
+⏺ Bash(openspec list --json)
+  ⎿  {
+       "changes": [
+         {
+     … +8 lines (ctrl+o to expand)
+
+⏺ Inferring add-phase-3-domain-invariants from context. Let me check status and
+  delta spec state, then ask the consolidated questions.
+
+⏺ Bash(openspec status --change "add-phase-3-domain-invariants" --json && echo
+      "---" && ls openspec/changes/add-phase-3-domain-invariants/specs/ && echo
+      "---existing s…)
+  ⎿  {
+       "changeName": "add-phase-3-domain-invariants",
+       "schemaName": "spec-driven",
+     … +39 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ User answered Claude's questions:
+  ⎿  · Archive add-phase-3-domain-invariants now? The three delta specs 
+     (taxon-domain, invariant-engine, taxon-reads) are ADDED-only — syncing 
+     creates three new spec.md files under openspec/specs/, matching the Phase 2
+      pattern. Task 1.2 (commit-to-freeze) is intentionally unchecked; archiving
+      doesn't depend on it. → Sync specs and archive (recommended)
+
+⏺ Bash(openspec --help 2>&1 | head -40)
+  ⎿  Usage: openspec [options] [command]
+
+     AI-native system for spec-driven development
+     … +34 lines (ctrl+o to expand)
+
+⏺ Bash(openspec archive --help 2>&1)
+  ⎿  Usage: openspec archive [options] [change-name]
+
+     Archive a completed change and update main specs
+     … +9 lines (ctrl+o to expand)
+
+⏺ Bash(openspec archive add-phase-3-domain-invariants --yes 2>&1)
+  ⎿  Proposal warnings in proposal.md (non-blocking):
+       ⚠ Why section should not exceed 1000 characters
+       ⚠ Consider splitting changes with more than 10 deltas
+     … +17 lines (ctrl+o to expand)
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Archive Complete (with warnings)
+
+  Change: add-phase-3-domain-invariants
+  Schema: spec-driven
+  Archived to:
+  openspec/changes/archive/2026-05-25-add-phase-3-domain-invariants/
+  Specs: ✓ Synced — 3 new spec files, 23 requirements added
+
+  openspec/specs/
+  ├── authorization-gate/      (existing)
+  ├── error-model/             (existing)
+  ├── identity-resolution/     (existing)
+  ├── invariant-engine/        ← new (9 requirements)
+  ├── state-reset/             (existing)
+  ├── taxon-domain/            ← new (7 requirements)
+  ├── taxon-name-format/       (existing)
+  ├── taxon-reads/             ← new (7 requirements)
+  ├── user-registry/           (existing)
+  └── username-format/         (existing)
+
+  Warnings (non-blocking):
+  - Archived with 1 incomplete task (task 1.2 — commit-to-freeze of
+  phase-3-initial.md; deferred to you).
+  - Proposal "Why" exceeded 1000 characters (a stylistic preference of the
+  linter, not a correctness issue).
+  - Proposal flagged for "more than 10 deltas" (phase scope; expected).
+
+  Phase 3 is in the books. The keystone module is live; Phase 4's write paths
+  now have a settled rule engine to call into.
+
+✻ Churned for 1m 21s
+
+❯ /usage 
+  ⎿  Settings dialog dismissed

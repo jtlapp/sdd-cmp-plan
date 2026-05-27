@@ -1,0 +1,894 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-only
+
+❯ We're building the system described in `prd/prd.md` (with                     
+  `prd/toolchain-supplement.md`, incorporated                                   
+  by reference and equally binding for toolchain/test mechanics). We work in    
+  sequential                                                                    
+  phases. This phase is Phase 4 — implement only what                           
+  `prd/phase-4-direct-actions.md` puts in scope, and                            
+  respect its "explicitly deferred" list. `prd/prd.md` is authoritative; where  
+  the brief                                                                     
+  restates a requirement, the PRD's wording governs. `prd/sample-taxonomy.md`   
+  is                                                                            
+  non-normative naming data for tests only.                                     
+                                                                                
+  Read `prd/phase-4-direct-actions.md` and the PRD sections it cites, then tell 
+   me your plan for this                                                        
+  phase before you start coding. Raise anything in the spec that's unclear or   
+  that you'd                                                                    
+  have to decide yourself.                                                      
+                                                                                
+
+  Read 21 files, listed 2 directories (ctrl+o to expand)
+
+⏺ I've read the Phase 4 brief and the PRD sections it cites (§5, §6, §7, §11.1,
+  §15.3), plus the existing Phase 1–3 code so I know what I'm building on. Below
+   is my plan with the open points I'd like you to settle before I write
+  anything.
+
+  What's already in place (Phases 1–3, for context)
+
+  - §15.6 error envelope (ApiError, httpError).
+  - §4 identity gates: identityWithRegistry (full §4 gate) and requireWriter
+  (writer gate). Already in src/middleware/. I'll reuse both.
+  - Taxon store (src/taxa.ts) — ID generation, child set + reverse parent index,
+   fixture-only mutation primitives (createTaxonFixture, attachChildFixture,
+  detachChildFixture). These are deliberately non-validating; Phase 4 layers the
+   validating mutations on top.
+  - Invariant module (src/invariants.ts) — evaluateAll(state) is the single
+  keystone Phase 4 must funnel through.
+  - Reachability (src/reachability.ts) — roots, descendants, treesContaining,
+  isShared, etc.
+  - Reset seam (src/state.ts) registers each module's clear(). Phase 4 adds no
+  module-level state of its own (everything lives in taxa.ts, already wired).
+
+  Phase 4 architecture sketch
+
+  1. Write serializer (§11.1) — new tiny module src/writeLock.ts exporting
+  withWriteLock(fn) that chains every write through a single promise. Reads stay
+   un-synchronized. Every Phase-4 route handler runs its body inside
+  withWriteLock. Cheap, single-process; matches §11.1's "single global write
+  lock or equivalent."
+  2. Validating mutation layer — a new src/mutations.ts (or split per-op) sits
+  between the routes and the fixture primitives. Pattern for every write:
+
+  1. Look up resources (404 if missing).
+  2. Authorize: ownership / parent-ownership (403).
+  3. Validate inputs syntactically (400) — name format, registered new owner.
+  4. Apply tentatively via fixture primitives.
+  5. evaluateAll(state). If violations → roll back and 409 with reason.
+  6. Commit (do nothing — already applied) and return.
+
+  2. Rollback is straightforward because the fixture primitives are reversible —
+   the writer remembers the inverse step. For the multi-step delete, I'll
+  compute the deletion region + detach set up-front (read-only walk), check
+  preconditions, then apply unconditionally (no invariant re-check needed for
+  delete — deletion strictly removes structure and can't create cycles,
+  duplicates, or clashes).
+  3. Routes — new src/routes/writes.ts mounted in app.ts:
+    - POST /taxa (§6.1)
+    - PATCH /taxa/{id} (§6.2) — accepts { name?, owner? }, validates name +
+  invariant 3 across every containing tree (the invariant module gets this for
+  free since evaluateAll iterates every root), validates owner is registered.
+    - DELETE /taxa/{id} (§6.3)
+    - PUT /taxa/{parentId}/children/{childId} (§6.4)
+    - DELETE /taxa/{parentId}/children/{childId} (§6.4)
+
+  All behind identityWithRegistry + requireWriter.
+  4. Delete region computation (§6.3, the subtlest piece) — walk downward from
+  N. At each step, include the current node if it's owned by U; if it's owned by
+   someone else (and isn't N), don't include it and instead record
+  (parentInRegion → otherOwnedChild) as a halt-frontier edge to detach.
+  Recursion stops at other-owned children — even if a U-owned taxon sits below
+  them, it's stranded (§14 cascade-deletion-never-removes-others bullet). Then
+  the two preconditions:
+    - P1: every region taxon (including N) is not shared — i.e.
+  treesContaining(t).length ≤ 1 for each. (The §6.3 parenthetical notes
+  halt-frontier taxa may be shared — they're not in the region.)
+    - P2: N has zero parents, or exactly one parent owned by U.
+  On commit: remove every region taxon from taxa and from every parent's
+  childIds, and remove the halt-frontier edges.
+  5. Test plans — test-plans/phase-4-initial.md (frozen at first commit), then
+  phase-4-final.md at the end with a changelog. Initial plan written from spec
+  before coding.
+
+  Spec ambiguities I'd like settled before coding
+
+  These aren't dealbreakers — I have a default for each — but I'd rather agree
+  up front than litigate in the test plan.
+
+⏺ User answered Claude's questions:
+  ⎿  · PATCH /taxa/{id} with an empty body ({} — no name, no owner). The PRD 
+     doesn't say. → 400 validation_error (Recommended)
+     · PUT /taxa/{parentId}/children/{childId} when the edge already exists. → 
+     204 idempotent no-op (Recommended)
+     · DELETE /taxa/{parentId}/children/{childId} when the edge doesn't exist 
+     (both taxa exist, but no edge between them). → 404 not_found (Recommended)
+     · DELETE /taxa/{id} response on success. → 204 No Content (Recommended)
+
+⏺ All four defaults confirmed. Plan locked in:
+
+  - Empty PATCH → 400. PUT existing edge → 204 idempotent. DELETE missing edge
+  → 404. DELETE taxon → 204.
+
+  What I'll do next, in order
+
+  1. Write test-plans/phase-4-initial.md from the spec — scenarios for create,
+  edit (name, owner, both, cross-tree-name-clash), edge add/remove (invariants,
+  ownership, idempotency), and delete (region computation boundaries: root-N vs
+  single-U-parent-N, halt-frontier with detach, shared-region rejection,
+  stranded-U-downstream behavior, multi-tree interactions). Commit it as a
+  frozen artifact before any code.
+  2. Implement the write lock, the mutation layer, the routes, and wire them
+  into createApp.
+  3. Write the tests matching the initial plan plus anything that surfaces
+  during implementation.
+  4. Write test-plans/phase-4-final.md with the changelog vs. initial.
+
+  Shall I proceed with step 1 (write the initial test plan and commit it before
+  any code)?
+
+✻ Crunched for 2m 36s
+
+❯ yes, write the initial test plan                                              
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Now writing the Phase 4 initial test plan. I'll mirror the Phase 3 structure
+  (frozen-banner, resolved-ambiguities, test groups, out-of-scope, mechanics)
+  and commit it before any code touches src/.
+
+⏺ Write(test-plans/phase-4-initial.md)
+  ⎿  Wrote 578 lines to test-plans/phase-4-initial.md
+      2 # Phase 4 — Initial Test Plan (FROZEN)
+      3 This plan is written from the spec (`prd/prd.md` §5, §6 (§6.1–§6.
+      4 §13, §14, §15.3, §15.6 and `prd/phase-4-direct-actions.md`) **bef
+        ore
+      5 implementation begins**. Once any implementation code lands, this
+      6 frozen and must not be edited. The phase's `phase-4-final.md` sup
+        ersedes it and
+        .ecords what was actually tested, with a changelog of differences
+      8 
+      9 ## Scope under test
+     … +793 lines (ctrl+o to expand)
+
+⏺ Bash(git add test-plans/phase-4-initial.md && git status && git diff --cached
+      --stat)
+  ⎿  On branch main
+     Your branch is up to date with 'origin/main'.
+     … +7 lines (ctrl+o to expand)
+
+⏺ Initial plan staged. Want me to commit it now (so it's frozen before any code
+  lands), then proceed to implementation? I'll use a Phase-3-style message —
+  something like "Phase 4 initial test plan (frozen)".
+
+✻ Brewed for 3m 51s
+
+❯ I committed it. Proceed.                                                      
+
+⏺ Going to build it in this order: write lock → state primitive for whole-taxon
+  removal → deletion-region planner → routes → wire-up → tests. I'll run npx tsc
+   after the implementation lands, then write the test suites, then the final
+  plan.
+
+⏺ Write(src/writeLock.ts)
+  ⎿  Wrote 35 lines to src/writeLock.ts
+       2 // Global write serializer from PRD §11.1.
+         ions) aretate-mutating operations (direct actions and review act
+       4 //  serialized: each completes atomically before the next begins
+       5 //  not be synchronized. Implementations may achieve this with a
+          single global
+       7 //  write lock or equivalent."
+         eLock(fn)entation: a promise-chain queue. Every call to withWrit
+       9 // schedules fn() to run after every previously-queued fn has fi
+      10 // returns a promise resolving to fn's result. Rejections do NOT
+          poison the
+     … +40 lines (ctrl+o to expand)
+⏺ Update(src/taxa.ts)
+  ⎿  Added 40 lines
+      159    }
+      160  }
+      161  
+      162 +/**                                                           
+      163 + * Remove a taxon entirely: drop it from the taxa map, remove 
+          +every edge                                                    
+      164 + * referencing it (from parents' childIds and from children's 
+          +parents-of                                                    
+      165 + * sets), and drop its own parents-of entry. No-op on unknown 
+          +id.                                                           
+      166 + *                                                            
+      167 + * Used by the Phase-4 delete cascade (src/deletion.ts) to app
+          +ly a planned                                                  
+      168 + * region removal: detaching incoming and outgoing edges falls
+          + out of the                                                   
+      169 + * removal naturally, so the cascade is just a loop of removeT
+          +axonFixture                                                   
+      170 + * calls over the region.                                     
+      171 + *                                                            
+      172 + * Like attach/detachChildFixture, this performs NO domain val
+          +idation —                                                     
+      173 + * the deletion planner is responsible for §6.3 preconditions 
+          +before any                                                    
+      174 + * remove is applied.                                         
+      175 + */                                                           
+      176 +export function removeTaxonFixture(id: TaxonId): void {       
+      177 +  const t = taxa.get(id);                                     
+      178 +  if (t === undefined) return;                                
+      179 +  // Remove every incoming edge: for each parent that points a
+          +t id, drop                                                    
+      180 +  // id from that parent's childIds.                          
+      181 +  const parents = parentsOf.get(id);                          
+      182 +  if (parents !== undefined) {                                
+      183 +    for (const pid of parents) {                              
+      184 +      const p = taxa.get(pid);                                
+      185 +      if (p !== undefined) p.childIds.delete(id);             
+      186 +    }                                                         
+      187 +  }                                                           
+      188 +  // Remove every outgoing edge: for each child of id, drop id
+          + from that                                                    
+      189 +  // child's parents-of set (and clean up an emptied set).    
+      190 +  for (const cid of t.childIds) {                             
+      191 +    const childParents = parentsOf.get(cid);                  
+      192 +    if (childParents !== undefined) {                         
+      193 +      childParents.delete(id);                                
+      194 +      if (childParents.size === 0) parentsOf.delete(cid);     
+      195 +    }                                                         
+      196 +  }                                                           
+      197 +  // Finally drop the taxon and its parents-of entry.         
+      198 +  parentsOf.delete(id);                                       
+      199 +  taxa.delete(id);                                            
+      200 +}                                                             
+      201 +                                                              
+      202  // --- Reset -------------------------------------------------
+           ----------------
+      203  
+      204  export function clear(): void {
+
+⏺ Write(src/deletion.ts)
+  ⎿  Wrote 145 lines to src/deletion.ts
+       2 // Delete-region computation from PRD §6.3 + §7.
+         as: N itself,e deletion region of a delete of taxon N by user U 
+         LUSIVELY every descendant reachable from N by a path passing EXC
+          a taxonugh taxa owned by U. The cascade HALTS upon encountering
+       6 //  owned by another user: that other-owned taxon is NOT deleted
+       7 //  the edge from its (deleted, U-owned) parent is removed, so i
+       8 //  from this tree (surviving as a root if it has no other paren
+       9 //  Crucially, the cascade does NOT continue past such a taxon: 
+      10 //  further-downstream taxa, EVEN those owned by U, are NOT dele
+         ted, because
+     … +167 lines (ctrl+o to expand)
+
+⏺ Write(src/routes/writes.ts)
+  ⎿  Wrote 383 lines to src/routes/writes.ts
+         –§7.irect-action write endpoints from PRD §15.3, behavior per §5
+       3 //   POST   /taxa                                 — §6.1 create
+         ame and/or owner)/{id}                            — §6.2 edit (n
+       5 //   DELETE /taxa/{id}                            — §6.3 delete 
+       6 //   PUT    /taxa/{parentId}/children/{childId}   — §6.4 add edg
+       7 //   DELETE /taxa/{parentId}/children/{childId}   — §6.4 remove 
+         edge (detach)
+       9 // All handlers run under §11.1 write serialization via withWrit
+      10 // invariant check is delegated to the Phase-3 invariant module 
+         (evaluateAll
+     … +444 lines (ctrl+o to expand)
+
+⏺ Update(src/app.ts)
+  ⎿  Added 2 lines
+       5  import { identityWithRegistry } from "./middleware/identity.js"
+          ;
+       6  import { readsRouter } from "./routes/reads.js";
+       7  import { usersRouter } from "./routes/users.js";
+       8 +import { writesRouter } from "./routes/writes.js";             
+       9  import { resetAllState } from "./state.js";
+      10 +import { withWriteLock } from "./writeLock.js";                
+      11  
+      12  export function createApp(): Hono<AppEnv> {
+      13    const app = new Hono<AppEnv>();
+
+⏺ Update(src/app.ts)
+  ⎿  Added 9 lines, removed 2 lines
+      20    // §15: fresh-boot state reset. Exempt from §4 — callable by 
+          null,
+      21    // unregistered, AND malformed-header callers. Plug-in cleanu
+          ps live in
+      22    // state.ts (the registry registers its clear() there).
+      23 -  app.post("/reset", (c) => {                                  
+      24 -    resetAllState();                                           
+      23 +  //                                                           
+      24 +  // §15 also says reset "runs under the §11.1 write serializat
+         +ion", so we                                                    
+      25 +  // route it through the same write lock as every Phase-4 muta
+         +tion.                                                          
+      26 +  app.post("/reset", async (c) => {                            
+      27 +    await withWriteLock(() => resetAllState());                
+      28      return c.body(null, 204);
+      29    });
+      30  
+     ...
+      35    // sub-router; null users may read per §15.2.
+      36    app.route("/", readsRouter);
+      37  
+      38 +  // §15.3 direct actions (create / edit / delete / edge add / 
+         +detach). All                                                   
+      39 +  // gates and the write lock live inside the sub-router.      
+      40 +  app.route("/", writesRouter);                                
+      41 +                                                               
+      42    app.notFound((c) =>
+      43      httpError(c, "not_found", `no route matches ${c.req.method}
+           ${new URL(c.req.url).pathname}`),
+      44    );
+
+⏺ Bash(npx tsc 2>&1 | head -80)
+  ⎿  (No output)
+
+⏺ Clean typecheck. Now let me verify the existing tests still pass before adding
+   new ones.
+
+⏺ Bash(node --test "dist/**/*.test.js" 2>&1 | tail -20)
+  ⎿  ℹ todo 0
+     ℹ duration_ms 163.408166
+     … +21 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ The new writesRouter.use("/taxa/*", ...) matches GET requests too, breaking
+  the existing notFound test. Need to scope the writer gate per-handler instead
+  of as a path-wide use.
+
+⏺ Update(src/routes/writes.ts)
+  ⎿  Added 9 lines, removed 6 lines
+      53  
+      54  export const writesRouter = new Hono<AppEnv>();
+      55  
+      56 -// Both gates on every write path. identityWithRegistry resolve
+         -s the §4                                                       
+      57 -// identity (malformed → 400, unregistered → 403); requireWrite
+         -r additionally                                                 
+      58 -// rejects the null user (→ 403). Order matters: format check b
+         -efore write                                                    
+      59 -// check, so a malformed null-equivalent still surfaces as 400.
+      60 -writesRouter.use("/taxa", identityWithRegistry, requireWriter);
+      61 -writesRouter.use("/taxa/*", identityWithRegistry, requireWriter
+         -);                                                             
+      56 +// Both gates are applied per-handler rather than via writesRou
+         +ter.use(...),                                                  
+      57 +// because a path-wide use() would also match GETs (whose handl
+         +ers live in                                                    
+      58 +// readsRouter) and other write methods we don't define, breaki
+         +ng the                                                         
+      59 +// Phase-1 catch-all 404 on unknown paths like /taxa/some/deepe
+         +r/path.                                                        
+      60 +//                                                             
+      61 +// Order matters: identityWithRegistry first (malformed X-Usern
+         +ame → 400,                                                     
+      62 +// unregistered → 403), then requireWriter (null → 403). A malf
+         +ormed-but-                                                     
+      63 +// null-equivalent header still surfaces as 400.               
+      64 +const writerGates = [identityWithRegistry, requireWriter] as co
+         +nst;                                                           
+      65  
+      66  // --- Response shape (mirrors Phase-3 reads) -----------------
+          ---------------
+      67  
+⏺ Update(src/routes/writes.ts)
+  ⎿  Added 1 line, removed 1 line
+      115  // fields (including "owner") are ignored — §6.1 fixes the cre
+           ator as the
+      116  // owner; clients can't pre-assign.
+      117  
+      118 -writesRouter.post("/taxa", async (c) => {                     
+      118 +writesRouter.post("/taxa", ...writerGates, async (c) => {     
+      119    const obj = await parseJsonObject(c);
+      120    const v = validateTaxonName(obj.name);
+      121    if (!v.ok) throw new ApiError("validation_error", v.reason);
+
+⏺ Task list is current; the reminder hits at an awkward moment because I'm
+  mid-refactor (still inside task #4). Continuing.
+
+⏺ Update(src/routes/writes.ts)
+  ⎿  Added 1 line, removed 1 line
+      132  // invariant module re-runs against the candidate state and ca
+           tches name
+      133  // clashes in EVERY containing tree (the §3.3 cross-tree path)
+           .
+      134  
+      135 -writesRouter.patch("/taxa/:id", async (c) => {                
+      135 +writesRouter.patch("/taxa/:id", ...writerGates, async (c) => {
+      136    const id = c.req.param("id");
+      137    const obj = await parseJsonObject(c);
+      138    const hasName = Object.prototype.hasOwnProperty.call(obj, "n
+           ame");
+
+⏺ Update(src/routes/writes.ts)
+  ⎿  Added 1 line, removed 1 line
+      201  // descendants beneath an other-owned halt point" is intention
+           al and
+      202  // surfaces as untouched downstream state.
+      203  
+      204 -writesRouter.delete("/taxa/:id", async (c) => {               
+      204 +writesRouter.delete("/taxa/:id", ...writerGates, async (c) => 
+          +{                                                             
+      205    const id = c.req.param("id");
+      206    const caller = callerCanonical(c.get(IDENTITY_KEY));
+      207  
+
+⏺ Update(src/routes/writes.ts)
+  ⎿  Added 1 line, removed 1 line
+      234  
+      235  // --- PUT /taxa/{parentId}/children/{childId}  (§6.4 add) ---
+           ----------------
+      236  
+      237 -writesRouter.put("/taxa/:parentId/children/:childId", async (c
+          -) => {                                                        
+      237 +writesRouter.put("/taxa/:parentId/children/:childId", ...write
+          +rGates, async (c) => {                                        
+      238    const parentId = c.req.param("parentId");
+      239    const childId = c.req.param("childId");
+      240    const caller = callerCanonical(c.get(IDENTITY_KEY));
+
+⏺ Update(src/routes/writes.ts)
+  ⎿  Added 1 line, removed 1 line
+      276  // create a cycle, duplicate, or name clash). Per decision #3,
+            the edge
+      277  // must exist; absence → 404.
+      278  
+      279 -writesRouter.delete("/taxa/:parentId/children/:childId", async
+          - (c) => {                                                     
+      279 +writesRouter.delete("/taxa/:parentId/children/:childId", ...wr
+          +iterGates, async (c) => {                                     
+      280    const parentId = c.req.param("parentId");
+      281    const childId = c.req.param("childId");
+      282    const caller = callerCanonical(c.get(IDENTITY_KEY));
+
+⏺ Bash(npx tsc 2>&1 | head -40 && echo "---tests---" && node --test
+      "dist/**/*.test.js" 2>&1 | tail -10)
+  ⎿  ---tests---
+     ✔ integration: POST /users error envelope codes round-trip through §15
+     .6 helpers (1.237208ms)
+     … +10 lines (ctrl+o to expand)
+
+⏺ All 181 inherited tests pass with the writes router mounted. Marking task #4
+  done and starting on the test suites.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Writing the Phase 4 test suites. I'll lay them out in parallel files.
+
+⏺ Write(test/writeLock.test.ts)
+  ⎿  Wrote 89 lines to test/writeLock.test.ts
+      1 // PRD §11.1 — write serialization primitive (src/writeLock.ts).
+      2 //
+      3 // Pure unit tests of the queue: no HTTP. The HTTP-boundary seria
+        lization
+      4 // guarantees are covered in writeSerialization.test.ts.
+      5 
+      6 import { test } from "node:test";
+      7 import assert from "node:assert/strict";
+      8 
+      9 import { withWriteLock } from "../src/writeLock.js";
+     … +90 lines (ctrl+o to expand)
+
+⏺ Write(test/taxaCreate.test.ts)
+  ⎿  Wrote 209 lines to test/taxaCreate.test.ts
+      1 // PRD §6.1 / §15.3 — POST /taxa.
+      2 //
+      3 // Body: { name }. Caller (registered, non-null) becomes the owne
+        r; the
+      4 // taxon is created as a root with no children.
+      5 
+      6 import { test } from "node:test";
+      7 import assert from "node:assert/strict";
+      8 
+      9 import { createApp } from "../src/app.js";
+     … +236 lines (ctrl+o to expand)
+
+⏺ Write(test/taxaEdit.test.ts)
+  ⎿  Wrote 383 lines to test/taxaEdit.test.ts
+       2 // PRD §6.2 / §15.3 — PATCH /taxa/{id}.
+       3 // Body: { name?, owner? }. Owner only. Name validation per §3.4
+          + §3.3
+       4 // invariant 3 across every containing tree. Owner reassignment 
+         is
+       6 // unilateral and requires a registered, non-null target.
+       7 import { test } from "node:test";
+       8 import assert from "node:assert/strict";
+       9 
+      10 import { createApp } from "../src/app.js";
+     … +439 lines (ctrl+o to expand)
+
+⏺ Write(test/taxaEdgeAdd.test.ts)
+  ⎿  Wrote 282 lines to test/taxaEdgeAdd.test.ts
+      2 // PRD §6.4 — PUT /taxa/{parentId}/children/{childId}.
+      3 // Parent owner only. Validates against §3.3 invariants in affect
+        ed tree(s)
+      4 // via the Phase-3 invariant module. Idempotent re-add (decision 
+        #2).
+      5 
+      6 import { test } from "node:test";
+      7 import assert from "node:assert/strict";
+      8 
+      9 import { createApp } from "../src/app.js";
+     … +307 lines (ctrl+o to expand)
+
+⏺ Write(test/taxaEdgeRemove.test.ts)
+  ⎿  Wrote 228 lines to test/taxaEdgeRemove.test.ts
+       2 // PRD §6.4, §7 — DELETE /taxa/{parentId}/children/{childId}.
+       3 // Pure detach. Never delete (§7). No invariant checks (removing
+          an edge
+       4 // cannot create a cycle, duplicate, or name clash). Missing edg
+         e → 404
+       6 // (decision #3).
+       7 import { test } from "node:test";
+       8 import assert from "node:assert/strict";
+       9 
+      10 import { createApp } from "../src/app.js";
+     … +241 lines (ctrl+o to expand)
+
+⏺ Now the largest one — delete. I'll cover every region/precondition boundary
+  from the initial plan.
+
+⏺ Write(test/taxaDelete.test.ts)
+  ⎿  Wrote 487 lines to test/taxaDelete.test.ts
+      2 // PRD §6.3, §7, §14 bullets 2 & 4 — DELETE /taxa/{id}.
+      3 // The subtlest piece of Phase 4: deletion-region computation (N 
+        + descendants
+      4 // reachable through wholly-U-owned paths, halting at and detachi
+        ng other-
+        red, and Naxa) plus the two preconditions (no region taxon is sha
+      6 // has no parent OR exactly one U-owned parent).
+      7 
+      8 import { test } from "node:test";
+      9 import assert from "node:assert/strict";
+     … +537 lines (ctrl+o to expand)
+
+⏺ Now the deletion-planner unit tests, the HTTP-boundary serialization tests,
+  and the integration suite.
+
+⏺ Write(test/deletion.test.ts)
+  ⎿  Wrote 149 lines to test/deletion.test.ts
+      2 // PRD §6.3 — pure deletion planner (src/deletion.ts).
+      3 // Unit tests over fixture-built state; complements the HTTP-boun
+        dary tests
+      4 // in taxaDelete.test.ts by pinning the planner's behavior on han
+        d-built
+        (e.g.apes that would be hard to express through the writes alone 
+      6 // multi-parent in-tree pathologies).
+      7 
+      8 import { test } from "node:test";
+      9 import assert from "node:assert/strict";
+     … +153 lines (ctrl+o to expand)
+
+⏺ Task list is current — I'm still mid-implementation on task #5. Continuing
+  with the HTTP-boundary serialization tests and the integration suite.
+
+⏺ Write(test/writeSerialization.test.ts)
+  ⎿  Wrote 132 lines to test/writeSerialization.test.ts
+      1 // PRD §11.1 — write serialization at the HTTP boundary.
+      2 //
+      3 // Complements writeLock.test.ts (the primitive in isolation) by 
+        exercising
+      4 // the lock through real route handlers in the Hono app.
+      5 
+      6 import { test } from "node:test";
+      7 import assert from "node:assert/strict";
+      8 
+      9 import { createApp } from "../src/app.js";
+     … +141 lines (ctrl+o to expand)
+⏺ Write(test/phase4Integration.test.ts)
+  ⎿  Wrote 226 lines to test/phase4Integration.test.ts
+          full writeintegration suite — multi-step stories exercising the
+       2 // surface together with the Phase-2 identity gate and the Phase
+         -3 reads.
+       3 
+       4 import { test } from "node:test";
+       6 import assert from "node:assert/strict";
+       7 import { createApp } from "../src/app.js";
+       8 
+       9 type TaxonRecord = {
+      10   id: string;
+     … +245 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | tail -60)
+  ⎿  > collaborative-taxon-tree-server@0.1.0 test
+     > tsc && node --test "dist/**/*.test.js"
+     … +4 lines (ctrl+o to expand)
+
+⏺ Update(test/writeSerialization.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      27    return app;
+      28  }
+      29  
+      30 -function postTaxa(                                             
+      30 +async function postTaxa(                                       
+      31    app: ReturnType<typeof createApp>,
+      32    caller: string,
+      33    name: string,
+
+⏺ Bash(npm test 2>&1 | tail -80)
+  ⎿  ✔ withWriteLock: many writes complete in submission order (0.202042ms)
+     ✔ withWriteLock: rejection is surfaced to the caller, not swallowed (0
+     .097709ms)
+     … +77 lines (ctrl+o to expand)
+
+⏺ Four failures, all the same: regular-space " Alice" gets HTTP-OWS-stripped to
+  "Alice" (Phase 2 final-plan note). Need NBSP.
+
+  Searched for 3 patterns, read 1 file (ctrl+o to expand)
+
+⏺ Bash(node --test "dist/test/taxaCreate.test.js" 2>&1 | grep -E
+      "(malformed|ok|not ok|fail|pass)" | head -20)
+  ⎿  ✔ POST /taxa: malformed X-Username (NBSP-prefixed) → 400 validation_er
+     ror (0.480958ms)
+     ℹ pass 13
+     ℹ fail 0
+
+⏺ Bash(cat > /tmp/check.mjs << 'EOF'
+      import { createApp } from
+      "/Users/joe/repos/sdd-cmp-cc-only/dist/src/app.js";…)
+  ⎿  POST /taxa with ' Alice': 201 {"id":"t1","name":"Fiction","owner":"Ali
+     ce","childIds":[],"parentIds":[]}
+     PATCH /taxa/id with ' Alice': 200 {"id":"t1","name":"X","owner":"Alice
+     ","childIds":[],"parentIds":[]}
+
+⏺ Bash(node --test --test-name-pattern="malformed X-Username"
+      "dist/test/taxaCreate.test.js" 2>&1 | head -20)
+  ⎿  ✔ POST /taxa: malformed X-Username (NBSP-prefixed) → 400 validation_er
+     ror (14.649542ms)
+     ℹ tests 1
+     … +7 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(cat > /tmp/check2.mjs << 'EOF'
+      import { test } from "node:test";…)
+  ⎿        at TestContext.<anonymous> (file:///private/tmp/check2.mjs:29:10
+     )
+           at async Test.run (node:internal/test_runner/test:1069:7)
+     … +8 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(node --test "dist/test/taxaCreate.test.js" 2>&1 | grep -E
+      "malformed|fail|ok|✖|✔" | head -20)
+  ⎿  ✔ POST /taxa: registered caller creates a root taxon owned by themselv
+     es (14.828083ms)
+     ✔ POST /taxa: consecutive creates issue distinct monotonic IDs (2.0036
+     … +16 lines (ctrl+o to expand)
+
+⏺ Bash(cat > /tmp/check3.mjs << 'EOF'
+      import { test } from "node:test";…)
+  ⎿  ℹ todo 0
+     ℹ duration_ms 62.103292
+     … +21 lines (ctrl+o to expand)
+
+⏺ Bash(diff <(grep -A 8 "NBSP-prefixed" dist/test/taxaCreate.test.js) <(grep -A
+      8 "NBSP-prefixed" test/taxaCreate.test.ts))
+  ⎿  2,6c2,6
+     <     const app = await freshApp();
+     <     await register(app, "Alice");
+     … +14 lines (ctrl+o to expand)
+⏺ Bash(node --test "dist/test/taxaCreate.test.js" 2>&1 | grep -B1 -A 20
+      "malformed")
+  ⎿  ✔ POST /taxa: unregistered well-formed caller → 403 forbidden (0.439ms
+     )
+     ✔ POST /taxa: malformed X-Username (NBSP-prefixed) → 400 validation_er
+     … +17 lines (ctrl+o to expand)
+
+⏺ Bash(node --test "dist/test/taxaCreate.test.js" --test-reporter=tap 2>&1 |
+      grep -A 20 "malformed")
+  ⎿  ✔ POST /taxa: malformed X-Username (NBSP-prefixed) → 400 validation_er
+     ror (1.152208ms)
+     ✔ POST /taxa: invalid JSON → 400 (0.799792ms)
+     … +15 lines (ctrl+o to expand)
+
+⏺ Bash(node --test --test-reporter=tap "dist/test/taxaCreate.test.js" 2>&1 |
+      grep -A 20 "malformed")
+  ⎿  # Subtest: POST /taxa: malformed X-Username (NBSP-prefixed) → 400 vali
+     dation_error
+     ok 7 - POST /taxa: malformed X-Username (NBSP-prefixed) → 400 validati
+     … +21 lines (ctrl+o to expand)
+
+⏺ Bash(cp dist/test/taxaCreate.test.js /tmp/copy.test.js && node --test
+      /tmp/copy.test.js 2>&1 | tail -10)
+  ⎿  ℹ cancelled 0
+     ℹ skipped 0
+     ℹ todo 0
+     … +7 lines (ctrl+o to expand)
+
+⏺ Bash(node --test /tmp/copy.test.js 2>&1 | grep -B 2 -A 15 "fail")
+  ⎿  ℹ suites 0
+     ℹ pass 0
+     ℹ fail 1
+     … +10 lines (ctrl+o to expand)
+
+⏺ Bash(node --test /tmp/copy.test.js 2>&1 | head -40)
+  ⎿  node:internal/modules/esm/resolve:274
+         throw new ERR_MODULE_NOT_FOUND(
+               ^
+     … +30 lines (ctrl+o to expand)
+
+⏺ Bash(node --test "dist/test/taxaCreate.test.js" 2>&1 | grep -E
+      "(Warning|deprecat|err|rejection|exception)" | head -10)
+  ⎿  ✔ POST /taxa: malformed X-Username (NBSP-prefixed) → 400 validation_er
+     ror (0.509375ms)
+
+⏺ Bash(cat > /tmp/inspect.mjs << 'EOF'
+      import { test } from "node:test";…)
+  ⎿  test at ../../../../private/tmp/inspect.mjs:29:1
+     ✖ Tests in sequence (file simulation) (17.9055ms)
+       AssertionError [ERR_ASSERTION]: Expected values to be strictly equal
+     … +15 lines (ctrl+o to expand)
+
+⏺ Bash(node --test --test-reporter=tap "dist/test/taxaCreate.test.js" 2>&1 | sed
+       -n '/Subtest: POST \/taxa: malformed/,/^ok\|^not ok\|^# Subtest/p' | head
+       -40)
+  ⎿  # Subtest: POST /taxa: malformed X-Username (NBSP-prefixed) → 400 vali
+     dation_error
+     ok 7 - POST /taxa: malformed X-Username (NBSP-prefixed) → 400 validati
+     … +37 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | grep -E "(✖|fail|pass [0-9])" | head -20)
+  ⎿  ✔ integration: a delete blocked by precondition fails 409, then Alice
+     fixes the shape and the retry succeeds (1.354833ms)
+     ✖ DELETE taxon: malformed X-Username → 400 (0.94875ms)
+     … +12 lines (ctrl+o to expand)
+
+⏺ Update(test/taxaCreate.test.ts)
+  ⎿  Error editing file
+
+⏺ Bash(sed -n '143,150p' test/taxaCreate.test.ts | od -c | head -20)
+  ⎿  0000000    t   e   s   t   (   "   P   O   S   T       /   t   a   x
+      a
+     0000020    :       m   a   l   f   o   r   m   e   d       X   -   U
+     … +20 lines (ctrl+o to expand)
+
+⏺ Bash(sed -n '146p' test/taxaCreate.test.ts | xxd | head -5)
+  ⎿  00000000: 2020 636f 6e73 7420 7265 7320 3d20 6177    const res = aw
+     00000010: 6169 7420 706f 7374 5461 7861 2861 7070  ait postTaxa(app
+     00000020: 2c20 22c2 a041 6c69 6365 222c 207b 206e  , "..Alice", { n
+     … +2 lines (ctrl+o to expand)
+
+⏺ Bash(for f in test/taxaCreate.test.ts test/taxaEdit.test.ts
+      test/taxaEdgeAdd.test.ts test/taxaEdgeRemove.test.ts
+      test/taxaDelete.test.ts; do
+        echo "=== $f ==="…)
+  ⎿  === test/taxaCreate.test.ts ===
+     === test/taxaEdit.test.ts ===
+       line 203 bytes:
+     … +14 lines (ctrl+o to expand)
+
+⏺ Bash(for f in test/taxaEdit.test.ts test/taxaEdgeAdd.test.ts
+      test/taxaEdgeRemove.test.ts test/taxaDelete.test.ts; do
+        line=$(grep -n '" Alice"' "$f" | grep -v "name…)
+  ⎿  === test/taxaEdgeAdd.test.ts line 160 ===
+     00000000: 2020 636f 6e73 7420 7265 7320 3d20 6177    const res = aw
+     00000010: 6169 7420 6174 7461 6368 2861 7070 2c20  ait attach(app,
+     … +9 lines (ctrl+o to expand)
+
+⏺ All four failures are the same root cause: regular ASCII space gets stripped
+  by Hono's Request normalization. The create test got an NBSP byte by luck.
+  Fix: use the explicit "\u00A0Alice" escape in all four files so the intent is
+  unambiguous.
+
+⏺ Update(test/taxaEdit.test.ts)  ⎿  Added 1 line, removed 1 line
+      200    await register(app, "Alice");
+      201    const t = await postTaxa(app, "Alice", "Fiction");
+      202  
+      203 -  const res = await patchTaxon(app, " Alice", t.id, { name: "X
+          -" });                                                         
+      203 +  const res = await patchTaxon(app, " Alice", t.id, { name: "X
+          +" });                                                         
+      204    assert.equal(res.status, 400);
+      205  });
+      206  
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(grep -n 'Alice", t.id, { name: "X"' test/taxaEdit.test.ts && grep -n
+      'Alice", t.id, { name: "X"' test/taxaEdit.test.ts | head -1 | cut -d: -f1
+      | xargs -I LINE s…)
+  ⎿  203:  const res = await patchTaxon(app, " Alice", t.id, { name: "X" })
+     ;
+     00000000: 2020 636f 6e73 7420 7265 7320 3d20 6177    const res = aw
+     … +2 lines (ctrl+o to expand)
+
+⏺ The Edit tool auto-handled the NBSP swap (per its footnote). Doing the same
+  for the other three.
+
+⏺ Update(test/taxaEdgeAdd.test.ts)
+  ⎿  Error editing file
+
+⏺ Bash(python3 -c "
+      import re…)
+  ⎿  fixed: test/taxaEdgeAdd.test.ts
+     fixed: test/taxaEdgeRemove.test.ts
+     fixed: test/taxaDelete.test.ts
+
+⏺ Bash(npm test 2>&1 | tail -15)
+  ⎿  ✔ withWriteLock: an async write holds the lock until it resolves (0.12
+     3708ms)
+     ✔ withWriteLock: many writes complete in submission order (0.190875ms)
+     … +18 lines (ctrl+o to expand)
+
+⏺ All 287 tests pass (181 inherited + 106 new). Marking #6 done and writing the
+  final plan.
+
+⏺ Bash(npm test 2>&1 | grep -c "^✔")
+  ⎿  287
+
+⏺ Bash(npm test 2>&1 | grep -E "^✔ (POST /taxa|PATCH /taxa|PUT edge|DELETE
+      edge|DELETE taxon|withWriteLock|write
+      serialization|integration|planDeletion)" | wc -l)
+  ⎿  114
+
+⏺ Bash(for f in writeLock taxaCreate taxaEdit taxaEdgeAdd taxaEdgeRemove
+      taxaDelete deletion writeSerialization phase4Integration; do
+        count=$(node --test "dist/test/…)
+  ⎿  writeLock: 5 tests
+     taxaCreate: 13 tests
+     taxaEdit: 23 tests
+     … +6 lines (ctrl+o to expand)
+
+⏺ Write(test-plans/phase-4-final.md)
+  ⎿  Wrote 437 lines to test-plans/phase-4-final.md
+       2 # Phase 4 — Final Test Plan
+       3 This supersedes `phase-4-initial.md` (frozen). It records what w
+         as actually
+         al plan andh a changelog of how it differs from the frozen initi
+       5 the reason for each change.
+       6 
+       8 ## Run command
+       9 ```
+      10 npm test                 # tsc && node --test "dist/**/*.test.js
+         "
+     … +493 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | tail -10 && echo "---status---" && git status --short)
+  ⎿  ✔ write serialization: POST /reset runs under the lock (§15) — writes
+     before observe pre-reset, after observe empty state (0.982417ms)
+     ✔ write serialization: a parent-add and a follow-up read see the consi
+     … +25 lines (ctrl+o to expand)
+
+⏺ Phase 4 complete. 287/287 tests passing (181 inherited from Phases 1–3, 106
+  new).
+
+  Summary of what landed
+
+  New source files:
+  - src/writeLock.ts — §11.1 global write serializer (promise-chain queue;
+  rejections don't poison the queue).
+  - src/deletion.ts — pure §6.3 region planner: BFS that halts at other-owned
+  children, plus both preconditions.
+  - src/routes/writes.ts — POST /taxa, PATCH /taxa/{id}, DELETE /taxa/{id},
+  PUT/DELETE /taxa/{p}/children/{c}. Every handler runs under withWriteLock;
+  invariant checks delegate to the Phase-3 module via
+  tentative-apply-and-rollback.
+
+  Modified:
+  - src/taxa.ts — added removeTaxonFixture(id) (full taxon removal cleans up
+  incoming/outgoing edges naturally, so the delete cascade is just a loop).
+  - src/app.ts — mounts writesRouter; /reset now runs under the same write lock
+  per §15.
+
+  Test artifacts:
+  - test-plans/phase-4-final.md with a changelog of seven refinements vs. the
+  frozen initial plan (extra deletion-planner unit suite, NBSP-everywhere
+  malformed-header fix, inline rollback assertions, graft-subtree-clash test,
+  case-only-rename success, reset-under-lock observable consequences, end-to-end
+   "blocked → fix → retry" delete story).
+
+  One implementation-time gotcha worth knowing: Hono's app.request() constructs
+  a Request whose Headers strip leading/trailing ASCII whitespace from string
+  values, so any malformed-X-Username test must use U+00A0 (NBSP), not a regular
+   space — the same fact the Phase-2 and Phase-3 final plans called out. One of
+  my Phase-4 tests accidentally had NBSP and the others had regular spaces;
+  fixing them was the only iteration needed to get the suite green.
+
+  Ready for you to inspect the diff and commit.
+
+✻ Brewed for 20m 4s
+
+❯ /usage 
+  ⎿  Settings dialog dismissed

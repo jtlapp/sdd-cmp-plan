@@ -1,0 +1,522 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-only
+
+  Welcome to Opus 4.7 xhigh! · /effort to tune speed vs. intelligence
+
+❯ /usage 
+  ⎿  Settings dialog dismissed
+
+❯ We're building the system described in `prd/prd.md` (with                     
+  `prd/toolchain-supplement.md``, incorporated                                  
+  by reference and equally binding for toolchain/test mechanics). We work in    
+  sequential                                                                    
+  phases. This phase is Phase 1 — implement only what `prd/phase-1-scaffold.md` 
+   puts in scope, and                                                           
+  respect its "explicitly deferred" list. `prd/prd.md` is authoritative; where  
+  the brief                                                                     
+  restates a requirement, the PRD's wording governs. `prd/sample-taxonomy.md`   
+  is                                                                            
+  non-normative naming data for tests only.                                     
+                                                                                
+  Read `prd/phase-1-scaffold.md` and the PRD sections it cites, then tell me    
+  your plan for this                                                            
+  phase before you start coding. Raise anything in the spec that's unclear or   
+  that you'd                                                                    
+  have to decide yourself.                                                      
+                                                                                
+
+  Read 4 files, listed 2 directories (ctrl+o to expand)
+
+⏺ I've read prd/phase-1-scaffold.md, the cited PRD sections (§2, §3.4, §4,
+  §15.6), and the toolchain supplement. Here's my plan, followed by the open
+  questions.
+
+  Plan for Phase 1
+
+  Project skeleton
+  - package.json with "type": "module", dependencies hono + @hono/node-server,
+  devDeps typescript + @types/node, and a single npm test script that runs tsc
+  then node --test "dist/**/*.test.js" — that's the "single documented command"
+  §13/supplement requires.
+  - Directory layout per supplement: src/, test/, dist/. Existing root
+  tsconfig.json is used as-is.
+  - A tiny src/server.ts entry that binds Hono via @hono/node-server for manual
+  smoke runs; the app itself lives in src/app.ts so tests can call
+  app.request(...) without opening a port.
+
+  Error model (§15.6) — src/errors.ts
+  - Discriminated ApiErrorCode = "validation_error" | "forbidden" | "not_found" 
+  | "conflict" with the 400/403/404/409 mapping.
+  - A single httpError(c, code, message, details?) helper that emits { error: { 
+  code, message, details? } }. Phase 2+ must route every error through this.
+  - A small class ApiError extends Error so domain code can throw and a Hono
+  onError handler converts it to the envelope (keeps call sites tidy).
+
+  Validators — src/validation/
+  - taxonName.ts: pure validateTaxonName(value): { ok: true; value } | { ok: 
+  false; reason } enforcing §3.4 (non-empty, no leading/trailing whitespace).
+  Plus taxonNamesEqual(a, b) for case-insensitive comparison.
+  - username.ts: pure parseUsername(headerValue: string | null | undefined): { 
+  kind: "null" } | { kind: "valid"; value } | { kind: "malformed"; reason }. The
+   three-way return is the §4 "validation-vs-forbidden distinction" — malformed
+  will become 400 in phase 2's middleware; null will be allowed for reads and
+  become 403 for writes. Plus usernamesEqual(a, b).
+  - Both modules are independently importable with no Hono/runtime deps so later
+   phases can compose them.
+
+  Routes (Phase-1-only, in src/app.ts)
+  - GET /health → 200 { status: "ok" }. Proves boot + routing.
+  - POST /reset → 204. Exempt from §4 (no auth check). Implemented as a true
+  reset by calling a resetAllState() aggregator that's currently a no-op; later
+  phases register their cleanup into it (so the brief's "every phase confirms
+  reset clears its state" is structurally easy).
+  - A Hono onError + catch-all notFound that emit the §15.6 envelope.
+
+  Tests — test/
+  - taxonName.test.ts: empty, whitespace-only, leading/trailing space (incl.
+  tab/newline boundary cases), internal whitespace allowed, exact 1-char
+  boundary, case-insensitive equality ("Fantasy" == "fantasy", with Unicode
+  lowercase handled per String.prototype.toLowerCase).
+  - username.test.ts: null header, empty string → null; malformed
+  (whitespace-only, leading/trailing space); valid; case-insensitive equality.
+  - errors.test.ts: each code maps to the right status; envelope shape; details
+  passthrough.
+  - routes.test.ts: GET /health returns 200; POST /reset returns 204 with no
+  body and is callable with no X-Username and with a malformed X-Username (since
+   it's exempt from §4); unknown route → 404 envelope; method-not-allowed
+  behavior under Hono.
+
+  Test plans
+  - Write test-plans/phase-1-initial.md before I write any implementation code,
+  derived only from the spec. Commit it, then freeze.
+  - Write test-plans/phase-1-final.md at the end with the changelog of
+  additions/changes vs. the frozen initial plan.
+
+  Order of work
+  1. Initial test plan → commit (freeze).
+  2. package.json, install deps, smoke-build with a trivial src/index.ts to
+  confirm the toolchain (the supplement's recommended one-time validation).
+  3. Validators + their tests.
+  4. Error helper + its tests.
+  5. App routes (/health, /reset, error handlers) + their tests.
+  6. Final test plan with changelog.
+
+  Things I'd like to confirm before coding
+
+  1. Validator return style — I'm planning a result object ({ ok, value | reason
+   }) for the validators rather than throwing. That keeps them pure and lets
+  phase 2's middleware decide the HTTP code. OK?
+  2. Username parser placement — I'm putting the header parser
+  (null/valid/malformed three-way) in phase 1 next to the format validator,
+  since the brief asks the validator to "surface the validation-vs-forbidden
+  distinction." The actual middleware that consults a registry and decides 403
+  is deferred to phase 2 — I won't write that. OK?
+  3. Hono dependency — adding hono and @hono/node-server (current stable).
+  Anything you'd rather avoid?
+  4. Reset implementation — I'll add an internal resetAllState() registry now
+  (an array of cleanup callbacks) so phase 2/3/4 can plug their stores into it
+  without re-touching the route. Want this central seam, or would you rather
+  each phase just calls a local reset directly inside the handler?
+  5. Server entrypoint — should I include src/server.ts that actually serve()s
+  the Hono app on a port (e.g. for node dist/server.js), or skip it since Phase
+  1's tests don't need a listening port?
+
+  Once you greenlight (or amend), I'll write the frozen initial test plan and
+  start in that order.
+
+✻ Baked for 1m 9s
+
+❯ Include the server entrypoint. Proceed.                                       
+
+⏺ I'll start by writing the frozen initial test plan, then build the scaffold.
+
+⏺ Write(test-plans/phase-1-initial.md)
+  ⎿  Wrote 161 lines to test-plans/phase-1-initial.md
+      2 # Phase 1 — Initial Test Plan (FROZEN)
+      3 This plan is written from the spec (`prd/prd.md` §2, §3.4, §4, §1
+        5.6 and
+         any/phase-1-scaffold.md`) **before implementation begins**. Once
+      5 implementation code lands, this file is frozen and must not be ed
+        ited. The
+        ually tested,e-1-final.md` supersedes it and records what was act
+      7 with a changelog of differences.
+      8 
+      9 ## Scope under test
+     … +197 lines (ctrl+o to expand)
+
+⏺ Now committing the frozen plan before writing any implementation.
+
+⏺ Bash(git add test-plans/phase-1-initial.md && git commit -m "$(cat <<'EOF'
+      Add Phase 1 initial test plan (frozen)…)
+  ⎿  Error: Permission to use Bash with command git add 
+     test-plans/phase-1-initial.md && git commit -m "$(cat <<'EOF'
+     Add Phase 1 initial test plan (frozen)
+
+     Written from the spec before any implementation lands, per the phase-1
+     brief and PRD §13. Superseded at end of phase by phase-1-final.md with a
+     changelog of differences.
+
+     Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+     EOF
+     )" has been denied.
+
+⏺ Right — I shouldn't have tried to commit without explicit ask. I'll treat the
+  plan as frozen now (won't edit it once implementation starts) and leave
+  committing to you. Setting up task tracking and proceeding with the scaffold.
+
+⏺ Bash(node --version && npm --version)  ⎿  v24.2.0
+     11.7.0
+
+⏺ Write(package.json)
+  ⎿  Wrote 20 lines to package.json
+       2   "name": "collaborative-taxon-tree-server",
+       3   "version": "0.1.0",
+       4   "private": true,
+       5   "type": "module",
+       6   "description": "Server for shared, multi-owner trees of taxa w
+         ith proposal-based collaboration.",
+       7   "scripts": {
+       8     "build": "tsc",
+       9     "start": "node dist/src/server.js",
+      10     "test": "tsc && node --test \"dist/**/*.test.js\""
+     … +11 lines (ctrl+o to expand)
+
+⏺ Bash(npm install 2>&1 | tail -20)
+  ⎿  added 5 packages, and audited 6 packages in 2s
+
+     found 0 vulnerabilities
+     … +5 lines (ctrl+o to expand)
+
+⏺ Write(src/validation/taxonName.ts)
+  ⎿  Wrote 28 lines to src/validation/taxonName.ts
+       2 // Taxon-name format rules from PRD §3.4.
+       3 // A name must be a non-empty string that neither begins nor end
+         s with
+       4 // whitespace. Names are compared case-insensitively.
+       5 
+       7   | { ok: true; value: string } =
+       8   | { ok: false; reason: string };
+       9 
+      10 export function validateTaxonName(value: unknown): TaxonNameVali
+         dation {
+     … +22 lines (ctrl+o to expand)
+
+⏺ Write(src/validation/username.ts)
+  ⎿  Wrote 35 lines to src/validation/username.ts
+       2 // Username rules from PRD §4.
+          ends withame must be a non-empty string that neither begins nor
+       4 // whitespace, and is compared case-insensitively. An absent or 
+       5 // X-Username header denotes the null user (anonymous). A presen
+         t-but-malformed
+         l user.er is a validation error, NOT silently treated as the nul
+       8 // This module surfaces the three-way distinction:
+       9 //   - null user (absent / empty header)         → caller decide
+      10 //   - valid (well-formed string)                → caller checks
+          registry (phase 2)
+     … +36 lines (ctrl+o to expand)
+
+⏺ Write(src/errors.ts)
+  ⎿  Wrote 61 lines to src/errors.ts
+       2 // Error model from PRD §15.6.
+       3 // All error responses use the JSON envelope
+       4 //   { "error": { "code": <string>, "message": <string>, "detail
+         s"?: <object> } }
+       5 // with the HTTP status determined by the code via the §15.6 map
+       6 ping.
+       7 import type { Context } from "hono";
+       8 import type { StatusCode } from "hono/utils/http-status";
+       9 
+      10 export type ApiErrorCode =
+     … +55 lines (ctrl+o to expand)
+
+⏺ Write(src/state.ts)
+  ⎿  Wrote 20 lines to src/state.ts
+       2 // Central reset seam.
+       3 // PRD §15 defines POST /reset as restoring the server to fresh-
+         boot state by
+         t later phasesL in-memory state. Phase 1 has no domain state, bu
+       5 // (registry, taxa, proposals, ...) will register their cleanup 
+         here so the
+       7 // route handler doesn't grow per-phase.
+       8 type ResetFn = () => void;
+       9 
+      10 const resetCallbacks: ResetFn[] = [];
+     … +13 lines (ctrl+o to expand)
+
+⏺ Write(src/app.ts)
+  ⎿  Wrote 37 lines to src/app.ts
+      2 import { ApiError, errorBody, httpError, STATUS_BY_CODE } from ".
+        /errors.js";
+      3 import { resetAllState } from "./state.js";
+      4 
+      5 export function createApp(): Hono {
+      6   const app = new Hono();
+      7 
+      8   // Trivial liveness probe — proves the server boots and routes 
+        (phase-1 brief).
+      9   app.get("/health", (c) => c.json({ status: "ok" }));
+     … +37 lines (ctrl+o to expand)
+
+⏺ Let me fix the onError fallback — using "conflict" for a 500 misrepresents it.
+   I'll emit the envelope shape inline with a code outside the documented set.
+
+⏺ Update(src/app.ts)
+  ⎿  Added 3 lines, removed 4 lines
+      24      if (err instanceof ApiError) {
+      25        return c.json(errorBody(err.code, err.message, err.detail
+          s), STATUS_BY_CODE[err.code]);
+      26      }
+      27 -    // Unhandled exception. PRD doesn't specify a 5xx code in t
+         -he §15.6 mapping,                                              
+      28 -    // but we still need to return SOMETHING; do so out-of-enve
+         -lope under a                                                   
+      29 -    // distinct code so it's visibly a server bug rather than a
+         - domain conflict.                                              
+      27 +    // Unhandled exception — not a documented §15.6 code. Use t
+         +he same envelope                                               
+      28 +    // shape so clients always parse the same way.             
+      29      return c.json(
+      31 -      errorBody("conflict", "internal server error", { kind: "i
+         -nternal" }),                                                   
+      30 +      { error: { code: "internal_error", message: "internal ser
+         +ver error" } },                                                
+      31        500,
+      32      );
+      33    });
+
+⏺ Write(src/server.ts)
+  ⎿  Wrote 9 lines to src/server.ts
+      1 import { serve } from "@hono/node-server";
+      2 import { createApp } from "./app.js";
+      3 
+      4 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
+      5 const app = createApp();
+      6 
+      7 serve({ fetch: app.fetch, port }, (info) => {
+      8   console.log(`taxon-tree server listening on http://localhost:${
+        info.port}`);
+      9 });
+⏺ Now writing the tests.
+
+⏺ Write(test/taxonName.test.ts)
+  ⎿  Wrote 87 lines to test/taxonName.test.ts
+       2 import assert from "node:assert/strict";
+       3 
+       4 import {
+       5   taxonNamesEqual,
+       6   validateTaxonName,
+       7 } from "../src/validation/taxonName.js";
+       8 
+       9 test("validateTaxonName: accepts a single non-whitespace charact
+         er", () => {
+      10   const r = validateTaxonName("a");
+     … +88 lines (ctrl+o to expand)
+
+⏺ Write(test/username.test.ts)
+  ⎿  Wrote 66 lines to test/username.test.ts
+       2 import assert from "node:assert/strict";
+       3 
+       4 import { parseUsername, usernamesEqual } from "../src/validation
+         /username.js";
+       5 
+       6 test("parseUsername: undefined → null user", () => {
+       7   assert.deepEqual(parseUsername(undefined), { kind: "null" });
+       8 });
+       9 
+      10 test("parseUsername: null → null user", () => {
+     … +62 lines (ctrl+o to expand)
+
+⏺ Write(test/errors.test.ts)
+  ⎿  Wrote 73 lines to test/errors.test.ts
+       1 import { test } from "node:test";
+       2 import assert from "node:assert/strict";
+       3 import { Hono } from "hono";
+       4 
+       5 import {
+       6   ApiError,
+       7   errorBody,
+       8   httpError,
+       9   STATUS_BY_CODE,
+      10   type ApiErrorCode,
+     … +74 lines (ctrl+o to expand)
+
+⏺ Write(test/app.test.ts)
+  ⎿  Wrote 95 lines to test/app.test.ts
+       1 import { test } from "node:test";
+       2 import assert from "node:assert/strict";
+       3 
+       4 import { createApp } from "../src/app.js";
+       5 import { registerReset } from "../src/state.js";
+       6 
+       7 test("GET /health: 200 with status:ok JSON body", async () => {
+       8   const app = createApp();
+       9   const res = await app.request("/health");
+      10   assert.equal(res.status, 200);
+     … +102 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1)
+  ⎿  Error: Exit code 1
+     src/app.ts(25,68): error TS2769: No overload matches this call.
+       Overload 1 of 2, '(object: ApiErrorBody, status?: ContentfulStatusCode | 
+     undefined, headers?: HeaderRecord | undefined): 
+     JSONRespondReturn<ApiErrorBody, ContentfulStatusCode>', gave the following 
+     error.
+         Argument of type 'StatusCode' is not assignable to parameter of type 
+     'ContentfulStatusCode | undefined'.
+           Type '101' is not assignable to type 'ContentfulStatusCode | 
+     undefined'.
+       Overload 2 of 2, '(object: ApiErrorBody, init?: 
+     ResponseOrInit<ContentfulStatusCode> | undefined): 
+     JSONRespondReturn<ApiErrorBody, ContentfulStatusCode>', gave the following 
+     error.
+         Argument of type 'StatusCode' is not assignable to parameter of type 
+     'ResponseOrInit<ContentfulStatusCode> | undefined'.
+           Type '100' is not assignable to type 
+     'ResponseOrInit<ContentfulStatusCode> | undefined'.
+     src/errors.ts(60,52): error TS2769: No overload matches this call.
+       Overload 1 of 2, '(object: ApiErrorBody, status?: ContentfulStatusCode | 
+     undefined, headers?: HeaderRecord | undefined): 
+     JSONRespondReturn<ApiErrorBody, ContentfulStatusCode>', gave the following 
+     error.
+     … +5 lines (ctrl+o to expand)
+
+⏺ Update(src/errors.ts)
+  ⎿  Added 2 lines, removed 2 lines
+       5  // with the HTTP status determined by the code via the §15.6 ma
+          pping.
+       6  
+       7  import type { Context } from "hono";
+       8 -import type { StatusCode } from "hono/utils/http-status";      
+       8 +import type { ContentfulStatusCode } from "hono/utils/http-stat
+         +us";                                                           
+       9  
+      10  export type ApiErrorCode =
+      11    | "validation_error"
+     ...
+      13    | "not_found"
+      14    | "conflict";
+      15  
+      16 -export const STATUS_BY_CODE: Record<ApiErrorCode, StatusCode> =
+         - {                                                             
+      16 +export const STATUS_BY_CODE: Record<ApiErrorCode, ContentfulSta
+         +tusCode> = {                                                   
+      17    validation_error: 400,
+      18    forbidden: 403,
+      19    not_found: 404,
+
+⏺ Bash(npx tsc 2>&1)
+  ⎿  (No output)
+
+⏺ Clean typecheck. Now running the tests.
+
+⏺ Bash(node --test "dist/**/*.test.js" 2>&1)
+  ⎿  ✔ GET /health: 200 with status:ok JSON body (13.25025ms)
+     ✔ POST /reset: 204 with empty body and no X-Username header (0.289541m
+     s)
+     … +48 lines (ctrl+o to expand)
+
+⏺ All 43 tests pass. Let me also do a quick boot smoke test to confirm the
+  server actually serves.
+
+⏺ Bash(PORT=3457 node dist/src/server.js &
+      SERVER_PID=$!…)
+  ⎿  taxon-tree server listening on http://localhost:3457
+     --- health ---
+     {
+     … +15 lines (ctrl+o to expand)
+
+⏺ Server boots, all three endpoints behave per spec.
+
+⏺ Now the final test plan with changelog.
+
+⏺ Write(test-plans/phase-1-final.md)
+  ⎿  Wrote 130 lines to test-plans/phase-1-final.md
+       2 # Phase 1 — Final Test Plan
+       3 This supersedes `phase-1-initial.md` (frozen). It records what w
+         as actually
+         al plan and thechangelog of how it differs from the frozen initi
+       5 reason for each change.
+       6 
+       8 ## Run command
+       9 ```
+      10 npm test                 # tsc && node --test "dist/**/*.test.js
+         "
+     … +169 lines (ctrl+o to expand)
+
+⏺ Bash(git status && echo --- && ls src test)
+  ⎿  On branch main
+     Your branch is up to date with 'origin/main'.
+     … +23 lines (ctrl+o to expand)
+
+⏺ Phase 1 done. The brief's "done when" list checks out:
+
+  - Server boots, trivial endpoint responds — GET /health returns
+  {"status":"ok"} (verified end-to-end via node dist/src/server.js).
+  - Errors conform to §15.6 — single helper httpError + ApiError class, exact
+  400/403/404/409 mapping, envelope { error: { code, message, details? } }.
+  Unknown routes and Hono's onError both go through it.
+  - Validators are pure, independently importable — src/validation/taxonName.ts
+  and src/validation/username.ts have no Hono/runtime deps; both expose a format
+   function and a case-insensitive equality helper. The username parser surfaces
+   the three-way null/valid/malformed distinction §4 draws.
+  - Single documented test command — npm test runs tsc && node --test 
+  "dist/**/*.test.js". 43 tests pass.
+  - POST /reset returns 204 from fresh-boot and is callable without registration
+   — exempt from §4 (null, well-formed-unregistered, malformed, and empty
+  X-Username all return 204). Central registerReset seam is in place so later
+  phases plug their cleanup in without touching the route.
+
+  Files added: package.json, package-lock.json, tsconfig.json (already present),
+   src/{app,server,errors,state}.ts, src/validation/{taxonName,username}.ts,
+  test/{app,errors,taxonName,username}.test.ts, and the two test-plan artifacts.
+   Nothing committed — let me know when you'd like the commit(s) made (and how
+  you'd prefer them split: one phase-1 commit vs. plan-then-impl).
+✻ Brewed for 5m 30s
+
+❯ I get failures when I run `node --test`.                                      
+
+⏺ Bash(node --test 2>&1 | head -80)
+  ⎿  ✔ GET /health: 200 with status:ok JSON body (12.882417ms)
+     ✔ POST /reset: 204 with empty body and no X-Username header (0.373459m
+     s)
+     … +77 lines (ctrl+o to expand)
+
+⏺ That's bare node --test doing auto-discovery — it walks test/ and finds the
+  .ts sources, and Node 24 happily type-strips and runs them. (The first 43 ✓
+  lines are the compiled tests under dist/ running fine.) Then the .ts sources
+  fail because their from "../src/app.js" imports point at the compiled path
+  that doesn't exist next to the .ts source — exactly the NodeNext rule the
+  toolchain supplement calls out.
+
+  The supplement is explicit about both:
+  - "Node never executes .ts directly — no type-stripping" (build/run model)
+  - Tests run via node --test "dist/**/*.test.js" — the glob is part of the
+  command, not optional.
+
+  The documented entry point is npm test, which does tsc && node --test 
+  "dist/**/*.test.js". That passes cleanly (you saw the 43 ✓ before the
+  discovery scan kicked in). Bare node --test isn't the supported command and
+  runs into the type-stripping rule the supplement forbids.
+
+  If you'd like, I can add a files field or a discovery filter so bare node 
+  --test also works — but that would mean accommodating an execution mode the
+  supplement explicitly excludes, so I'd rather not silently paper over it.
+  Concretely your options:
+
+  1. Use npm test (or npx tsc && node --test "dist/**/*.test.js") — the
+  documented command. This is what the supplement specifies.
+  2. Have me add a package.json node field that restricts test discovery to
+  dist/ so bare node --test happens to work too. Strictly redundant with the
+  documented command, but harmless.
+  3. Have me change the project to embrace Node 24's TS type-stripping (run .ts
+  directly, drop .js import extensions, drop tsc from the run path). This would
+  contradict the supplement, which I'd flag as a spec change rather than
+  implement silently.
+
+  My read: stick with (1). Want me to do (2) anyway as a convenience?
+
+✻ Cooked for 37s
+
+❯ /usage 
+  ⎿  Settings dialog dismissed

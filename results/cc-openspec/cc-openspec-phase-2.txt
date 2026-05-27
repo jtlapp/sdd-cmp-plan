@@ -1,0 +1,2446 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-openspec-openlore
+
+❯ /opsx:explore                                                                 
+
+  Listed 2 directories (ctrl+o to expand)
+
+⏺ You're in explore mode — no topic yet. Quick lay of the land before we dive
+  in:
+
+  - Phase 1 (scaffold) is shipped and archived. Specs live: error-model,
+  state-reset, taxon-name-format, username-format.
+  - Phase 2 (prd/phase-2-users.md) is the next brief, not yet started.
+  - No active OpenSpec changes.
+
+  A few directions we could take — pick whatever resonates, or steer somewhere
+  else entirely:
+
+  1. Read Phase 2 together and start surfacing the ambiguities before they bite
+  us in the proposal stage.
+  2. Look back at Phase 1 — anything in the final test plan vs. initial that
+  suggests the spec/PRD relationship needs adjustment for Phase 2?
+  3. Something specific you've been chewing on — a design tension, a concern, a
+  "what if we did it differently."
+  4. Free exploration — toss me a half-formed idea and we riff.
+
+  What's on your mind?
+
+✻ Sautéed for 16s
+
+❯ 1                                                                             
+
+  Read 5 files (ctrl+o to expand)
+
+⏺ Read Phase 2, the relevant PRD sections, and the three Phase 1 specs. Here's
+  the shape of what's coming and the questions I'd want resolved before we write
+   a proposal.
+
+  The actual scope, visually
+
+                     ┌────────────────────────┐
+                     │   X-Username header    │
+                     └────────┬───────────────┘
+                              │
+                  ┌───────────┼───────────┐
+              absent /     present,    present,
+              empty        malformed   well-formed
+                  │           │              │
+                  ▼           ▼              │
+           ┌──────────┐ ┌──────────┐         │
+           │ null user│ │   400    │   ┌─────┴──────┐
+           │ (read OK)│ │validation│   │ registered │ ──── yes ──▶  caller
+           └──────────┘ │  _error  │   │     ?      │
+                       └──────────┘   └─────┬──────┘
+                                            │
+                                            no
+                                            │
+                                            ▼
+                                    ┌──────────────┐
+                                    │ 403 forbidden│   ← § 4, § 15.6
+                                    └──────────────┘
+
+  So really it's a quartet, not a trichotomy (the brief says
+  "null/malformed/registered" but elides the well-formed-unregistered case,
+  which §4 and §15.6 spell out as 403). Worth being explicit about up front.
+
+  Open threads I'd want to chew on before proposing
+
+  1. Identity resolution vs. authorization gate — one middleware or two?
+
+  The brief talks about "a reusable gate, applied by later phases to write
+  endpoints." But GET /queue (Phase 7-ish) is a read that still needs caller
+  identity. Suggests two distinct concerns:
+
+  - Identity resolution — runs everywhere, produces { kind: "null" } | { kind: 
+  "registered", username }, throws on malformed/unregistered.
+  - Authorization gate — selectively attached to writes; just asserts "kind ===
+  registered".
+
+  Or you fold them into one and accept that "kind" gets read by handlers
+  directly. Worth picking a stance.
+
+  2. What does "open" mean for POST /users and GET /users?
+
+  The PRD gives us three exemption levels and doesn't fully disambiguate:
+
+  ┌─────────────┬──────────────────┬────────────────┬──────────────────────┐
+  │  Endpoint   │  Header format   │  Registered    │        Source        │
+  │             │      check?      │     check?     │                      │
+  ├─────────────┼──────────────────┼────────────────┼──────────────────────┤
+  │ POST /reset │ No (explicit)    │ No (explicit)  │ state-reset spec is  │
+  │             │                  │                │ clear                │
+  ├─────────────┼──────────────────┼────────────────┼──────────────────────┤
+  │ POST /users │ ?                │ No (open,      │ implied              │
+  │             │                  │ §15.1)         │                      │
+  ├─────────────┼──────────────────┼────────────────┼──────────────────────┤
+  │ GET /users  │ ?                │ No (open,      │ implied              │
+  │             │                  │ §15.1)         │                      │
+  ├─────────────┼──────────────────┼────────────────┼──────────────────────┤
+  │ writes      │ Yes              │ Yes            │ §4                   │
+  │ (later)     │                  │                │                      │
+  └─────────────┴──────────────────┴────────────────┴──────────────────────┘
+
+  My read: header format check is global by default, with /reset as the explicit
+   exemption. So POST /users with X-Username:    → 400. But this is genuinely
+  under-specified — worth resolving in the proposal, not at code-write time.
+
+  3. How do we "prove the gate in isolation"?
+
+  Phase 2 has no protected endpoints yet — they're explicitly deferred to phases
+   3–7. Three options:
+
+  - Mount the middleware on a stub/fixture route in tests only.
+  - Add a temporary POST /_test/gated endpoint behind a flag (and rip out in
+  Phase 3). Feels ugly.
+  - Test the middleware as a pure function/handler without a route at all.
+
+  Option 1 feels cleanest. But it raises: do we want the gate to be a Hono
+  middleware, or a small helper that endpoints invoke explicitly? Affects
+  testability.
+
+  4. Registry storage — case-insensitive index, case-preserving display.
+
+  Phase 1's username spec already commits to "no normalized form SHALL be
+  stored." So the registry needs to store original casing but de-dupe
+  case-insensitively. Probably Map<ciKey, originalCase> or a Set<originalCase>
+  plus a Set<ciKey> for membership. Trivial, but worth deciding once so the spec
+   can state it.
+
+  5. Body-username on POST /users reuses the same validator as the header.
+
+  So one validator, two consumption sites. The spec should note this explicitly
+  so we don't drift into "header rules" vs "body rules."
+
+  6. /reset extension.
+
+  Forward obligation from Phase 1's state-reset spec: Phase 2 extends /reset to
+  clear the registry, and ships at least one test for it. Already locked in by
+  the existing spec — just need to remember it.
+
+  ---
+  Which of these do you want to dig into first? Or is there something the brief
+  glosses that I haven't surfaced?
+
+✻ Sautéed for 1m 44s
+
+❯ For 1, use one middleware. For 2, no user is required to post a user. For 3,  
+  do we still have a problem? Do we still have a gate? For the rest, whatever.  
+
+⏺ Good answers. Let me reflect them back and push on #3.
+
+  Design implied by your answers
+
+                     ┌────────────────────────┐
+                     │   X-Username header    │
+                     └────────┬───────────────┘
+                              │
+                ┌─────────────┴──────────────┐
+                ▼                            ▼
+      ┌───────────────────┐    ┌──────────────────────────┐
+      │ /reset → exempt   │    │ everyone else → middleware│
+      └───────────────────┘    └──────────┬────────────────┘
+                                          │ parse + validate format
+                                          ▼
+                            ┌────────── classify ──────────┐
+                            │                              │
+                         absent /      malformed       well-formed
+                         empty          │                  │
+                           │            ▼                  ▼
+                           │      throw 400         lookup in registry
+                           │                              │
+                           ▼                      ┌───────┴────────┐
+                      Caller=null            unregistered      registered
+                                                   │                │
+                                                   ▼                ▼
+                                            Caller={unreg, name} Caller={reg,
+  name}
+
+                              ▼ (middleware attaches Caller to ctx; never throws
+   on unreg)
+
+      POST /users, GET /users  ───── ignore Caller (open)
+      /reset                   ───── never reached the middleware
+      future write endpoints   ───── call requireRegistered(ctx) → 403 if null
+  or unreg
+
+  Key shift: the middleware doesn't enforce "must be registered" — it just 
+  resolves identity and 400s on malformed. The enforcement lives in a tiny
+  requireRegistered(ctx) helper that future write endpoints call. That's still
+  "one middleware" — the middleware does the universal work; the helper does the
+   per-endpoint work.
+
+  On your question #3 — "do we still have a problem? do we still have a gate?"
+
+  Yes to both, but smaller than I painted them:
+
+  The gate is now two things working together:
+  - The middleware (rejects malformed headers; classifies caller).
+  - The requireRegistered helper (rejects null + unregistered for write
+  endpoints).
+
+  The "isolation" problem mostly evaporates. We already have three real
+  endpoints in Phase 2 (POST /users, GET /users, POST /reset) that exercise the
+  middleware end-to-end — that gives us the integration coverage for the parser
+  half of the gate. For the helper half, we just unit-test the function
+  directly. No fixture endpoint needed, no test-only scaffolding shipped.
+
+  So the phase-2 deliverable for "the gate" is really:
+  1. Middleware that runs globally (except /reset), classifies, 400s on
+  malformed.
+  2. A requireRegistered(ctx) function that throws 403 if caller is null or
+  unregistered.
+  3. Tests that hit (1) through real endpoints and (2) as a unit.
+
+  Phase 3 is when (2) actually gets wired into HTTP handlers.
+
+  One small thing your "whatever" leaves open
+
+  Should POST /users and GET /users still validate the header format (and 400 on
+   X-Username:   )? My read: yes — the header format rule is global, only /reset
+   is fully exempt. That keeps the contract clean: anywhere you send X-Username,
+   you must send it well-formed. Want me to lock that in, or do you want those
+  two endpoints fully exempt like /reset?
+
+✻ Cogitated for 1m 8s
+
+❯ lock it in                                                                    
+
+⏺ Locked. Here's our running set of decisions for the Phase 2 proposal:
+
+  ┌─────┬────────────────────────────────────────────────────────────────────┐
+  │  #  │                              Decision                              │
+  ├─────┼────────────────────────────────────────────────────────────────────┤
+  │ 1   │ One global middleware that resolves identity + 400s on malformed;  │
+  │     │ never throws on unregistered.                                      │
+  ├─────┼────────────────────────────────────────────────────────────────────┤
+  │     │ Authorization helper requireRegistered(ctx) lives separately;      │
+  │ 2   │ future write endpoints call it. 403 for null user, 403 for         │
+  │     │ unregistered.                                                      │
+  ├─────┼────────────────────────────────────────────────────────────────────┤
+  │ 3   │ POST /users is open — no registered caller required.               │
+  ├─────┼────────────────────────────────────────────────────────────────────┤
+  │     │ Header format check is global. POST /users, GET /users, and every  │
+  │ 4   │ future endpoint 400 on malformed X-Username. Only POST /reset is   │
+  │     │ fully exempt.                                                      │
+  ├─────┼────────────────────────────────────────────────────────────────────┤
+  │ 5   │ Registry: case-preserving display, case-insensitive membership     │
+  │     │ (e.g. Map<ciKey, originalCase>).                                   │
+  ├─────┼────────────────────────────────────────────────────────────────────┤
+  │ 6   │ Reuse the Phase 1 username validator for the POST /users body      │
+  │     │ field.                                                             │
+  ├─────┼────────────────────────────────────────────────────────────────────┤
+  │ 7   │ /reset extends to clear the registry (Phase 1's forward            │
+  │     │ obligation).                                                       │
+  ├─────┼────────────────────────────────────────────────────────────────────┤
+  │ 8   │ No fixture endpoints. Middleware tested via real Phase 2           │
+  │     │ endpoints; requireRegistered tested as a unit.                     │
+  ├─────┼────────────────────────────────────────────────────────────────────┤
+  │     │ The classification quartet — null / malformed (400) /              │
+  │ 9   │ well-formed-unregistered (403 at gate) / registered — is explicit  │
+  │     │ in the spec, not collapsed into a trichotomy.                      │
+  └─────┴────────────────────────────────────────────────────────────────────┘
+
+  Where to next? A few options:
+
+  - Write the proposal (openspec/changes/add-phase-2-users/...) — captures all
+  of this in formal artifacts.
+  - Keep exploring — there are still corners we haven't poked: the exact
+  body-schema for POST /users, what GET /users returns (just names? names with
+  metadata?), whether requireRegistered lives in the middleware module or
+  somewhere else.
+  - Sketch the spec deltas verbally first — which existing specs change vs.
+  which new capabilities appear (user-registry? identity-middleware?
+  authorization-gate? all separate, or fused?).
+
+  I'd lean toward the third — naming the capabilities up front prevents spec
+  sprawl. But your call.
+
+✻ Cogitated for 16s
+
+❯ write the proposal                                                            
+
+  Read 6 files, listed 3 directories (ctrl+o to expand)
+⏺ Bash(mkdir -p openspec/changes/add-phase-2-users/specs/user-registry
+      openspec/changes/add-phase-2-users/specs/identity-resolution
+      openspec/changes/add-phase-2-users/…)
+  ⎿  specs
+
+⏺ Write(openspec/changes/add-phase-2-users/README.md)
+  ⎿  Wrote 4 lines to openspec/changes/add-phase-2-users/README.md
+      1 # add-phase-2-users
+      2 
+      3 Phase 2: user registry, X-Username identity resolution middleware
+        , and the
+      4 authorization gate that future write endpoints will call.
+
+⏺ Write(openspec/changes/add-phase-2-users/proposal.md)
+  ⎿  Wrote 100 lines to openspec/changes/add-phase-2-users/proposal.md
+      2 ## Why
+      3 Phase 2 lifts the server from the empty Phase 1 scaffold into som
+      4 has identity. It implements the user registry (PRD §15.1), the pe
+        r-request
+        / registeredX-Username` into the null / malformed / unregistered 
+      6 quartet (§4), and the small authorization helper future write end
+      7 call to enforce "non-null, registered caller." With this phase in
+         place, every
+         gate withoutan layer its own write semantics on a stable, tested
+      9 re-deciding identity rules.
+     … +141 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-2-users/design.md)
+  ⎿  Wrote 318 lines to openspec/changes/add-phase-2-users/design.md
+      2 ## Context
+      3 Phase 2 sits directly on top of the Phase 1 scaffold. Phase 1 fro
+        ze four
+        t`,abilities (`error-model`, `taxon-name-format`, `username-forma
+      5 `state-reset`) and explicitly carved registry membership and `X-U
+        sername`
+        s job. Thising out of `username-format`, marking them as Phase 2'
+      7 phase fills that hole.
+      8 
+      9 The decisions below are long-lived. Every later phase will:
+     … +411 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-2-users/specs/user-registry/spec.md)
+  ⎿  Wrote 281 lines to
+     openspec/changes/add-phase-2-users/specs/user-registry/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: User registry stores usernames in original casi
+       4 ng with case-insensitive membership
+       5 The system SHALL maintain an in-memory **user registry** that re
+         cords the
+       7 set of registered usernames. The registry SHALL:
+       8 1. store each registered username in the **exact casing** suppli
+       9    registration time, and
+      10 2. treat membership **case-insensitively** — two registration at
+         tempts whose
+     … +350 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-2-users/specs/identity-resolution/spec.md)
+  ⎿  Wrote 222 lines to
+     openspec/changes/add-phase-2-users/specs/identity-resolution/spec.md
+       2 ## ADDED Requirements
+         n-reset request: Identity-resolution middleware runs on every no
+       4 
+         re** thatr SHALL install a single **identity-resolution middlewa
+       6 runs on every incoming HTTP request **except** `POST /reset`. Th
+       7 middleware SHALL classify the caller into exactly one of three c
+       8 based on the `X-Username` request header, attach the result to t
+         he request
+         equestt as a value referred to below as `Caller`, and continue r
+      10 processing.
+     … +279 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-2-users/specs/authorization-gate/spec.md)  ⎿  Wrote 158 lines to
+     openspec/changes/add-phase-2-users/specs/authorization-gate/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: requireRegistered enforces "non-null, registere
+         d caller"
+       5 The system SHALL expose a helper — referred to below as
+       6 `requireRegistered(c: Context)` — that inspects the `Caller` pla
+         ced on the
+       8 request context by the [[identity-resolution]] middleware and:
+       9 - if `caller.kind === "registered"`, returns `{ username: caller
+         .username }`
+      10   (the registry's stored original casing);
+     … +194 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-2-users/tasks.md)
+  ⎿  Wrote 54 lines to openspec/changes/add-phase-2-users/tasks.md
+       2 ## 1. Initial test plan (frozen at end of step 1)
+         ew specs in this change, using the established `Rule | Input | E
+       4 - [ ] 1.2 Commit `phase-2-initial.md` — this commit marks the fr
+         eeze; do not edit this file afterward
+         initial plan plus an empty `## Changelog` section at the endthe 
+       7 ## 2. User registry storage (`specs/user-registry`, storage half
+         )
+       9 - [ ] 2.1 Implement `src/users/store.ts` with a `Map<lowercaseKe
+         red(name)`, `originalCasing(name)`, `list()`, `reset()`isRegiste
+      10 - 
+     … +130 lines (ctrl+o to expand)
+
+⏺ Bash(npx --yes -p @anthropic-ai/openspec openspec validate add-phase-2-users
+      --strict 2>&1 | head -80)
+  ⎿  npm error code E404
+     npm error 404 Not Found - GET https://registry.npmjs.org/@anthropic-ai
+     %2fopenspec - Not found
+     … +8 lines (ctrl+o to expand)
+
+⏺ Bash(which openspec 2>&1; command -v openspec; npx --no-install openspec
+      --version 2>&1 | head -5)
+  ⎿  /Users/joe/.nvm/versions/node/v24.2.0/bin/openspec
+     /Users/joe/.nvm/versions/node/v24.2.0/bin/openspec
+     1.3.1
+
+⏺ Bash(openspec validate add-phase-2-users --strict 2>&1)
+  ⎿  Error: Exit code 1
+     Change 'add-phase-2-users' has issues
+     ✗ [ERROR] authorization-gate/spec.md: ADDED "Forward obligation — every 
+     future write endpoint calls requireRegistered" must contain SHALL or MUST
+     ✗ [ERROR] identity-resolution/spec.md: ADDED "Malformed X-Username is 
+     rejected with 400 validation_error" must contain SHALL or MUST
+     Next steps:
+       - Ensure change has deltas in specs/: use headers ## 
+     ADDED/MODIFIED/REMOVED/RENAMED Requirements
+       - Each requirement MUST include at least one #### Scenario: block
+       - Debug parsed deltas: openspec change show <id> --json --deltas-only
+
+⏺ Bash(openspec change show add-phase-2-users --json --deltas-only 2>&1 | head
+      -200)
+  ⎿  Warning: The "openspec change ..." commands are deprecated. Prefer ver
+     b-first commands (e.g., "openspec list", "openspec validate --changes"
+     ).
+     … +197 lines (ctrl+o to expand)
+
+⏺ The validator extracts the first line of each requirement body as the
+  "requirement text" and requires SHALL/MUST in it. Two of mine put SHALL on the
+   second line. Fixing.
+
+⏺ Update(openspec/changes/add-phase-2-users/specs/identity-resolution/spec.md)
+  ⎿  Added 8 lines, removed 8 lines
+      75  
+      76  ### Requirement: Malformed X-Username is rejected with 400 vali
+          dation_error
+      77  
+      78 -When the `X-Username` header is **present, non-empty**, but doe
+         -s not                                                          
+      79 -satisfy the [[username-format]] rules (i.e. is whitespace-only,
+         - has                                                           
+      80 -leading whitespace, or has trailing whitespace), the middleware
+         - SHALL                                                         
+      81 -reject the request by throwing `ApiError("validation_error", me
+         -ssage,                                                         
+      82 -{ tag })` where `tag` is the [[username-format]] validator's ta
+         -g for the                                                      
+      83 -failure (one of `"leading-whitespace"`, `"trailing-whitespace"`
+         -, or                                                           
+      84 -`"empty"` — though `"empty"` is unreachable here because an emp
+         -ty header                                                      
+      85 -is classified as the null user).                               
+      78 +The middleware SHALL reject any request whose `X-Username` head
+         +er is                                                          
+      79 +**present, non-empty**, but does not satisfy the [[username-for
+         +mat]]                                                          
+      80 +rules (i.e. is whitespace-only, has leading whitespace, or has 
+         +trailing                                                       
+      81 +whitespace). It SHALL reject by throwing `ApiError("validation_
+         +error",                                                        
+      82 +message, { tag })` where `tag` is the [[username-format]] valid
+         +ator's tag                                                     
+      83 +for the failure (one of `"leading-whitespace"`, `"trailing-whit
+         +espace"`,                                                      
+      84 +or `"empty"` — though `"empty"` is unreachable here because an 
+         +empty                                                          
+      85 +header is classified as the null user).                        
+      86  
+      87  The thrown `ApiError` SHALL be caught by the global error handl
+          er defined
+      88  by [[error-model]], emitting the standard envelope at HTTP `400
+          `. The
+
+⏺ Update(openspec/changes/add-phase-2-users/specs/authorization-gate/spec.md)
+  ⎿  Added 3 lines, removed 3 lines
+      90  
+      91  ### Requirement: Forward obligation — every future write endpoi
+          nt calls requireRegistered
+      92  
+      93 -Every later phase that introduces a **state-mutating endpoint**
+         - other than                                                    
+      94 -`POST /reset` SHALL ensure the handler invokes `requireRegister
+         -ed(c)` (or                                                     
+      95 -a stricter check that implies it, such as an ownership check th
+         -at                                                             
+      93 +Each later phase SHALL ensure that every **state-mutating endpo
+         +int** it                                                       
+      94 +introduces other than `POST /reset` invokes `requireRegistered(
+         +c)` (or a                                                      
+      95 +stricter check that implies it, such as an ownership check that
+      96  internally asserts the caller is registered) **before** mutatin
+          g state.
+      97  
+      98  Each later phase's test plan SHALL include at least one test pe
+          r new
+
+⏺ Bash(openspec validate add-phase-2-users --strict 2>&1)
+  ⎿  Change 'add-phase-2-users' is valid
+
+⏺ Bash(openspec list 2>&1)
+  ⎿  Changes:
+       add-phase-2-users     0/31 tasks    just now
+
+⏺ Proposal is written and validated. Layout:
+
+  openspec/changes/add-phase-2-users/
+  ├── README.md
+  ├── proposal.md          ── Why / What Changes / Capabilities / Impact
+  ├── design.md            ── 9 decisions, 5 risks, open questions
+  ├── tasks.md             ── 31 tasks across 8 sections
+  └── specs/
+      ├── user-registry/spec.md         ── POST/GET /users + store + reset
+      ├── identity-resolution/spec.md   ── global middleware, the quartet, reset
+   exemption
+      └── authorization-gate/spec.md    ── requireRegistered + forward
+  obligation
+
+  openspec validate add-phase-2-users --strict → valid. openspec list shows it
+  at 0/31 tasks.
+
+  The forward obligation in authorization-gate is the one to remember when you
+  start Phase 3: every new write endpoint must call requireRegistered and ship
+  two 403 tests (null user + unregistered user). I wrote it into the spec so it
+  survives this conversation.
+
+  Next move when you're ready: write test-plans/phase-2-initial.md from the
+  three specs and commit (freezing it), then implement.
+
+✻ Baked for 7m 13s
+
+❯ write the initial test plan                                                   
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+⏺ Write(test-plans/phase-2-initial.md)
+  ⎿  Wrote 359 lines to test-plans/phase-2-initial.md
+       2 # Phase 2 — Initial test plan (frozen)
+       3 > **Status: frozen on commit.** This plan was written from the O
+       4 > change `add-phase-2-users` (specs: `user-registry`, `identity-
+         resolution`,
+         ot editedization-gate`) **before** implementation began and is n
+       6 > afterward. The companion file `phase-2-final.md` supersedes th
+       7 > carries a `## Changelog` listing every row added, removed, or 
+         changed
+       9 > during implementation, with the reason for each.
+      10 ## Why this plan exists
+     … +639 lines (ctrl+o to expand)
+⏺ Initial plan written at test-plans/phase-2-initial.md — 7 sections matching
+  the Phase 1 template:
+
+  1. user-registry — store unit tests, POST /users cases (including the
+  validation-order rule that malformed never reports duplicate), GET /users
+  cases.
+  2. identity-resolution — header classification via real endpoints, the /reset
+  exemption regression, Caller-shape tests through a fixture route,
+  registry-lookup freshness.
+  3. authorization-gate — unit tests on requireRegistered, envelope tests
+  through a test-only protected fixture, the no-production-caller audit.
+  4. /reset extension — discharges Phase 1's forward obligation; includes the
+  case-key clearing test and a Phase-1-exemption regression.
+  5. Integration sanity — bootstrap flow, cross-casing round-trip, Phase 1
+  regressions (health, unknown route, envelope).
+  6. Deliberate non-coverage — 10 items, each pointing to its owner phase.
+  7. Operational checklist — build, tests, validate, drift check, plus two
+  source-level audits (requireRegistered and lowerKey).
+
+  The plan is not yet frozen — freeze happens when you commit it (tasks.md
+  §1.2). I left phase-2-final.md for when implementation starts (tasks.md §1.3),
+   as the workflow keeps the two creation moments distinct.
+
+✻ Crunched for 2m 56s
+
+※ recap: Goal: ship Phase 2 (user registry, identity middleware, authorization gate) for the taxon-tree server. The proposal and initial test plan are written and validated; next, commit them to freeze the initial plan and begin implementation. (disable recaps in /config)
+
+❯ Committed. Proceed.                                                           
+
+⏺ Skill(opsx:apply)
+  ⎿  Successfully loaded skill
+
+⏺ Using change: add-phase-2-users. (Override with /opsx:apply <other> if you
+  meant a different one.)
+
+⏺ Bash(openspec status --change add-phase-2-users --json 2>&1 | head -100)
+  ⎿  {
+       "changeName": "add-phase-2-users",
+       "schemaName": "spec-driven",
+     … +27 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions apply --change add-phase-2-users --json 2>&1 | head
+       -300)
+  ⎿  {
+       "changeName": "add-phase-2-users",
+       "changeDir": "/Users/joe/repos/sdd-cmp-cc-openspec-openlore/openspec
+     … +182 lines (ctrl+o to expand)
+
+⏺ Status: 31 tasks pending, schema spec-driven. I've already read the change
+  artifacts in the explore session. Tasks 1.1–1.2 are done (plan written and
+  committed); 1.3 (create phase-2-final.md) remains. Let me first survey the
+  Phase 1 codebase to learn conventions.
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+  Read 13 files (ctrl+o to expand)
+⏺ Have the context. Starting with task §1 (trivial copy).
+
+⏺ Bash(cp test-plans/phase-2-initial.md test-plans/phase-2-final.md && printf
+      '\n\n## Changelog\n\n_(none yet — populated at end of phase)_\n' >>
+      test-plans/phase-2-fi…)
+  ⎿        sanctioned predicate elsewhere).
+     … +3 lines (ctrl+o to expand)
+
+⏺ Update(openspec/changes/add-phase-2-users/tasks.md)
+  ⎿  Added 3 lines, removed 3 lines
+      1  ## 1. Initial test plan (frozen at end of step 1)
+      2  
+      3 -- [ ] 1.1 Write `test-plans/phase-2-initial.md` from the three n
+        -ew specs in this change, using the established `Rule | Input | E
+        -xpected | Notes` table format                                   
+      4 -- [ ] 1.2 Commit `phase-2-initial.md` — this commit marks the fr
+        -eeze; do not edit this file afterward                           
+      5 -- [ ] 1.3 Create `test-plans/phase-2-final.md` as a copy of the 
+        -initial plan plus an empty `## Changelog` section at the end    
+      3 +- [x] 1.1 Write `test-plans/phase-2-initial.md` from the three n
+        +ew specs in this change, using the established `Rule | Input | E
+        +xpected | Notes` table format                                   
+      4 +- [x] 1.2 Commit `phase-2-initial.md` — this commit marks the fr
+        +eeze; do not edit this file afterward                           
+      5 +- [x] 1.3 Create `test-plans/phase-2-final.md` as a copy of the 
+        +initial plan plus an empty `## Changelog` section at the end    
+      6  
+      7  ## 2. User registry storage (`specs/user-registry`, storage half
+         )
+      8  
+
+⏺ §2: user registry store + its test.
+
+⏺ Write(src/users/store.ts)
+  ⎿  Wrote 46 lines to src/users/store.ts
+         re-use).mory user registry (PRD §15.1, §4 registry-required-befo
+       3 // Storage discipline (Phase 2 design Decision 3):
+         ername The key into the Map is a case-insensitive form of the us
+       5 //     (lowercase). `lowerKey` is the **only** place in the enti
+       6 //     that constructs this key. Elsewhere, case-insensitive com
+       7 //     uses `equalsCI` from the [[username-format]] capability.
+       8 //   - The value in the Map is the username in its **original ca
+       9 //     exactly what the client supplied at registration. No norm
+      10 //     is exposed to callers; `list()` and `originalCasing()` al
+         ways surface
+     … +45 lines (ctrl+o to expand)
+
+⏺ Write(test/users/store.test.ts)
+  ⎿  Wrote 114 lines to test/users/store.test.ts
+      1 import { describe, it, beforeEach } from "node:test";
+      2 import assert from "node:assert/strict";
+      3 import {
+      4   register,
+      5   isRegistered,
+      6   originalCasing,
+      7   list,
+      8   reset,
+      9 } from "../../src/users/store.js";
+     … +113 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | tail -40)
+  ⎿  ✔ POST /reset: idempotence (0.430833ms)
+     ▶ POST /reset: wrong method
+       ✔ GET /reset returns 404 or 405 with the standard envelope (1.347375
+     … +37 lines (ctrl+o to expand)
+
+⏺ All 82 tests pass (Phase 1 + new store tests). Marking §2 done.
+
+⏺ Update(openspec/changes/add-phase-2-users/tasks.md)
+  ⎿  Added 3 lines, removed 3 lines
+       6  
+       7  ## 2. User registry storage (`specs/user-registry`, storage hal
+          f)
+       8  
+       9 -- [ ] 2.1 Implement `src/users/store.ts` with a `Map<lowercaseK
+         -ey, originalCasing>` and the helpers `register(name)`, `isRegis
+         -tered(name)`, `originalCasing(name)`, `list()`, `reset()`      
+      10 -- [ ] 2.2 Confirm `lowerKey` is the only call-site that constru
+         -cts a case-insensitive key (no other file in `src/` lowercases 
+         -a username for storage or comparison; comparisons elsewhere use
+         - `equalsCI`)                                                   
+      11 -- [ ] 2.3 Write `test/users/store.test.ts` covering: empty list
+         - at boot; register then isRegistered=true; case-variant isRegis
+         -tered=true; originalCasing returns the stored form; originalCas
+         -ing returns undefined for unknown names; reset clears membershi
+         -p; register returns duplicate on case-variant re-register; list
+         - preserves registration order                                  
+       9 +- [x] 2.1 Implement `src/users/store.ts` with a `Map<lowercaseK
+         +ey, originalCasing>` and the helpers `register(name)`, `isRegis
+         +tered(name)`, `originalCasing(name)`, `list()`, `reset()`      
+      10 +- [x] 2.2 Confirm `lowerKey` is the only call-site that constru
+         +cts a case-insensitive key (no other file in `src/` lowercases 
+         +a username for storage or comparison; comparisons elsewhere use
+         + `equalsCI`)                                                   
+      11 +- [x] 2.3 Write `test/users/store.test.ts` covering: empty list
+         + at boot; register then isRegistered=true; case-variant isRegis
+         +tered=true; originalCasing returns the stored form; originalCas
+         +ing returns undefined for unknown names; reset clears membershi
+         +p; register returns duplicate on case-variant re-register; list
+         + preserves registration order                                  
+      12  
+      13  ## 3. POST /users and GET /users endpoints (`specs/user-registr
+          y`, HTTP half)
+      14  
+
+⏺ §3: handlers + wire into app + HTTP tests.
+
+⏺ Write(src/users/handlers.ts)
+  ⎿  Wrote 53 lines to src/users/handlers.ts
+       1 import type { Context } from "hono";
+       2 import { ApiError } from "../errors/api-error.js";
+       3 import { validateUsername } from "../format/username.js";
+       4 import { register, list } from "./store.js";
+       5 
+       6 // POST /users — validation order (Phase 2 design Decision 4):
+       7 //   1. body is a JSON object       → else "malformed-body"
+       8 //   2. username is a string        → else "missing-username"
+       9 //   3. username passes format rule → else the validator's tag
+      10 //   4. registry has no duplicate   → else "duplicate-username"
+     … +50 lines (ctrl+o to expand)
+
+⏺ Update(src/app.ts)
+  ⎿  Added 7 lines
+      1  import { Hono } from "hono";
+      2  import { onError, notFoundHandler, normalizeThrows } from "./err
+         ors/handler.js";
+      3  import { resetAll } from "./reset/handler.js";
+      4 +import { postUsers, getUsers } from "./users/handlers.js";      
+      5  import packageJson from "../package.json" with { type: "json" };
+      6  
+      7  export function createApp(): Hono {
+     ...
+      23      c.json({ status: "ok", version: packageJson.version }, 200)
+          ,
+      24    );
+      25  
+      26 +  // User registry (PRD §15.1). Both endpoints are open to all 
+         +callers —                                                      
+      27 +  // the null user is permitted on POST so the system is bootst
+         +rappable                                                       
+      28 +  // from fresh-boot state.                                    
+      29 +  app.post("/users", postUsers);                               
+      30 +  app.get("/users", getUsers);                                 
+      31 +                                                               
+      32    return app;
+      33  }
+      34  
+
+⏺ Write(test/users/http.test.ts)
+  ⎿  Wrote 290 lines to test/users/http.test.ts
+       1 import { describe, it, beforeEach } from "node:test";
+       2 import assert from "node:assert/strict";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset } from "../../src/users/store.js";
+       5 
+       6 beforeEach(() => {
+       7   reset();
+       8 });
+       9 
+      10 interface ErrorBody {
+     … +300 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | tail -15)
+  ⎿  ▶ user registry store: reset clears membership
+       ✔ after reset, list is empty and isRegistered is false (0.0745ms)
+       ✔ after reset, the case-key map is cleared (no lingering duplicate)
+     … +13 lines (ctrl+o to expand)
+
+⏺ 105/105 pass. §3 complete.
+
+⏺ Update(openspec/changes/add-phase-2-users/tasks.md)
+  ⎿  Added 5 lines, removed 5 lines
+      12  
+      13  ## 3. POST /users and GET /users endpoints (`specs/user-registr
+          y`, HTTP half)
+      14  
+      15 -- [ ] 3.1 Implement `src/users/handlers.ts` with `postUsers(c)`
+         - and `getUsers(c)`                                             
+      16 -- [ ] 3.2 `postUsers` validation order: (a) JSON object body → 
+         -else `validation_error` `tag:"malformed-body"`; (b) `username` 
+         -is a string → else `validation_error` `tag:"missing-username"`;
+         - (c) `validateUsername(name)` → else `validation_error` with th
+         -e validator's tag; (d) `store.register(name)` → on `{ ok:false,
+         - reason:"duplicate" }` throw `conflict` with `tag:"duplicate-us
+         -ername"`; on success return `201 { username: <as-supplied> }`  
+      17 -- [ ] 3.3 `getUsers` returns `200 { users: store.list() }`     
+      18 -- [ ] 3.4 Wire both routes into `src/app.ts`                   
+      19 -- [ ] 3.5 Write `test/users/http.test.ts` covering each scenari
+         -o in the spec: null user registers; registered caller registers
+         - another; unregistered caller registers; non-JSON body → 400 `m
+         -alformed-body`; missing field → 400 `missing-username`; non-str
+         -ing field → 400 `missing-username`; empty/leading/trailing whit
+         -espace username → 400 with validator's tag; identical-case dupl
+         -icate → 409 `duplicate-username`; different-case duplicate → 40
+         -9 `duplicate-username`; GET on empty registry returns `{ users:
+         - [] }`; GET preserves registration order; GET preserves origina
+         -l casing; GET works with null user                             
+      15 +- [x] 3.1 Implement `src/users/handlers.ts` with `postUsers(c)`
+         + and `getUsers(c)`                                             
+      16 +- [x] 3.2 `postUsers` validation order: (a) JSON object body → 
+         +else `validation_error` `tag:"malformed-body"`; (b) `username` 
+         +is a string → else `validation_error` `tag:"missing-username"`;
+         + (c) `validateUsername(name)` → else `validation_error` with th
+         +e validator's tag; (d) `store.register(name)` → on `{ ok:false,
+         + reason:"duplicate" }` throw `conflict` with `tag:"duplicate-us
+         +ername"`; on success return `201 { username: <as-supplied> }`  
+      17 +- [x] 3.3 `getUsers` returns `200 { users: store.list() }`     
+      18 +- [x] 3.4 Wire both routes into `src/app.ts`                   
+      19 +- [x] 3.5 Write `test/users/http.test.ts` covering each scenari
+         +o in the spec: null user registers; registered caller registers
+         + another; unregistered caller registers; non-JSON body → 400 `m
+         +alformed-body`; missing field → 400 `missing-username`; non-str
+         +ing field → 400 `missing-username`; empty/leading/trailing whit
+         +espace username → 400 with validator's tag; identical-case dupl
+         +icate → 409 `duplicate-username`; different-case duplicate → 40
+         +9 `duplicate-username`; GET on empty registry returns `{ users:
+         + [] }`; GET preserves registration order; GET preserves origina
+         +l casing; GET works with null user                             
+      20  
+      21  ## 4. Caller type and identity-resolution middleware (`specs/id
+          entity-resolution`)
+      22  
+⏺ §4: Caller type, middleware, mount, three test files.
+
+⏺ Write(src/identity/caller.ts)
+  ⎿  Wrote 21 lines to src/identity/caller.ts
+         st by thersed caller identity attached to every non-/reset reque
+         n over they-resolution middleware (PRD §4). A discriminated unio
+       4 //   - absent or empty X-Username header           → { kind: "nu
+         ll" }
+         gistered", username }formed, registered            → { kind: "re
+         registered", username }rmed, NOT in registry       → { kind: "un
+       7 // (A present-but-malformed header is rejected by the middleware
+       8 // 400 validation_error and never produces a Caller value.)
+      10 // For `registered` callers, `username` is the **registry's stor
+         ed original
+     … +21 lines (ctrl+o to expand)
+
+⏺ Write(src/identity/middleware.ts)
+  ⎿  Wrote 45 lines to src/identity/middleware.ts
+       2 import { ApiError } from "../errors/api-error.js";
+       3 import { validateUsername } from "../format/username.js";
+         ;mport { isRegistered, originalCasing } from "../users/store.js"
+       5 import type { Caller, AppVariables } from "./caller.js";
+       6 
+         solution]]).resolution middleware (PRD §4, Phase 2 [[identity-re
+       8 // Runs on every non-/reset request, classifies the caller, and 
+       9 // result to the request context as `caller`. Never throws on th
+         e unregistered
+      10 // case — that's the [[authorization-gate]]'s job.
+     … +45 lines (ctrl+o to expand)
+
+⏺ Update(src/app.ts)
+  ⎿  Added 5 lines, removed 2 lines
+       2  import { onError, notFoundHandler, normalizeThrows } from "./er
+          rors/handler.js";
+       3  import { resetAll } from "./reset/handler.js";
+       4  import { postUsers, getUsers } from "./users/handlers.js";
+       5 +import { identityMiddleware } from "./identity/middleware.js"; 
+       6 +import type { AppVariables } from "./identity/caller.js";      
+       7  import packageJson from "../package.json" with { type: "json" }
+          ;
+       8  
+       7 -export function createApp(): Hono {                            
+       8 -  const app = new Hono();                                      
+       9 +export function createApp(): Hono<{ Variables: AppVariables }> 
+         +{                                                              
+      10 +  const app = new Hono<{ Variables: AppVariables }>();         
+      11  
+      12    app.use("*", normalizeThrows);
+      13 +  app.use("*", identityMiddleware);                            
+      14    app.onError(onError);
+      15    app.notFound(notFoundHandler);
+      16  
+
+⏺ Bash(npm test 2>&1 | tail -25)
+  ⎿    ✔ originalCasing returns undefined for unknown name (0.094167ms)
+     ✔ user registry store: case-insensitive membership (0.463583ms)
+     ▶ user registry store: duplicate detection
+     … +22 lines (ctrl+o to expand)
+
+⏺ Write(test/identity/middleware.test.ts)
+  ⎿  Wrote 206 lines to test/identity/middleware.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset, register } from "../../src/users/store.js";
+       5 
+       6 beforeEach(() => {
+       7   reset();
+       8 });
+       9 
+      10 // These tests observe the middleware through the real GET /user
+         s endpoint:
+     … +230 lines (ctrl+o to expand)
+
+⏺ Write(test/identity/exposure.test.ts)
+  ⎿  Wrote 115 lines to test/identity/exposure.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset, register } from "../../src/users/store.js";
+       5 import type { Caller, AppVariables } from "../../src/identity/ca
+         ller.js";
+       6 import type { Hono } from "hono";
+       7 
+       8 beforeEach(() => {
+       9   reset();
+      10 });
+     … +128 lines (ctrl+o to expand)
+
+⏺ Write(test/identity/divergence.test.ts)
+  ⎿  Wrote 43 lines to test/identity/divergence.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset } from "../../src/users/store.js";
+       5 
+       6 beforeEach(() => {
+       7   reset();
+       8 });
+       9 
+      10 // The malformed-vs-null contract from Phase 1's [[username-form
+         at]] spec and
+     … +39 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | tail -20)
+  ⎿      actual: 409,
+         expected: 400,
+         operator: 'strictEqual'
+     … +21 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | grep -E "^(✖|✘|pass|fail|tests )" | tail -30)
+  ⎿  ✖ identity middleware: malformed-vs-null divergence (16.552209ms)
+     ✖ identity middleware: lookup freshness (per request) (2.177208ms)
+     ✖ identity middleware: malformed header → 400 validation_error (5.1848
+     … +15 lines (ctrl+o to expand)
+
+⏺ Let me check empirically whether Hono's test transport is normalizing the
+  header.
+
+⏺ Write(test/identity/diagnostic.test.ts)
+  ⎿  Wrote 44 lines to test/identity/diagnostic.test.ts
+       2 import assert from "node:assert/strict";;
+       3 import { Hono } from "hono";
+       5 // Diagnostic: what does the request handler actually see when t
+         he client
+       6 // sends X-Username with leading/trailing whitespace? Hypothesis
+       7 // header normalization (per RFC 7230) strips OWS = SP / HTAB, s
+         o the
+       9 // middleware never sees these characters at the boundaries.
+      10 describe("Hono request transport: X-Username header arrival", ()
+          => {
+     … +42 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | grep -A 10 "X-Username arrivals")
+  ⎿  X-Username arrivals:
+       whitespace-only      sent="   " got=""
+       leading-space        sent=" alice" got="alice"
+     … +9 lines (ctrl+o to expand)
+
+⏺ Pausing — implementation revealed an HTTP transport reality the spec doesn't
+  acknowledge.
+
+  What I found
+
+  Hono's test transport (and any RFC-7230-compliant HTTP server) normalizes 
+  header values: leading/trailing ASCII whitespace (space, HTAB, newline) is
+  stripped before the handler sees it. From the diagnostic:
+
+  sent="   " (whitespace-only)  got=""        ← becomes absent
+  sent=" alice" (leading SP)    got="alice"   ← stripped
+  sent="alice " (trailing SP)   got="alice"   ← stripped
+  sent="\talice" (leading TAB)  got="alice"   ← stripped
+  sent="alice\n" (trailing LF)  got="alice"   ← stripped
+  sent="\u00a0alice" (NBSP)     got="\u00a0alice"  ← survives (non-OWS)
+
+  Implication: the spec's "malformed X-Username" scenarios using ASCII
+  whitespace can't be exercised through real HTTP — those bytes never reach my
+  middleware. The middleware does reject them correctly when it sees them; HTTP
+  just rarely delivers them.
+
+  The spec's behavioral contract still holds:
+  - absent / empty → null caller ✓
+  - well-formed registered → registered caller ✓
+  - well-formed unregistered → unregistered caller ✓
+  - present, non-empty, malformed → 400 validation_error (still true; just hard
+  to reach via HTTP)
+
+  What I'd do
+
+  Three small adjustments, none of them spec-defeating:
+
+  1. Update the test scenarios to use NBSP (\u00A0) or other non-OWS whitespace
+  as the HTTP-level "malformed" probe — those survive transport and trigger the
+  middleware's 400 path through real HTTP. (My existing HTTP failures all use
+  ASCII whitespace.)
+  2. Add a direct unit test of the middleware function with a mock context,
+  asserting that when called with a string like "   " or " alice" it throws
+  ApiError("validation_error"). This proves the contract holds for any input,
+  not just HTTP-reachable ones.
+  3. Add one paragraph to design.md (or as a new Decision 10) acknowledging that
+   HTTP OWS-stripping makes ASCII-whitespace malformed cases effectively
+  unreachable, and that the middleware's correctness for those inputs is
+  verified at the unit-function level.
+
+  The spec text itself doesn't need to change — its requirements describe what
+  the middleware does, not what HTTP delivers.
+
+  Want me to proceed with that adjustment? Or would you rather I rework the spec
+   to drop the ASCII-whitespace scenarios?
+
+✻ Cooked for 7m 18s
+
+※ recap: Implementing Phase 2 (user registry + identity middleware); halfway through §4, the middleware tests fail because HTTP strips ASCII whitespace from headers before my code sees it. Next: decide whether to update tests to use NBSP plus a unit-level middleware test, or rework the spec. (disable recaps in /config)
+
+❯ There's no need to test anything other than space, tab, and line feed in      
+  usernames. Otherwise proceed.                                                 
+
+⏺ Proceeding. Dropping HTTP tests that can't reach the middleware (HTTP
+  normalizes them away); moving those cases to direct unit tests of the
+  middleware function.
+
+⏺ Bash(rm test/identity/diagnostic.test.ts && ls test/identity/)
+  ⎿  divergence.test.ts
+     exposure.test.ts
+     middleware.test.ts
+⏺ Write(test/identity/middleware.test.ts)
+  ⎿  Added 28 lines, removed 97 lines
+       7    reset();
+       8  });
+       9  
+      10 -// These tests observe the middleware through the real GET /use
+         -rs endpoint:                                                   
+      11 -// if the middleware classifies the caller without throwing, th
+         -e request                                                      
+      12 -// reaches the handler and returns 200; if it throws on malform
+         -ed, the                                                        
+      13 -// global error handler returns 400 with the validation_error e
+         -nvelope.                                                       
+      10 +// HTTP-level observation of the middleware. RFC 7230 OWS-strip
+         +ping at the                                                    
+      11 +// transport layer means leading/trailing ASCII space, tab, and
+         + newline in                                                    
+      12 +// `X-Username` are normalized AWAY before they reach the middl
+         +eware (see                                                     
+      13 +// design.md Decision 10). Tests of the middleware's malformed-
+         +input handling                                                 
+      14 +// therefore live in middleware-unit.test.ts; this file covers 
+         +what HTTP can                                                  
+      15 +// actually deliver: absent, empty, well-formed (registered or 
+         +not), the                                                      
+      16 +// /reset exemption, and registry-lookup freshness.            
+      17  
+      18  describe("identity middleware: header absent or empty → null ca
+          ller passes", () => {
+      19    it("no header → 200 from GET /users", async () => {
+     ...
+      43      assert.equal(res.status, 200);
+      44      assert.notEqual(res.status, 403);
+      45    });
+      43 -});                                                            
+      46  
+      45 -interface ErrorBody {                                          
+      46 -  error: { code: string; message: string; details?: { tag?: str
+         -ing } };                                                       
+      47 -}                                                              
+      48 -                                                               
+      49 -describe("identity middleware: malformed header → 400 validatio
+         -n_error", () => {                                              
+      50 -  it("whitespace-only → 400 leading-whitespace", async () => { 
+      51 -    const app = createApp();                                   
+      52 -    const res = await app.request("/users", { headers: { "X-Use
+         -rname": "   " } });                                            
+      53 -    assert.equal(res.status, 400);                             
+      54 -    const body = (await res.json()) as ErrorBody;              
+      55 -    assert.equal(body.error.code, "validation_error");         
+      56 -    assert.equal(body.error.details?.tag, "leading-whitespace")
+         -;                                                              
+      57 -  });                                                          
+      58 -                                                               
+      59 -  it("leading space → 400 leading-whitespace", async () => {   
+      60 -    const app = createApp();                                   
+      61 -    const res = await app.request("/users", { headers: { "X-Use
+         -rname": " alice" } });                                         
+      62 -    assert.equal(res.status, 400);                             
+      63 -    const body = (await res.json()) as ErrorBody;              
+      64 -    assert.equal(body.error.details?.tag, "leading-whitespace")
+         -;                                                              
+      65 -  });                                                          
+      66 -                                                               
+      67 -  it("trailing space → 400 trailing-whitespace", async () => { 
+      68 -    const app = createApp();                                   
+      69 -    const res = await app.request("/users", { headers: { "X-Use
+         -rname": "alice " } });                                         
+      70 -    assert.equal(res.status, 400);                             
+      71 -    const body = (await res.json()) as ErrorBody;              
+      72 -    assert.equal(body.error.details?.tag, "trailing-whitespace"
+         -);                                                             
+      73 -  });                                                          
+      74 -                                                               
+      75 -  it("leading tab → 400 leading-whitespace", async () => {     
+      76 -    const app = createApp();                                   
+      77 -    const res = await app.request("/users", { headers: { "X-Use
+         -rname": "\talice" } });                                        
+      78 -    assert.equal(res.status, 400);                             
+      79 -    const body = (await res.json()) as ErrorBody;              
+      80 -    assert.equal(body.error.details?.tag, "leading-whitespace")
+         -;                                                              
+      81 -  });                                                          
+      82 -                                                               
+      83 -  it("trailing newline → 400 trailing-whitespace", async () => 
+         -{                                                              
+      84 -    const app = createApp();                                   
+      85 -    const res = await app.request("/users", { headers: { "X-Use
+         -rname": "alice\n" } });                                        
+      86 -    assert.equal(res.status, 400);                             
+      87 -    const body = (await res.json()) as ErrorBody;              
+      88 -    assert.equal(body.error.details?.tag, "trailing-whitespace"
+         -);                                                             
+      89 -  });                                                          
+      90 -                                                               
+      91 -  it("internal whitespace permitted (registered, with internal 
+         -space)", async () => {                                         
+      47 +  it("internal whitespace in well-formed name is preserved", as
+         +ync () => {                                                    
+      48      register("alice smith");
+      49      const app = createApp();
+      50      const res = await app.request("/users", {
+     ...
+       52      });
+       53      assert.equal(res.status, 200);
+       54    });
+       55 +});                                                           
+       56  
+      100 -  it("malformed header rejected BEFORE body parsing (POST /use
+          -rs)", async () => {                                           
+      101 -    register("alice");                                        
+       57 +describe("identity middleware: POST /reset is fully exempt", (
+          +) => {                                                        
+       58 +  it("absent X-Username on POST /reset → 204", async () => {  
+       59      const app = createApp();
+      103 -    const res = await app.request("/users", {                 
+      104 -      method: "POST",                                         
+      105 -      headers: { "Content-Type": "application/json", "X-Userna
+          -me": "   " },                                                 
+      106 -      body: JSON.stringify({ username: "alice" }),            
+      107 -    });                                                       
+      108 -    assert.equal(res.status, 400);                            
+      109 -    const body = (await res.json()) as ErrorBody;             
+      110 -    assert.equal(body.error.code, "validation_error");        
+      111 -    assert.notEqual(body.error.code, "conflict");             
+       60 +    const res = await app.request("/reset", { method: "POST" }
+          +);                                                            
+       61 +    assert.equal(res.status, 204);                            
+       62    });
+       63  
+      114 -  it("malformed header on unknown route still 400 (middleware 
+          -before route)", async () => {                                 
+       64 +  it("empty X-Username on POST /reset → 204", async () => {   
+       65      const app = createApp();
+      116 -    const res = await app.request("/no-such-path", {          
+      117 -      method: "POST",                                         
+      118 -      headers: { "X-Username": "   " },                       
+      119 -    });                                                       
+      120 -    assert.equal(res.status, 400);                            
+      121 -    const body = (await res.json()) as ErrorBody;             
+      122 -    assert.equal(body.error.details?.tag, "leading-whitespace"
+          -);                                                            
+      123 -  });                                                         
+      124 -});                                                           
+      125 -                                                              
+      126 -describe("identity middleware: POST /reset is fully exempt", (
+          -) => {                                                        
+      127 -  it("whitespace-only X-Username on POST /reset → 204 (still)"
+          -, async () => {                                               
+      128 -    const app = createApp();                                  
+       66      const res = await app.request("/reset", {
+       67        method: "POST",
+      131 -      headers: { "X-Username": "   " },                       
+       68 +      headers: { "X-Username": "" },                          
+       69      });
+       70      assert.equal(res.status, 204);
+       71    });
+       72  
+      136 -  it("leading-whitespace X-Username on POST /reset → 204", asy
+          -nc () => {                                                    
+       73 +  it("unregistered X-Username on POST /reset → 204", async () 
+          +=> {                                                          
+       74      const app = createApp();
+       75      const res = await app.request("/reset", {
+       76        method: "POST",
+      140 -      headers: { "X-Username": " alice" },                    
+       77 +      headers: { "X-Username": "ghost" },                     
+       78      });
+       79      assert.equal(res.status, 204);
+       80    });
+       81  
+      145 -  it("trailing-whitespace X-Username on POST /reset → 204", as
+          -ync () => {                                                   
+       82 +  it("registered X-Username on POST /reset → 204", async () =>
+          + {                                                            
+       83 +    register("alice");                                        
+       84      const app = createApp();
+       85      const res = await app.request("/reset", {
+       86        method: "POST",
+      149 -      headers: { "X-Username": "alice " },                    
+       87 +      headers: { "X-Username": "alice" },                     
+       88      });
+       89      assert.equal(res.status, 204);
+       90    });
+       91  
+      154 -  it("absent X-Username on POST /reset → 204", async () => {  
+       92 +  // ASCII whitespace gets normalized off by HTTP transport be
+          +fore reaching                                                 
+       93 +  // the middleware, but we keep these tests as a regression n
+          +et: even after                                                
+       94 +  // any future change to the middleware mount order, /reset M
+          +UST continue                                                  
+       95 +  // to return 204 regardless of header presentation.         
+       96 +  it("X-Username `   ` (becomes empty after HTTP normalization
+          +) on /reset → 204", async () => {                             
+       97      const app = createApp();
+      156 -    const res = await app.request("/reset", { method: "POST" }
+          -);                                                            
+      157 -    assert.equal(res.status, 204);                            
+      158 -  });                                                         
+      159 -                                                              
+      160 -  it("unregistered X-Username on POST /reset → 204", async () 
+          -=> {                                                          
+      161 -    const app = createApp();                                  
+       98      const res = await app.request("/reset", {
+       99        method: "POST",
+      164 -      headers: { "X-Username": "ghost" },                     
+      100 +      headers: { "X-Username": "   " },                       
+      101      });
+      102      assert.equal(res.status, 204);
+      103    });
+     ...
+      107    it("registering promotes a previously-unregistered header", 
+           async () => {
+      108      const app = createApp();
+      109  
+      174 -    // First: caller is unregistered (200 with empty user list
+          - shape)                                                       
+      110 +    // First: caller is unregistered (200 — GET /users is open
+          + to all)                                                      
+      111      const first = await app.request("/users", { headers: { "X-
+           Username": "alice" } });
+      112      assert.equal(first.status, 200);
+      113  
+     ...
+      118        body: JSON.stringify({ username: "alice" }),
+      119      });
+      120  
+      185 -    // Second: caller is registered — observable via the next 
+          -test's                                                        
+      186 -    // exposure route. Here we only confirm that subsequent re
+          -quests don't                                                  
+      187 -    // trip on a stale negative cache.                        
+      121 +    // Second: caller is now registered — still 200, no stale 
+          +negative cache                                                
+      122      const second = await app.request("/users", { headers: { "X
+           -Username": "alice" } });
+      123      assert.equal(second.status, 200);
+      124    });
+     ...
+      132      assert.equal(before.status, 200);
+      133      await app.request("/reset", { method: "POST" });
+      134      const after = await app.request("/users", { headers: { "X-
+           Username": "alice" } });
+      201 -    // After reset, alice is no longer registered — but the re
+          -quest still                                                   
+      202 -    // succeeds because GET /users is open to all callers incl
+          -uding the                                                     
+      203 -    // (now-)unregistered one.                                
+      135      assert.equal(after.status, 200);
+      136    });
+      137  });
+
+⏺ Write(test/identity/middleware-unit.test.ts)
+  ⎿  Wrote 154 lines to test/identity/middleware-unit.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { identityMiddleware } from "../../src/identity/middlewar
+       4 import { reset, register } from "../../src/users/store.js";
+       5 import { ApiError } from "../../src/errors/api-error.js";
+       6 import type { Caller } from "../../src/identity/caller.js";
+       8 // Direct unit tests of the middleware function. These bypass HT
+         TP transport
+         s about, can feed the middleware the exact strings the spec talk
+      10 // including the leading/trailing ASCII whitespace that RFC 7230
+         's OWS rule
+     … +179 lines (ctrl+o to expand)
+
+⏺ Write(test/identity/divergence.test.ts)
+  ⎿  Added 56 lines, removed 25 lines
+       1  import { describe, it, beforeEach } from "node:test";
+       2  import assert from "node:assert/strict";
+       3 -import { createApp } from "../../src/app.js";                  
+       3 +import { identityMiddleware } from "../../src/identity/middlewa
+         +re.js";                                                        
+       4  import { reset } from "../../src/users/store.js";
+       5 +import { ApiError } from "../../src/errors/api-error.js";      
+       6 +import type { Caller } from "../../src/identity/caller.js";    
+       7  
+       8  beforeEach(() => {
+       9    reset();
+      10  });
+      11  
+      10 -// The malformed-vs-null contract from Phase 1's [[username-for
+         -mat]] spec and                                                 
+      11 -// Phase 2's [[identity-resolution]] spec: an absent header and
+         - a                                                             
+      12 -// whitespace-only header MUST NOT produce the same response. O
+         -ne is the                                                      
+      13 -// null user (proceeds); the other is a 400 validation_error.  
+      12 +// The Phase 1 [[username-format]] and Phase 2 [[identity-resol
+         +ution]] specs                                                  
+      13 +// both insist that an absent header and a present-but-malforme
+         +d header are                                                   
+      14 +// classified differently — the former is the null user, the la
+         +tter is a 400.                                                 
+      15 +// At the HTTP transport layer, RFC 7230 OWS-stripping collapse
+         +s ASCII                                                        
+      16 +// whitespace-only headers into empties, so divergence is unobs
+         +ervable                                                        
+      17 +// through `app.request()`. We verify it at the middleware-func
+         +tion level                                                     
+      18 +// instead, which is where the contract actually lives.        
+      19  
+      15 -describe("identity middleware: malformed-vs-null divergence", (
+         -) => {                                                         
+      16 -  it("absent header is 200; whitespace-only header is 400 on th
+         -e same endpoint", async () => {                                
+      17 -    const app = createApp();                                   
+      20 +interface FakeContext {                                        
+      21 +  req: { method: string; path: string; header: (n: string) => s
+         +tring | undefined };                                           
+      22 +  set: (k: string, v: unknown) => void;                        
+      23 +}                                                              
+      24  
+      19 -    const absent = await app.request("/users");                
+      20 -    assert.equal(absent.status, 200);                          
+      25 +async function runMiddleware(                                  
+      26 +  xUsername: string | undefined,                               
+      27 +): Promise<{ caller?: Caller; error?: unknown }> {             
+      28 +  let caller: Caller | undefined;                              
+      29 +  const ctx: FakeContext = {                                   
+      30 +    req: {                                                     
+      31 +      method: "GET",                                           
+      32 +      path: "/users",                                          
+      33 +      header: (n) => (n.toLowerCase() === "x-username" ? xUsern
+         +ame : undefined),                                              
+      34 +    },                                                         
+      35 +    set: (k, v) => {                                           
+      36 +      if (k === "caller") caller = v as Caller;                
+      37 +    },                                                         
+      38 +  };                                                           
+      39 +  try {                                                        
+      40 +    await (identityMiddleware as unknown as (                  
+      41 +      c: FakeContext,                                          
+      42 +      n: () => Promise<void>,                                  
+      43 +    ) => Promise<void>)(ctx, async () => {});                  
+      44 +    return { caller };                                         
+      45 +  } catch (e) {                                                
+      46 +    return { caller, error: e };                               
+      47 +  }                                                            
+      48 +}                                                              
+      49  
+      22 -    const whitespace = await app.request("/users", {           
+      23 -      headers: { "X-Username": "   " },                        
+      24 -    });                                                        
+      25 -    assert.equal(whitespace.status, 400);                      
+      50 +describe("identity middleware: malformed-vs-null divergence (un
+         +it level)", () => {                                            
+      51 +  it("absent header → null caller; whitespace-only → ApiError; 
+         +the two outcomes differ", async () => {                        
+      52 +    const absent = await runMiddleware(undefined);             
+      53 +    const malformed = await runMiddleware("   ");              
+      54  
+      27 -    assert.notEqual(absent.status, whitespace.status);         
+      55 +    assert.equal(absent.error, undefined);                     
+      56 +    assert.deepEqual(absent.caller, { kind: "null" });         
+      57 +                                                               
+      58 +    assert.ok(malformed.error instanceof ApiError);            
+      59 +    assert.equal(malformed.error.code, "validation_error");    
+      60 +    assert.equal(malformed.caller, undefined);                 
+      61    });
+      62  
+      30 -  it("empty header is 200; trailing-whitespace header is 400", 
+         -async () => {                                                  
+      31 -    const app = createApp();                                   
+      63 +  it("empty header → null caller; trailing-whitespace → ApiErro
+         +r; the two outcomes differ", async () => {                     
+      64 +    const empty = await runMiddleware("");                     
+      65 +    const trailing = await runMiddleware("alice ");            
+      66  
+      33 -    const empty = await app.request("/users", { headers: { "X-U
+         -sername": "" } });                                             
+      34 -    assert.equal(empty.status, 200);                           
+      67 +    assert.equal(empty.error, undefined);                      
+      68 +    assert.deepEqual(empty.caller, { kind: "null" });          
+      69  
+      36 -    const trailing = await app.request("/users", {             
+      37 -      headers: { "X-Username": "alice " },                     
+      38 -    });                                                        
+      39 -    assert.equal(trailing.status, 400);                        
+      40 -                                                               
+      41 -    assert.notEqual(empty.status, trailing.status);            
+      70 +    assert.ok(trailing.error instanceof ApiError);             
+      71 +    assert.equal(trailing.error.code, "validation_error");     
+      72 +    assert.equal(trailing.error.details?.tag, "trailing-whitesp
+         +ace");                                                         
+      73    });
+      74  });
+
+⏺ Update(openspec/changes/add-phase-2-users/design.md)
+  ⎿  Added 42 lines
+      262  header). The path-aware approach is simpler and keeps the rout
+           e table
+      263  flat — the recommended default, but not normative.
+      264  
+      265 +### 10. HTTP transport pre-normalizes ASCII OWS in header valu
+          +es                                                            
+      266 +                                                              
+      267 +Discovered during implementation. RFC 7230 §3.2.4 defines OWS 
+          += SP /                                                        
+      268 +HTAB and treats leading and trailing OWS in a header field-val
+          +ue as                                                         
+      269 +**stripped on parse**. In practice the Fetch implementation un
+          +der Node's                                                    
+      270 +test transport (and any RFC-conformant HTTP server) honors thi
+          +s — leading                                                   
+      271 +and trailing ASCII space, tab, and line feed in `X-Username` a
+          +re removed                                                    
+      272 +before the middleware ever sees the value. Consequences:      
+      273 +                                                              
+      274 +- `X-Username: "   "` (whitespace-only) arrives at the middlew
+          +are as                                                        
+      275 +  `""` and is therefore indistinguishable from an absent / emp
+          +ty                                                            
+      276 +  header. The middleware classifies it as the null user; it do
+          +es **not**                                                    
+      277 +  throw 400.                                                  
+      278 +- `X-Username: " alice"` arrives as `"alice"` and is well-form
+          +ed.                                                           
+      279 +- `X-Username: "alice "` arrives as `"alice"` and is well-form
+          +ed.                                                           
+      280 +- `X-Username: "\talice"` arrives as `"alice"` and is well-for
+          +med.                                                          
+      281 +- `X-Username: "alice\n"` arrives as `"alice"` and is well-for
+          +med.                                                          
+      282 +                                                              
+      283 +The spec's "Malformed X-Username is rejected" contract still h
+          +olds:                                                         
+      284 +when the middleware function receives such a string, it throws
+      285 +`ApiError("validation_error", …)`. But that input is unreachab
+          +le for                                                        
+      286 +ASCII whitespace through the HTTP transport. We do not paper o
+          +ver this                                                      
+      287 +with non-OWS test fixtures (per the project owner's direction:
+          + test                                                         
+      288 +only space, tab, and line feed).                              
+      289 +                                                              
+      290 +**Test strategy.** The middleware's malformed-input behavior i
+          +s verified                                                    
+      291 +at the **function level** by `test/identity/middleware-unit.te
+          +st.ts`,                                                       
+      292 +which constructs a fake Hono `Context` and invokes the middlew
+          +are                                                           
+      293 +directly. The HTTP-level test file                            
+      294 +`test/identity/middleware.test.ts` exercises only what the tra
+          +nsport                                                        
+      295 +actually delivers (absent, empty, well-formed registered, well
+          +-formed                                                       
+      296 +unregistered, `/reset` exemption, registry-lookup freshness). 
+          +The                                                           
+      297 +absent-vs-malformed **divergence** lives at the unit level too
+      298 +(`test/identity/divergence.test.ts`), because the HTTP layer c
+          +ollapses                                                      
+      299 +the two presentations.                                        
+      300 +                                                              
+      301 +**Spec scenarios are not retroactively re-worded.** The Requir
+          +ement                                                         
+      302 +text describes the system contract — the middleware does rejec
+          +t malformed                                                   
+      303 +strings — and the Scenarios are illustrative. The test files d
+          +ocument                                                       
+      304 +which scenarios are reachable via HTTP and which are verified 
+          +at the                                                        
+      305 +unit level. The Phase 2 final test plan's changelog records th
+          +e move.                                                       
+      306 +                                                              
+      307  ## Risks / Trade-offs
+      308  
+      309  - **Splitting middleware from gate widens the surface to misus
+           e.** A
+
+⏺ Bash(npm test 2>&1 | tail -15)
+  ⎿      {
+       +   kind: 'registered',
+       -   kind: 'unregistered',
+     … +14 lines (ctrl+o to expand)
+
+⏺ The exposure test depends on /reset clearing the registry, which is §6 (not
+  done yet). Let me do §6 now to unblock.
+
+⏺ Update(src/reset/handler.ts)
+  ⎿  Added 8 lines, removed 7 lines
+       1 +import { reset as usersReset } from "../users/store.js";       
+       2 +                                                               
+       3  /**
+       4   * Composed reset of every form of in-memory state in the serve
+          r (PRD §15).
+       5   *
+       4 - * Phase 1 owns no domain state, so the body is empty. This is 
+         -the **seam**:                                                  
+       5 - * every later phase that introduces in-memory state extends th
+         -is function to                                                 
+       6 - * clear it. The composition is explicit (no registration side 
+         -effects) so                                                    
+       7 - * the set of cleared subsystems is visible here.              
+       6 + * Each subsystem that owns in-memory state exports a `reset()`
+         + and is                                                        
+       7 + * composed here. The composition is explicit (no registration 
+         +side                                                           
+       8 + * effects) so the set of cleared subsystems is visible at one 
+         +site.                                                          
+       9   *
+       9 - * Forward contributors (each adds one `await xReset()` call in
+         - source order):                                                
+      10 - *   Phase 2  — user registry                                  
+      10 + * Forward contributors (each adds one `xReset()` call in sourc
+         +e order):                                                      
+      11 + *   Phase 2  — user registry          ✓                       
+      12   *   Phase 3  — taxa, edges, ID generator
+      13   *   Phase 5  — proposals and derived changes
+      14   *   Phase 6  — reviewer queues
+     ...
+      16   * See `openspec/specs/state-reset/spec.md` for the forward obl
+          igation.
+      17   */
+      18  export async function resetAll(): Promise<void> {
+      18 -  // (no-op at Phase 1)                                        
+      19 +  usersReset();                                                
+      20  }
+
+⏺ Write(test/reset/users-reset.test.ts)
+  ⎿  Wrote 72 lines to test/reset/users-reset.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset } from "../../src/users/store.js";
+       5 
+       6 beforeEach(() => {
+       7   reset();
+       8 });
+       9 
+      10 // Phase 1's [[state-reset]] forward obligation: every phase tha
+         t introduces
+     … +70 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | grep -E "^(✖|tests |pass |fail )" | head -20)
+  ⎿  (No output)
+
+⏺ Bash(npm test 2>&1 | tail -15)
+  ⎿  ▶ user registry store: reset clears membership
+       ✔ after reset, list is empty and isRegistered is false (0.052791ms)
+       ✔ after reset, the case-key map is cleared (no lingering duplicate)
+     … +13 lines (ctrl+o to expand)
+
+⏺ 144/144 pass. §4 and §6 complete.
+
+⏺ Update(openspec/changes/add-phase-2-users/tasks.md)
+  ⎿  Added 7 lines, removed 7 lines
+      20  
+      21  ## 4. Caller type and identity-resolution middleware (`specs/id
+          entity-resolution`)
+      22  
+      23 -- [ ] 4.1 Define the `Caller` discriminated union in `src/ident
+         -ity/caller.ts`: `{ kind: "null" } | { kind: "registered", usern
+         -ame } | { kind: "unregistered", username }`                    
+      24 -- [ ] 4.2 Declare `type AppVariables = { caller: Caller }` and 
+         -convert `src/app.ts` to `new Hono<{ Variables: AppVariables }>(
+         -)`                                                             
+      25 -- [ ] 4.3 Implement `src/identity/middleware.ts` exporting `ide
+         -ntityMiddleware(c, next)`: if absent or empty header → set null
+         - caller; else run `validateUsername`, on failure throw `ApiErro
+         -r("validation_error", reason.message, { tag: reason.tag })`; on
+         - success consult `store.isRegistered(name)` → set `registered` 
+         -with `store.originalCasing(name)!` or `unregistered` with the h
+         -eader value                                                    
+      26 -- [ ] 4.4 Mount the middleware globally in `src/app.ts` with a 
+         -`POST /reset` short-circuit (either a path check inside the mid
+         -dleware or by registering `/reset` before the global middleware
+         - mount — see design Decision 9)                                
+      27 -- [ ] 4.5 Write `test/identity/middleware.test.ts` covering eac
+         -h spec scenario through real Phase 2 endpoints (`GET /users` is
+         - the most convenient fixture): no header → null caller path pro
+         -ceeds; empty header → null caller path proceeds; valid register
+         -ed → handler sees registered caller; valid unregistered → handl
+         -er sees unregistered caller; whitespace-only → 400 `leading-whi
+         -tespace`; leading WS → 400 `leading-whitespace`; trailing WS → 
+         -400 `trailing-whitespace`; reset is fully exempt (whitespace-on
+         -ly header still returns 204)                                   
+      28 -- [ ] 4.6 Add a `test/identity/exposure.test.ts` that uses a si
+         -ngle test-only route registered against `app` (not shipped — ad
+         -ded in the test file's `beforeEach`) to read `c.get("caller")` 
+         -and echo it back; assert the shape is exactly the discriminated
+         - union the spec requires                                       
+      29 -- [ ] 4.7 Write `test/identity/divergence.test.ts` asserting th
+         -at an absent header and a whitespace-only header produce differ
+         -ent responses on the same endpoint (200 vs 400) — the malformed
+         --vs-null contract                                              
+      23 +- [x] 4.1 Define the `Caller` discriminated union in `src/ident
+         +ity/caller.ts`: `{ kind: "null" } | { kind: "registered", usern
+         +ame } | { kind: "unregistered", username }`                    
+      24 +- [x] 4.2 Declare `type AppVariables = { caller: Caller }` and 
+         +convert `src/app.ts` to `new Hono<{ Variables: AppVariables }>(
+         +)`                                                             
+      25 +- [x] 4.3 Implement `src/identity/middleware.ts` exporting `ide
+         +ntityMiddleware(c, next)`: if absent or empty header → set null
+         + caller; else run `validateUsername`, on failure throw `ApiErro
+         +r("validation_error", reason.message, { tag: reason.tag })`; on
+         + success consult `store.isRegistered(name)` → set `registered` 
+         +with `store.originalCasing(name)!` or `unregistered` with the h
+         +eader value                                                    
+      26 +- [x] 4.4 Mount the middleware globally in `src/app.ts` with a 
+         +`POST /reset` short-circuit (either a path check inside the mid
+         +dleware or by registering `/reset` before the global middleware
+         + mount — see design Decision 9)                                
+      27 +- [x] 4.5 Write `test/identity/middleware.test.ts` covering eac
+         +h spec scenario through real Phase 2 endpoints (`GET /users` is
+         + the most convenient fixture). HTTP-reachable scenarios only: a
+         +bsent/empty header, well-formed registered/unregistered, `/rese
+         +t` exemption, registry-lookup freshness. Malformed-header scena
+         +rios moved to `test/identity/middleware-unit.test.ts` (see desi
+         +gn Decision 10).                                               
+      28 +- [x] 4.6 Add a `test/identity/exposure.test.ts` that uses a si
+         +ngle test-only route registered against `app` (not shipped — ad
+         +ded in the test file's `beforeEach`) to read `c.get("caller")` 
+         +and echo it back; assert the shape is exactly the discriminated
+         + union the spec requires                                       
+      29 +- [x] 4.7 Write `test/identity/divergence.test.ts` asserting th
+         +at an absent header and a malformed header produce different mi
+         +ddleware outcomes (null caller vs ApiError) — verified at the m
+         +iddleware-function level per design Decision 10, because HTTP t
+         +ransport collapses the divergence                              
+      30  
+      31  ## 5. Authorization gate (`specs/authorization-gate`)
+      32  
+
+⏺ Update(openspec/changes/add-phase-2-users/tasks.md)
+  ⎿  Added 2 lines, removed 2 lines
+      37  
+      38  ## 6. Reset extension (`specs/state-reset` forward obligation)
+      39  
+      40 -- [ ] 6.1 Edit `src/reset/handler.ts` to import `reset as users
+         -Reset` from `src/users/store.ts` and call it inside `resetAll()
+         -` (replace or extend the Phase 1 comment placeholder)          
+      41 -- [ ] 6.2 Write `test/reset/users-reset.test.ts` covering: regi
+         -ster `"alice"` and `"bob"`; `GET /users` shows both; `POST /res
+         -et` returns 204; `GET /users` returns `{ users: [] }`; re-regis
+         -ter `"alice"` succeeds (no lingering duplicate state)          
+      40 +- [x] 6.1 Edit `src/reset/handler.ts` to import `reset as users
+         +Reset` from `src/users/store.ts` and call it inside `resetAll()
+         +` (replace or extend the Phase 1 comment placeholder)          
+      41 +- [x] 6.2 Write `test/reset/users-reset.test.ts` covering: regi
+         +ster `"alice"` and `"bob"`; `GET /users` shows both; `POST /res
+         +et` returns 204; `GET /users` returns `{ users: [] }`; re-regis
+         +ter `"alice"` succeeds (no lingering duplicate state)          
+      42  
+      43  ## 7. Integration sanity
+      44  
+
+⏺ §5: authorization gate.
+
+⏺ Write(src/auth/require-registered.ts)
+  ⎿  Wrote 29 lines to src/auth/require-registered.ts
+       2 import { ApiError } from "../errors/api-error.js";
+       3 import type { AppVariables } from "../identity/caller.js";
+       4 
+       6 // requireRegistered — the authorization gate (PRD §4, §15.6).
+       7 // Reads ONLY c.get("caller") — the value set by the identity-re
+         solution
+         d does notare. It does not parse the X-Username header itself an
+       9 // consult the registry; that would duplicate work the middlewar
+         e already
+      10 // did, and the two paths could diverge.
+     … +28 lines (ctrl+o to expand)
+
+⏺ Write(test/auth/require-registered.test.ts)
+  ⎿  Wrote 127 lines to test/auth/require-registered.test.ts
+       2 import assert from "node:assert/strict";;
+       3 import { requireRegistered } from "../../src/auth/require-regist
+         ered.js";
+       5 import type { Caller } from "../../src/identity/caller.js";
+       6 
+       7 // Unit tests of requireRegistered. The helper reads exclusively
+       8 // c.get("caller"), so a minimal mock context with just .get is 
+         enough.
+       9 
+      10 interface FakeContext {
+     … +134 lines (ctrl+o to expand)
+
+⏺ Write(test/auth/envelope.test.ts)
+  ⎿  Wrote 112 lines to test/auth/envelope.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset, register } from "../../src/users/store.js";
+       5 import { requireRegistered } from "../../src/auth/require-regist
+         ered.js";
+       7 import type { AppVariables } from "../../src/identity/caller.js"
+         ;
+       8 
+       9 beforeEach(() => {
+      10   reset();
+     … +119 lines (ctrl+o to expand)
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | tail -15)
+  ⎿  ▶ user registry store: reset clears membership
+       ✔ after reset, list is empty and isRegistered is false (0.050167ms)
+       ✔ after reset, the case-key map is cleared (no lingering duplicate)
+     … +13 lines (ctrl+o to expand)
+
+⏺ 158/158 pass. Audit: requireRegistered referenced only inside src/auth/ (its
+  own definition site). §5 complete.
+
+⏺ Update(openspec/changes/add-phase-2-users/tasks.md)
+  ⎿  Added 4 lines, removed 4 lines
+      30  
+      31  ## 5. Authorization gate (`specs/authorization-gate`)
+      32  
+      33 -- [ ] 5.1 Implement `src/auth/require-registered.ts` exporting 
+         -`requireRegistered(c): { username: string }` that reads `c.get(
+         -"caller")` and throws `ApiError("forbidden", ...)` for null and
+         - unregistered, returning `{ username }` for registered         
+      34 -- [ ] 5.2 Write `test/auth/require-registered.test.ts` covering
+         -: registered caller returns `{ username }`; null caller throws 
+         -`ApiError("forbidden")`; unregistered caller throws `ApiError("
+         -forbidden")`; the helper reads only `c.get("caller")` (does not
+         - parse headers itself — sanity-checkable by stubbing the contex
+         -t)                                                             
+      35 -- [ ] 5.3 Write `test/auth/envelope.test.ts` that mounts a test
+         --only protected route (added in the test file only) which calls
+         - `requireRegistered`, hits it from each of the three caller sta
+         -tes, and confirms: registered → 200; null → 403 with `error.cod
+         -e = "forbidden"`; unregistered → 403 with `error.code = "forbid
+         -den"`                                                          
+      36 -- [ ] 5.4 Confirm no Phase 2 production handler invokes `requir
+         -eRegistered` (grep `src/` excluding `src/auth/` and the test tr
+         -ees should yield no matches) — this satisfies the spec's "no Ph
+         -ase 2 production endpoint calls requireRegistered" scenario    
+      33 +- [x] 5.1 Implement `src/auth/require-registered.ts` exporting 
+         +`requireRegistered(c): { username: string }` that reads `c.get(
+         +"caller")` and throws `ApiError("forbidden", ...)` for null and
+         + unregistered, returning `{ username }` for registered         
+      34 +- [x] 5.2 Write `test/auth/require-registered.test.ts` covering
+         +: registered caller returns `{ username }`; null caller throws 
+         +`ApiError("forbidden")`; unregistered caller throws `ApiError("
+         +forbidden")`; the helper reads only `c.get("caller")` (does not
+         + parse headers itself — sanity-checkable by stubbing the contex
+         +t)                                                             
+      35 +- [x] 5.3 Write `test/auth/envelope.test.ts` that mounts a test
+         +-only protected route (added in the test file only) which calls
+         + `requireRegistered`, hits it from each of the three caller sta
+         +tes, and confirms: registered → 200; null → 403 with `error.cod
+         +e = "forbidden"`; unregistered → 403 with `error.code = "forbid
+         +den"`                                                          
+      36 +- [x] 5.4 Confirm no Phase 2 production handler invokes `requir
+         +eRegistered` (grep `src/` excluding `src/auth/` and the test tr
+         +ees should yield no matches) — this satisfies the spec's "no Ph
+         +ase 2 production endpoint calls requireRegistered" scenario    
+      37  
+      38  ## 6. Reset extension (`specs/state-reset` forward obligation)
+      39  
+
+⏺ §7: integration test + clean rebuild.
+
+⏺ Write(test/app.integration.test.ts)
+  ⎿  Wrote 111 lines to test/app.integration.test.ts
+       1 import { describe, it, beforeEach } from "node:test";
+       2 import assert from "node:assert/strict";
+       3 import { createApp } from "../src/app.js";
+       4 import { reset } from "../src/users/store.js";
+       5 import type { Hono } from "hono";
+       6 import type { AppVariables } from "../src/identity/caller.js";
+       7 
+       8 beforeEach(() => {
+       9   reset();
+      10 });
+     … +116 lines (ctrl+o to expand)
+
+⏺ Bash(rm -rf dist && npx tsc && node --test "dist/**/*.test.js" 2>&1 | tail
+      -15)
+  ⎿  ▶ user registry store: reset clears membership
+       ✔ after reset, list is empty and isRegistered is false (0.056ms)
+       ✔ after reset, the case-key map is cleared (no lingering duplicate)
+     … +13 lines (ctrl+o to expand)
+
+⏺ Clean rebuild + 162/162 pass. §7 complete.
+
+⏺ Update(openspec/changes/add-phase-2-users/tasks.md)
+  ⎿  Added 2 lines, removed 2 lines
+      42  
+      43  ## 7. Integration sanity
+      44  
+      45 -- [ ] 7.1 Extend `test/app.test.ts` (or add `test/app.integrati
+         -on.test.ts`) confirming end-to-end: register a user; identity m
+         -iddleware classifies subsequent requests with that header as `r
+         -egistered`; reset; same header classifies as `unregistered`    
+      46 -- [ ] 7.2 Run the full build/test command end-to-end on a clean
+         - checkout: `rm -rf dist && npx tsc && node --test "dist/**/*.te
+         -st.js"` — all Phase 1 + Phase 2 tests pass                     
+      45 +- [x] 7.1 Extend `test/app.test.ts` (or add `test/app.integrati
+         +on.test.ts`) confirming end-to-end: register a user; identity m
+         +iddleware classifies subsequent requests with that header as `r
+         +egistered`; reset; same header classifies as `unregistered`    
+      46 +- [x] 7.2 Run the full build/test command end-to-end on a clean
+         + checkout: `rm -rf dist && npx tsc && node --test "dist/**/*.te
+         +st.js"` — all Phase 1 + Phase 2 tests pass                     
+      47  
+      48  ## 8. Final test plan and Phase 2 close-out
+      49  
+
+⏺ Per CLAUDE.md the drift check happens before writing the final test plan.
+  Running it now.
+
+  Called openlore (ctrl+o to expand)
+
+⏺ Bash(git status --short)
+  ⎿   M openspec/changes/add-phase-2-users/design.md
+      M openspec/changes/add-phase-2-users/tasks.md
+      M src/app.ts
+     … +10 lines (ctrl+o to expand)
+
+  Called openlore 2 times (ctrl+o to expand)
+
+⏺ Drift check ran clean: hasDrift: false, zero gaps/stale/uncovered/orphaned
+  across the 4 git-tracked changed files (the untracked new files all map to
+  capabilities I just specced, no orphans). The re-analyzed graph now sees the
+  new users, identity, and auth domains.
+
+  Now updating the final test plan with the discovered changes.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-2-final.md)
+  ⎿  Added 7 lines, removed 7 lines
+       1 -# Phase 2 — Initial test plan (frozen)                         
+       1 +# Phase 2 — Final test plan                                    
+       2  
+       3 -> **Status: frozen on commit.** This plan was written from the 
+         -OpenSpec                                                       
+       4 -> change `add-phase-2-users` (specs: `user-registry`, `identity
+         --resolution`,                                                  
+       5 -> `authorization-gate`) **before** implementation began and is 
+         -not edited                                                     
+       6 -> afterward. The companion file `phase-2-final.md` supersedes t
+         -his one and                                                    
+       7 -> carries a `## Changelog` listing every row added, removed, or
+         - changed                                                       
+       8 -> during implementation, with the reason for each.             
+       3 +> **Status: final.** This plan supersedes the frozen `phase-2-i
+         +nitial.md`                                                     
+       4 +> and reflects what was actually tested. The `## Changelog` at 
+         +the bottom                                                     
+       5 +> lists every row that was added, removed, or changed during   
+       6 +> implementation, with the reason for each. The body of this do
+         +cument is                                                      
+       7 +> otherwise the same as the initial plan; only rows mentioned i
+         +n the                                                          
+       8 +> changelog were modified.                                     
+       9  
+      10  ## Why this plan exists
+      11  
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-2-final.md)  ⎿  Added 42 lines, removed 17 lines
+      149  `Caller.username` exposed to handlers must be the **registered
+            casing**,
+      150  not the header casing.
+      151  
+      152 -The middleware tests are mostly observed-through-endpoints: we
+          - hit real                                                     
+      153 -Phase 2 endpoints (`GET /users` is the most convenient) and as
+          -sert on                                                       
+      154 -the resulting HTTP status and body. A small number of `Caller`
+          --exposure                                                     
+      155 -tests use a test-only fixture route to read `c.get("caller")` 
+          -directly.                                                     
+      152 +The middleware tests are split across **two layers**, a split 
+          +discovered                                                    
+      153 +during implementation (see Changelog entry **CL-1** and `desig
+          +n.md`                                                         
+      154 +Decision 10):                                                 
+      155  
+      157 -### Header-classification tests (observed via real endpoints) 
+      156 +- **HTTP-layer tests** (`test/identity/middleware.test.ts`) co
+          +ver what                                                      
+      157 +  Hono's test transport can actually deliver: absent, empty, w
+          +ell-formed                                                    
+      158 +  registered, well-formed unregistered, the `/reset` exemption
+          +, and                                                         
+      159 +  registry-lookup freshness. RFC 7230 OWS-stripping normalizes
+          + leading                                                      
+      160 +  and trailing ASCII space, tab, and line feed out of `X-Usern
+          +ame`                                                          
+      161 +  before the middleware sees them, so the "malformed header" p
+          +ath is                                                        
+      162 +  unreachable from this layer.                                
+      163 +- **Function-level tests** (`test/identity/middleware-unit.tes
+          +t.ts`)                                                        
+      164 +  invoke the middleware directly against a fake `Context`, fee
+          +ding it                                                       
+      165 +  the exact whitespace strings the spec describes. The        
+      166 +  divergence test (`test/identity/divergence.test.ts`) likewis
+          +e runs at                                                     
+      167 +  the function level for the same reason.                     
+      168  
+      169 +A small number of `Caller`-exposure tests use a test-only fixt
+          +ure route                                                     
+      170 +to read `c.get("caller")` directly.                           
+      171 +                                                              
+      172 +### Header-classification tests (HTTP layer — `middleware.test
+          +.ts`)                                                         
+      173 +                                                              
+      174  | Rule | Input | Expected | Notes |
+      175  |---|---|---|---|
+      161 -| Absent header → null caller path proceeds | `GET /users` wit
+          -h no `X-Username` | Status `200`; handler runs (response body 
+          -is the user list) | Verifies null caller is non-rejecting |   
+      176 +| Absent header → null caller path proceeds | `GET /users` wit
+          +h no `X-Username` | Status `200`; handler runs | Verifies null
+          + caller is non-rejecting |                                    
+      177  | Empty header → null caller path proceeds | `GET /users` with
+            `X-Username:` (empty value) | Status `200` | Empty value trea
+           ted as absent |
+      178  | Well-formed registered header → handler proceeds | Pre-regis
+           ter `"alice"`; `GET /users` with `X-Username: alice` | Status 
+           `200` | |
+      179  | Well-formed unregistered header → handler proceeds (middlewa
+           re does not 403) | `GET /users` with `X-Username: ghost` (not 
+           registered) | Status `200`; NOT `403` | Confirms middleware do
+           es not enforce |
+      165 -| Whitespace-only header → `400 leading-whitespace` | `GET /us
+          -ers` with `X-Username:   ` | Status `400`; `error.code = "vali
+          -dation_error"`; `error.details.tag = "leading-whitespace"` | M
+          -atches Phase 1 validator's whitespace-only scenario |         
+      166 -| Leading-whitespace header → `400 leading-whitespace` | `GET 
+          -/users` with `X-Username:  alice` (leading space) | Status `40
+          -0`; `error.details.tag = "leading-whitespace"` | |            
+      167 -| Trailing-whitespace header → `400 trailing-whitespace` | `GE
+          -T /users` with `X-Username: alice ` | Status `400`; `error.det
+          -ails.tag = "trailing-whitespace"` | |                         
+      168 -| Tab character in header is whitespace | `GET /users` with `X
+          --Username: \talice` | Status `400`; `error.details.tag = "lead
+          -ing-whitespace"` | Confirms the validator's Unicode-whitespace
+          - rule applies at the HTTP layer too |                         
+      169 -| Newline character in header is whitespace | `GET /users` wit
+          -h `X-Username: alice\n` | Status `400`; `error.details.tag = "
+          -trailing-whitespace"` | |                                     
+      180  | Internal whitespace in header is permitted | `GET /users` wi
+           th `X-Username: alice smith` (registered, with space) | Status
+            `200` | Confirms boundary-only rule applies |
+      171 -| Absent and whitespace-only diverge on same endpoint | Two `G
+          -ET /users` requests: one with no header, one with `X-Username:
+          -   ` | First is `200`, second is `400` (different responses) |
+          - The malformed-vs-null contract |                             
+      172 -| Malformed header rejection happens before body parsing | `PO
+          -ST /users` with `X-Username:   ` and body `{"username":"alice"
+          -}` (pre-registered) | Status `400` (NOT `409`); `error.code = 
+          -"validation_error"` (NOT `"conflict"`) | Middleware runs befor
+          -e handler |                                                   
+      173 -| Malformed header rejection happens before route 404 | `POST 
+          -/no-such-path` with `X-Username:   ` | Status `400`; `error.de
+          -tails.tag = "leading-whitespace"` | Middleware applies on ever
+          -y non-`/reset` route, including unmatched ones — implementatio
+          -n note: depends on middleware mount order, document and pin | 
+      181  
+      182 +### Header-classification tests (function level — `middleware-
+          +unit.test.ts`)                                                
+      183 +                                                              
+      184 +| Rule | Input | Expected | Notes |                           
+      185 +|---|---|---|---|                                             
+      186 +| Absent (undefined) → null caller; calls next | mock ctx with
+          + `header()` returning `undefined` | `c.set("caller", {kind:"nu
+          +ll"})`; next runs | Function-level mirror of the HTTP test |  
+      187 +| Empty `""` → null caller; calls next | mock ctx with `header
+          +()` returning `""` | `c.set("caller", {kind:"null"})`; next ru
+          +ns | |                                                        
+      188 +| Well-formed unregistered → unregistered caller | mock with `
+          +xUsername:"ghost"`, registry empty | `c.set("caller", {kind:"u
+          +nregistered", username:"ghost"})` | |                         
+      189 +| Well-formed registered → registered caller (stored casing) |
+          + `register("Alice")`; mock with `xUsername:"alice"` | `c.set("
+          +caller", {kind:"registered", username:"Alice"})` | The casing-
+          +substitution rule |                                           
+      190 +| Whitespace-only `"   "` → throws ApiError(validation_error, 
+          +leading-whitespace) | mock with `xUsername:"   "` | Throws `Ap
+          +iError`, `code="validation_error"`, `details.tag="leading-whit
+          +espace"`; next NOT called; caller NOT set | Spec-required malf
+          +ormed-rejection path |                                        
+      191 +| Leading space `" alice"` → throws (leading-whitespace) | moc
+          +k with `xUsername:" alice"` | Throws with `tag="leading-whites
+          +pace"` | |                                                    
+      192 +| Trailing space `"alice "` → throws (trailing-whitespace) | m
+          +ock with `xUsername:"alice "` | Throws with `tag="trailing-whi
+          +tespace"` | |                                                 
+      193 +| Leading tab `"\talice"` → throws (leading-whitespace) | mock
+          + with `xUsername:"\talice"` | Throws with `tag="leading-whites
+          +pace"` | |                                                    
+      194 +| Trailing tab `"alice\t"` → throws (trailing-whitespace) | mo
+          +ck with `xUsername:"alice\t"` | Throws with `tag="trailing-whi
+          +tespace"` | |                                                 
+      195 +| Leading line feed `"\nalice"` → throws (leading-whitespace) 
+          +| mock with `xUsername:"\nalice"` | Throws with `tag="leading-
+          +whitespace"` | |                                              
+      196 +| Trailing line feed `"alice\n"` → throws (trailing-whitespace
+          +) | mock with `xUsername:"alice\n"` | Throws with `tag="traili
+          +ng-whitespace"` | |                                           
+      197 +                                                              
+      198  ### `POST /reset` exemption tests
+      199  
+      200  | Rule | Input | Expected | Notes |
+      201  |---|---|---|---|
+      179 -| Whitespace-only header → reset succeeds | `POST /reset` with
+          - `X-Username:   ` | Status `204`; NOT `400` | Exemption preser
+          -ved across Phase 2's middleware addition |                    
+      180 -| Leading-whitespace header → reset succeeds | `POST /reset` w
+          -ith `X-Username:  alice` | Status `204` | |                   
+      181 -| Trailing-whitespace header → reset succeeds | `POST /reset` 
+          -with `X-Username: alice ` | Status `204` | |                  
+      202  | Absent header → reset succeeds | `POST /reset` with no `X-Us
+           ername` | Status `204` | Phase 1 behavior preserved |
+      203 +| Empty header → reset succeeds | `POST /reset` with `X-Userna
+          +me:` (empty) | Status `204` | |                               
+      204  | Unregistered header → reset succeeds | `POST /reset` with `X
+           -Username: ghost` | Status `204` | Phase 1 behavior preserved 
+           |
+      205 +| Registered header → reset succeeds | `POST /reset` with `X-U
+          +sername: alice` (registered) | Status `204` | New Phase 2 case
+          + |                                                            
+      206 +| ASCII-whitespace header → reset succeeds | `POST /reset` wit
+          +h `X-Username:   ` (becomes empty after HTTP transport) | Stat
+          +us `204` | Regression net against any future change to middlew
+          +are mount order |                                             
+      207 +| Function-level: middleware called with `POST /reset` and `xU
+          +sername:"   "` does NOT throw | mock ctx with `method:"POST"`,
+          + `path:"/reset"`, `xUsername:"   "` | `next` runs; caller NOT 
+          +set | Exemption verified at the middleware function, independe
+          +nt of transport normalization |                               
+      208 +| Function-level: middleware on `GET /reset` (wrong method) is
+          + NOT exempt | mock ctx with `method:"GET"`, `path:"/reset"`, `
+          +xUsername:"alice"` | Classifies as `unregistered` | The exempt
+          +ion is method-specific |                                      
+      209  
+      210  ### `Caller` exposure tests (via a test-only fixture route)
+      211  
+
+⏺ Now updating the divergence row and adding the changelog:
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-2-final.md)
+  ⎿  Added 1 line, removed 1 line
+      336  | `Content-Type: application/json` survives the middleware | `
+           GET /users` with any caller state | Response header `applicati
+           on/json` | Middleware does not strip or rewrite response heade
+           rs |
+      337  | Health endpoint still works | `GET /health` after Phase 2 in
+           stall | Status `200`; body `{"status":"ok","version":<string>}
+           ` | Regression: middleware does not break the no-header endpoi
+           nt |
+      338  | Unknown route still emits envelope | `GET /no-such-path` wit
+           h no `X-Username` | Status `404`; body `{"error":{"code":"not_
+           found","message":<string>}}` | Regression: Phase 1 envelope be
+           havior preserved |
+      339 -| Unknown route emits envelope even with malformed header | `G
+          -ET /no-such-path` with `X-Username:   ` | Status is `400` (mid
+          -dleware first) OR `404` (route first), depending on mount orde
+          -r; in either case the body is the standard envelope | Document
+          -s the implementation-defined order; the **envelope contract** 
+          -is what's normative |                                         
+      339 +| Unknown route emits envelope (no malformed-header variant) |
+          + `GET /no-such-path` with no `X-Username` | Status `404`; body
+          + `{"error":{"code":"not_found","message":<string>}}` | Phase 1
+          + envelope regression. The "malformed header on unknown route" 
+          +variant from the initial plan is removed (CL-2): HTTP normaliz
+          +es the header so the test was unreachable. |                  
+      340  
+      341  ---
+      342  
+
+⏺ Update(test-plans/phase-2-final.md)
+  ⎿  Added 114 lines, removed 1 line
+      386  
+      387  ## Changelog
+      388  
+      389 -_(none yet — populated at end of phase)_                      
+      389 +Entries are tagged `CL-N` so other sections can reference them
+          +.                                                             
+      390 +                                                              
+      391 +### CL-1 — Split middleware tests into HTTP-layer and function
+          +-layer (added + changed)                                      
+      392 +                                                              
+      393 +**What changed.** The initial plan had a single "Header-classi
+          +fication                                                      
+      394 +tests (observed via real endpoints)" subsection that exercised
+          + every                                                        
+      395 +middleware behavior — including malformed-header rejection — t
+          +hrough                                                        
+      396 +`app.request()`. Implementation revealed that Hono's Fetch-bas
+          +ed test                                                       
+      397 +transport applies RFC 7230 §3.2.4 OWS-stripping, which removes
+          + leading                                                      
+      398 +and trailing ASCII space, tab, and line feed from `X-Username`
+          + before                                                       
+      399 +the middleware ever sees the value (verified empirically with 
+          +a                                                             
+      400 +one-shot diagnostic test, then deleted). Every malformed-heade
+          +r test                                                        
+      401 +written against the HTTP layer therefore observed a *well-form
+          +ed* or                                                        
+      402 +*null* header instead of a malformed one.                     
+      403 +                                                              
+      404 +**How resolved.** Added a new test file                       
+      405 +`test/identity/middleware-unit.test.ts` that invokes the middl
+          +eware                                                         
+      406 +function directly against a fake `Context`, feeding it the exa
+          +ct                                                            
+      407 +strings the spec talks about. The HTTP-layer file now covers o
+          +nly what                                                      
+      408 +the transport can actually deliver. Added `design.md` Decision
+          + 10                                                           
+      409 +documenting the HTTP normalization and the two-layer test stra
+          +tegy.                                                         
+      410 +The Phase 2 spec text itself was **not** modified — its requir
+          +ement                                                         
+      411 +("the middleware SHALL reject malformed strings") is correct a
+          +s                                                             
+      412 +written; the scenarios are illustrative and their HTTP framing
+          + is                                                           
+      413 +clarified by the design note.                                 
+      414 +                                                              
+      415 +**Reason.** Truthfulness over wishful testing. A row that asse
+          +rts                                                           
+      416 +`POST /users` with `X-Username:   ` returns 400 is wrong again
+          +st this                                                       
+      417 +codebase (HTTP normalizes the header to empty → null user → 20
+          +1, not                                                        
+      418 +400). The function-level test is the real verification of the 
+          +contract.                                                     
+      419 +                                                              
+      420 +### CL-2 — Removed "absent vs whitespace-only diverge on same 
+          +endpoint" at HTTP level (removed + replaced)                  
+      421 +                                                              
+      422 +**What changed.** The initial plan asserted that absent and   
+      423 +whitespace-only `X-Username` produce different HTTP responses 
+          +on the                                                        
+      424 +same endpoint. At the HTTP layer they produce the **same** res
+          +ponse                                                         
+      425 +(both classify as null caller, status 200) because the transpo
+          +rt                                                            
+      426 +strips the whitespace.                                        
+      427 +                                                              
+      428 +**How resolved.** The divergence assertion moved to           
+      429 +`test/identity/divergence.test.ts` at the middleware-function 
+          +level,                                                        
+      430 +where the middleware receives the raw string and the divergenc
+          +e is                                                          
+      431 +real (absent → null caller; `"   "` → throws `ApiError`). Same
+      432 +contract, accurate test layer.                                
+      433 +                                                              
+      434 +**Reason.** As CL-1.                                          
+      435 +                                                              
+      436 +### CL-3 — Removed "malformed header rejection before route 40
+          +4" (removed)                                                  
+      437 +                                                              
+      438 +**What changed.** The initial plan included                   
+      439 +`POST /no-such-path` with `X-Username:   ` → 400 as a check th
+          +at                                                            
+      440 +middleware runs before route matching.                        
+      441 +                                                              
+      442 +**How resolved.** Removed. HTTP normalization makes the input 
+      443 +unreachable (the middleware receives an empty header → null ca
+          +ller →                                                        
+      444 +the request proceeds to the not-found handler → 404). The unkn
+          +own-route                                                     
+      445 +envelope test stays, but uses an absent header, which is a Pha
+          +se 1                                                          
+      446 +regression check rather than a Phase 2 middleware-order check.
+      447 +                                                              
+      448 +**Reason.** Test had no realizable input.                     
+      449 +                                                              
+      450 +### CL-4 — Added "registered header → /reset succeeds" (added)
+      451 +                                                              
+      452 +**What changed.** The initial plan's `/reset` exemption table 
+      453 +enumerated absent / empty / unregistered / whitespace headers 
+          +but not                                                       
+      454 +the registered case.                                          
+      455 +                                                              
+      456 +**How resolved.** Added one HTTP-layer test row to confirm the
+      457 +exemption holds even when the caller would otherwise classify 
+          +as                                                            
+      458 +registered. Also added two function-level tests confirming the
+      459 +exemption is method-specific: `POST /reset` is exempt, `GET /r
+          +eset`                                                         
+      460 +runs the middleware normally.                                 
+      461 +                                                              
+      462 +**Reason.** Completeness — the registered case is the most lik
+          +ely                                                           
+      463 +real-world `X-Username` value and should be exercised against 
+          +the                                                           
+      464 +exemption path.                                               
+      465 +                                                              
+      466 +### CL-5 — Added function-level confirmation of the `/reset` e
+          +xemption (added)                                              
+      467 +                                                              
+      468 +**What changed.** The initial plan's `/reset` exemption tests 
+          +were                                                          
+      469 +HTTP-level only. Per CL-1, that layer normalizes the malformed
+          +-header                                                       
+      470 +input the exemption is meant to protect against, so the HTTP t
+          +est                                                           
+      471 +proves less than it claims.                                   
+      472 +                                                              
+      473 +**How resolved.** Added two function-level tests in           
+      474 +`middleware-unit.test.ts`: one confirming the middleware short
+          +-circuits                                                     
+      475 +on `POST /reset` with a malformed header without throwing, and
+          + one                                                          
+      476 +confirming `GET /reset` is NOT exempt (the exemption is keyed 
+          +on                                                            
+      477 +method + path).                                               
+      478 +                                                              
+      479 +**Reason.** Defense in depth around an explicitly-exempt path.
+      480 +                                                              
+      481 +### CL-6 — Added "registered caller via different-case header"
+          + envelope test (added)                                        
+      482 +                                                              
+      483 +**What changed.** The initial plan's authorization-gate envelo
+          +pe tests                                                      
+      484 +covered the three caller states but not the casing-substitutio
+          +n                                                             
+      485 +property end-to-end through the gate.                         
+      486 +                                                              
+      487 +**How resolved.** Added one row to `test/auth/envelope.test.ts
+          +`:                                                            
+      488 +register `"BOB"`; request with `X-Username: bOb`; assert the g
+          +ate's                                                         
+      489 +response body shows `"BOB"` (registry casing).                
+      490 +                                                              
+      491 +**Reason.** The casing-substitution rule is the most surprisin
+          +g                                                             
+      492 +behavior of the integration; verifying it crosses the middlewa
+          +re →                                                          
+      493 +gate seam is worth a row.                                     
+      494 +                                                              
+      495 +### CL-7 — Forward-obligation tracker reflects the discharge (
+          +changed)                                                      
+      496 +                                                              
+      497 +**What changed.** Phase 2 row in the forward-obligation tracke
+          +r was                                                         
+      498 +`TBD` for "new state introduced" and "extension required" in t
+          +he                                                            
+      499 +initial plan; updated to record that the registry is the new s
+          +tate                                                          
+      500 +and `usersReset()` is the composed extension.                 
+      501 +                                                              
+      502 +**Reason.** Phase 2 actually shipped the extension.           
+
+⏺ Now 8.4 and 8.5 — validate and list.
+
+⏺ Bash(openspec validate add-phase-2-users --strict && echo --- && openspec
+      list)
+  ⎿  Change 'add-phase-2-users' is valid
+     ---
+     Changes:
+       add-phase-2-users     26/31 tasks   4m ago
+
+⏺ Update(openspec/changes/add-phase-2-users/tasks.md)
+  ⎿  Added 5 lines, removed 5 lines
+      47  
+      48  ## 8. Final test plan and Phase 2 close-out
+      49  
+      50 -- [ ] 8.1 Update `test-plans/phase-2-final.md` to reflect what 
+         -was actually tested (rows that diverge from the frozen `phase-2
+         --initial.md`)                                                  
+      51 -- [ ] 8.2 Add to the `## Changelog` section of `phase-2-final.m
+         -d`: for each row added/removed/changed since the initial plan, 
+         -one bullet `+/- <description> — <reason>`                      
+      52 -- [ ] 8.3 Run `check_spec_drift` via openlore MCP and reconcile
+         - any drift before archiving (per CLAUDE.md)                    
+      53 -- [ ] 8.4 Run `openspec validate add-phase-2-users --strict` an
+         -d confirm no errors                                            
+      54 -- [ ] 8.5 Run `openspec list` and confirm the change appears as
+         - completable                                                   
+      50 +- [x] 8.1 Update `test-plans/phase-2-final.md` to reflect what 
+         +was actually tested (rows that diverge from the frozen `phase-2
+         +-initial.md`)                                                  
+      51 +- [x] 8.2 Add to the `## Changelog` section of `phase-2-final.m
+         +d`: for each row added/removed/changed since the initial plan, 
+         +one bullet `+/- <description> — <reason>`                      
+      52 +- [x] 8.3 Run `check_spec_drift` via openlore MCP and reconcile
+         + any drift before archiving (per CLAUDE.md)                    
+      53 +- [x] 8.4 Run `openspec validate add-phase-2-users --strict` an
+         +d confirm no errors                                            
+      54 +- [x] 8.5 Run `openspec list` and confirm the change appears as
+         + completable                                                   
+
+⏺ Bash(openspec list && echo --- && npm test 2>&1 | tail -8)
+  ⎿  Changes:
+       add-phase-2-users     ✓ Complete    just now
+     ---
+     … +8 lines (ctrl+o to expand)
+
+⏺ Implementation Complete
+
+  Change: add-phase-2-users
+  Schema: spec-driven
+  Progress: 31/31 tasks complete ✓ — openspec list shows the change as ✓ 
+  Complete
+  Tests: 162/162 pass on a clean rebuild (rm -rf dist && npx tsc && node --test 
+  "dist/**/*.test.js")
+  Validation: openspec validate add-phase-2-users --strict → valid
+  Drift: check_spec_drift → clean (zero gaps, stale, uncovered, or orphaned
+  across the analyzed files; the re-analyzed graph picked up the new users,
+  identity, and auth domains)
+
+  What landed
+
+  src/users/store.ts                  ── case-preserving map + case-insensitive
+  membership
+  src/users/handlers.ts               ── POST/GET /users with 4-step validation
+  order
+  src/identity/caller.ts              ── Caller discriminated union +
+  AppVariables typing
+  src/identity/middleware.ts          ── global classifier; /reset short-circuit
+  src/auth/require-registered.ts     ── 403 gate; returns {username} from
+  registered caller
+  src/reset/handler.ts               ── extended: usersReset() composed into
+  resetAll()
+  src/app.ts                         ── mounts middleware, wires /users routes,
+  typed Hono
+
+  Tests across test/users/, test/identity/ (HTTP-layer + function-layer +
+  exposure + divergence), test/auth/, test/reset/, and
+  test/app.integration.test.ts.
+
+  One discovery worth flagging
+
+  RFC 7230 OWS-stripping at the HTTP transport layer normalizes leading/trailing
+   space, tab, and line feed out of X-Username before the middleware ever sees
+  them. The spec's "malformed header → 400" contract still holds — the
+  middleware does reject malformed strings — but for ASCII whitespace that path
+  is unreachable through HTTP. Resolution:
+
+  - Added design.md Decision 10 documenting the normalization.
+  - Split middleware tests into HTTP-layer (middleware.test.ts, covers what HTTP
+   delivers) and function-layer (middleware-unit.test.ts, calls the middleware
+  with raw strings via a fake Context).
+  - The Phase 2 spec text was not changed — requirements are correct as written;
+   scenarios are illustrative.
+  - Documented as CL-1 through CL-7 in test-plans/phase-2-final.md so the
+  deviation from the frozen initial plan is auditable.
+
+  You can archive with /opsx:archive add-phase-2-users when ready.
+
+✻ Sautéed for 8m 48s
+
+※ recap: We're implementing Phase 2 of the Collaborative Taxon Tree Server (user registry, identity middleware, authorization gate); all 31 tasks are done, 162/162 tests pass, and the change validates clean. Next action: archive with /opsx:archive add-phase-2-users. (disable recaps in /config)
+
+❯  /opsx:archive add-phase-2-users                                              
+
+⏺ Skill(opsx:archive)
+  ⎿  Successfully loaded skill
+
+⏺ Bash(openspec status --change add-phase-2-users --json && echo --- && grep -c
+      "^- \[ \]" openspec/changes/add-phase-2-users/tasks.md && echo "incomplete
+       tasks ^" &&…)
+  ⎿  Error: Exit code 1
+     {
+       "changeName": "add-phase-2-users",
+       "schemaName": "spec-driven",
+       "isComplete": true,
+       "applyRequires": [
+         "tasks"
+       ],
+       "artifacts": [
+         {
+     … +23 lines (ctrl+o to expand)
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ All artifacts done, isComplete: true, 0 incomplete tasks. Now checking delta
+  specs vs main specs.
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Three brand-new capabilities are being added: user-registry,
+  identity-resolution, authorization-gate. None exist in openspec/specs/ yet,
+  and all deltas are pure ADDED Requirements — sync would create three new spec
+  files.
+
+⏺ User answered Claude's questions:
+  ⎿  · Sync the three new capability specs (user-registry, identity-resolution, 
+     authorization-gate) into openspec/specs/ before archiving? → Sync now 
+     (Recommended)
+
+⏺ Agent(Sync Phase 2 specs)
+  ⎿  Done (12 tool uses · 43.1k tokens · 2m 18s)
+  (ctrl+o to expand)
+⏺ Bash(ls openspec/specs/ && echo --- && mkdir -p openspec/changes/archive && ls
+       openspec/changes/archive/ | grep add-phase-2-users && echo "ARCHIVE
+      EXISTS — will fail…)
+  ⎿  authorization-gate
+     error-model
+     identity-resolution
+     … +6 lines (ctrl+o to expand)
+
+⏺ Bash(mv openspec/changes/add-phase-2-users
+      openspec/changes/archive/2026-05-25-add-phase-2-users && openspec list &&
+      echo --- && ls openspec/changes/archive/)
+  ⎿  No active changes found.
+     ---
+     2026-05-25-add-phase-1-scaffold
+     2026-05-25-add-phase-2-users
+
+⏺ Archive Complete
+
+  Change: add-phase-2-users
+  Schema: spec-driven
+  Archived to: openspec/changes/archive/2026-05-25-add-phase-2-users/
+  Specs: ✓ Synced — 3 new living specs created at
+  openspec/specs/{user-registry,identity-resolution,authorization-gate}/spec.md;
+   the 4 Phase 1 specs were not touched. openspec validate --specs --strict → 7
+  passed, 0 failed.
+
+  All artifacts complete. All 31 tasks complete. openspec list shows no active
+  changes.
+
+  Phase 2 done. When you're ready for Phase 3, the forward obligations to
+  remember are:
+  - Every new write endpoint MUST call requireRegistered(c) and ship two 403
+  tests (null + unregistered).
+  - Every new in-memory state MUST extend resetAll() and ship a reset-clears-it
+  test.
+  - Both obligations are now permanent requirements in the living specs.
+
+✻ Cooked for 3m 25s
+
+❯ /usage 
+  ⎿  Settings dialog dismissed

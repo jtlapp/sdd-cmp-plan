@@ -1,0 +1,2026 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-openspec-openlore
+
+❯ /opsx:explore                                                                 
+
+⏺ I'm in explore mode — a thinking partner, not an implementer. Let me orient
+  first to see where things stand before we pick a thread.
+
+⏺ Bash(openspec list --json 2>/dev/null || openspec list 2>/dev/null || echo
+      "openspec not on PATH or no changes")
+  ⎿  {
+       "changes": []
+     }
+
+  Listed 3 directories (ctrl+o to expand)
+
+⏺ Fresh slate — no active changes, no specs yet, just PRDs and a Phase 1 brief.
+  Let me peek at what's actually being built before I open threads.
+
+  Read 3 files (ctrl+o to expand)
+
+⏺ Sitting at a clean Phase 1 starting line. Let me sketch the lay of the land
+  and float a few threads — pick whatever's most useful, or steer somewhere else
+   entirely.
+
+  Where we are
+
+  ┌───────────────────────────────────────────────────────────────┐
+  │  Phase 1 scope (PRD §2, §3.4, §4 format-only, §15.6, §15 reset) │
+  ├───────────────────────────────────────────────────────────────┤
+  │  • Node 24 + TS + Hono skeleton + health endpoint               │
+  │  • POST /reset (works against empty registry, no auth gate)     │
+  │  • Error envelope helper + status mapping (used by all phases)  │
+  │  • Taxon-name validator (§3.4)                                  │
+  │  • Username validator (§4, format-only — registry is Phase 2)   │
+  │  • node:test runner wired up                                    │
+  │  • test-plans/phase-1-initial.md (frozen) + phase-1-final.md    │
+  ├───────────────────────────────────────────────────────────────┤
+  │  Deferred:                                                      │
+  │    Registry + X-Username middleware → P2                        │
+  │    Taxa storage / IDs / reads → P3                              │
+  │    Write serialization → P4                                     │
+  └───────────────────────────────────────────────────────────────┘
+
+  No OpenSpec change yet, no src/, no package.json. We are at the moment before
+  anyone has tried to turn this brief into a spec.
+
+  Threads worth pulling
+
+  1. The "validation vs forbidden" hairline crack (§4)
+
+  This phrase from the brief — "surfacing the validation-vs-forbidden 
+  distinction" — is doing more work than it looks. The PRD draws three distinct
+  cases:
+
+     incoming X-Username:
+     ┌──────────────────┬──────────────────┬─────────────────────┐
+     │ absent / empty   │ present, well-   │ present, malformed  │
+     │                  │ formed, unreg.   │ (ws-only, padded)   │
+     ├──────────────────┼──────────────────┼─────────────────────┤
+     │  null user       │  forbidden (403) │  validation_error   │
+     │  reads allowed   │  unregistered    │  (400)              │
+     │  writes blocked  │                  │  NOT silently null  │
+     └──────────────────┴──────────────────┴─────────────────────┘
+                                ↑
+                    Phase 2 boundary (registry)
+
+  Phase 1 ships only the format validator — it can't know "unregistered" yet.
+  The interesting question is: what shape does the validator have so Phase 2 can
+   layer the registry check on cleanly?
+
+  A few sketchable options:
+
+  A)  validateUsername(s: string): { ok: true } | { ok: false, reason: ... }
+      // pure format check; middleware composes registry check separately
+
+  B)  parseUsername(header: string|undefined):
+         { kind: "null" } | { kind: "malformed", reason } | { kind: "named",
+  name }
+      // validator owns the "absent vs malformed vs candidate" split
+
+  C)  classes / discriminated union with explicit "candidate" state
+      that Phase 2's middleware promotes to "registered"
+
+  (B) is more opinionated and pulls the trichotomy into Phase 1 even though only
+   two of the three cases produce validator-visible output. (A) is minimal but
+  pushes the trichotomy into the Phase 2 middleware. There's a real choice here
+  about where the spec lives.
+
+  2. Case-insensitive comparison — predicate or normalizer?
+
+  §3.4 and §4 both say "compared case-insensitively." Two paths:
+
+     a)  normalize(s) → string    (e.g. toLowerCase)
+         used wherever uniqueness/equality is checked
+
+     b)  equalsCI(a, b) → boolean
+         no normalized form leaks out
+
+  (a) makes Phase 3's per-tree uniqueness check trivially a Set lookup but
+  commits to a canonical form being storable. (b) keeps the original casing the
+  only form anywhere in the system, but makes uniqueness checks an O(n) scan
+  unless you build a side index.
+
+  Worth pinning before Phase 3, but the validator's surface (does it expose a
+  normalizer? equality? both?) gets decided now.
+
+  3. The error helper — class, function, or middleware?
+
+  §15.6 is rigid: { error: { code, message, details? } }, with a fixed
+  code→status mapping. Every later phase must emit through this. Three flavors:
+
+     throw new ApiError("conflict", "in-tree name clash", {...})
+     → caught by Hono onError → emitted as envelope
+
+     return respondError(c, "validation_error", "...")
+     → explicit per-callsite, no throwing
+
+     c.json(err("conflict", "...", {...}), 409)
+     → builder + manual status
+
+  The choice ripples through every endpoint in P3–P6. Throwing is ergonomic in
+  deep code paths (validators returning into handlers), but Hono's middleware
+  story changes how you'd wire it. Worth picking before we have callsites.
+
+  4. The reset endpoint at Phase 1 is almost a no-op — but it's a contract
+
+  ▎ "implement it as a true full reset so that, as each later phase adds state, 
+  ▎ that state falls under reset's fresh-start guarantee"
+
+  That's an extensibility statement, not a behavioral one. The shape is: a
+  single resetAll() that each phase contributes to. Either a registry of
+  reset-handlers, or a single function that imports each subsystem's reset. Tiny
+   architectural decision, but compounding — by Phase 7 you have ~5 subsystems
+  to clear.
+
+  5. Initial test plan — granularity?
+
+  The brief is explicit that the initial plan is frozen the moment
+  implementation starts, with a separate final plan that diffs from it. The
+  value of the artifact is the anticipated-vs-discovered delta. That only works
+  if the initial plan is specific enough to be wrong about.
+
+     Too coarse: "validate taxon names per §3.4"        ← can't be wrong
+     Too fine:   one bullet per assertion line          ← brittle
+     Sweet spot: per-rule × per-disposition matrix
+                 (e.g. "empty name → validation_error",
+                       "leading whitespace → validation_error",
+                       "case-variant equality → equal",
+                       "trailing tab → rejected" …)
+
+  Worth deciding what "specific enough" looks like before writing it.
+
+  6. Subtle PRD bit: §3.4 says the validator rule and §15.6 says the error code,
+   but nothing says the validator returns the §15.6 code
+
+  The natural mapping is obvious — but is the validator in the business of
+  producing §15.6 codes, or just producing yes/no/why, and the error helper maps
+   that to a code? Coupling decision that determines whether the validators are
+  reusable in a non-HTTP context.
+
+  ---
+  Anything here resonate, or is there something else nagging you about Phase 1?
+  I'd say (1) and (3) are the highest-leverage choices because they shape every
+  subsequent phase's surface area — but you might also just want to talk about
+  something I haven't surfaced.
+
+✻ Churned for 1m 22s
+
+※ recap: We're starting Phase 1 of the Collaborative Taxon Tree Server (scaffold, error envelope, name/username validators, reset, test runner) and exploring design choices before writing a spec. Next: pick which thread to dig into — validator API shape or error helper style are highest-leverage. (disable recaps in /config)
+
+❯ For 1, use (A). For 2, use (b). For 3, I prefer ApiError. For 4, we'll        
+  gradually be adding to what it does. For 5, sweet spot. For 6, the validator  
+  does not produce error codes, as that's only done on mapping to the HTTP      
+  response.                                                                     
+
+⏺ Locking those in. Here's what the surface looks like with those choices, plus
+  a few smaller things they leave open:
+
+  Decision summary
+
+  ┌───────┬────────────────────────────────────────────────────────────┐
+  │  #1   │ validateUsername(s): { ok: true } | { ok: false, reason }   │
+  │       │ validateTaxonName same shape                                 │
+  │       │ middleware (P2) layers registry check on top                 │
+  ├───────┼────────────────────────────────────────────────────────────┤
+  │  #2   │ equalsCI(a, b) → boolean                                     │
+  │       │ no normalized form stored or exposed                         │
+  ├───────┼────────────────────────────────────────────────────────────┤
+  │  #3   │ class ApiError extends Error { code, message, details? }    │
+  │       │ throw → Hono onError → §15.6 envelope                        │
+  ├───────┼────────────────────────────────────────────────────────────┤
+  │  #4   │ reset extensibility — TBD pattern, but P1 sets the seed     │
+  ├───────┼────────────────────────────────────────────────────────────┤
+  │  #5   │ test plan: per-rule × per-disposition rows                  │
+  ├───────┼────────────────────────────────────────────────────────────┤
+  │  #6   │ validators return reason strings; throw site maps to code   │
+  └───────┴────────────────────────────────────────────────────────────┘
+
+  And the rough flow these imply:
+
+     HTTP handler
+         │
+         ▼  validateTaxonName(input)
+     ┌───────────────────────────────┐
+     │ { ok: false, reason: "..." }  │ ──▶ throw new
+  ApiError("validation_error", reason)
+     └───────────────────────────────┘                       │
+         │ ok: true                                          │
+         ▼                                                   ▼
+     (proceed)                            Hono onError → §15.6 envelope + 400
+
+  Clean. The validator never speaks HTTP, never speaks §15.6 vocabulary. The
+  throw site is the seam.
+
+  Smaller things now in the open
+
+  These mostly fall out of the choices you just made:
+
+  a) Shape of reason
+
+  reason is the only thing the validator says about failure. It has three
+  readers:
+  - humans (eventually shown in message)
+  - tests (assertions key off it — and your "sweet spot" granularity needs
+  distinguishable values)
+  - future code that might want to react to specific failure modes (probably
+  never, but…)
+
+  Three flavors:
+
+   plain string          "name must not begin or end with whitespace"
+   tag + string          { tag: "leading-whitespace", message: "..." }
+   tag only              "leading-whitespace"   (test-friendly, message
+  reconstructed)
+
+  The middle one is most flexible. The tag-only is most test-friendly but pushes
+   message construction into the throw site. Tag + string lets you assert on tag
+   in tests while letting the throw site decide whether to surface the message
+  verbatim or wrap it.
+
+  b) Reset extensibility pattern
+
+  Three shapes, increasing in commitment:
+
+   1. Each subsystem exports `reset()`. P1's /reset handler imports
+      each one and calls them in order. Phase N adds an import line.
+
+   2. resetRegistry: a module where subsystems call register(fn) at
+      module-load. /reset iterates the registry. No imports needed.
+
+   3. Single state-owning module that exposes mutate operations and
+      a single `clearAll()`. All in-memory state lives in one place.
+
+  (1) is dumbest and works. (2) is decoupled but spooky (registration is a side
+  effect of import). (3) fights the natural per-phase encapsulation. I'd default
+   to (1) unless there's a reason not to — but it's your call.
+
+  c) equalsCI placement
+
+  Both validators use it (well, the comparison rule applies to both). Three
+  obvious homes:
+
+   src/format/compare.ts          ← shared utility
+   src/format/taxon-name.ts       (and re-exported from username.ts)
+   inside each validator module   (duplicated)
+
+  The first is the only one that doesn't fight itself.
+
+  d) Non-ApiError throws → 500
+
+  onError should also catch anything that isn't an ApiError and emit the §15.6
+  envelope with code "internal_error" (or similar — not listed in §15.6, so a
+  new code) at 500. Otherwise the envelope contract leaks at unexpected throws.
+  Worth mentioning in the spec since it's the system invariant, not just the
+  happy path.
+
+  e) Health endpoint name
+
+  The brief just says "a health/version endpoint." GET /health? GET / returning
+  { ok: true, version: "0.1.0" }? Trivial but the spec should name it.
+
+  f) Test-plan markdown shape
+
+  The "sweet spot" granularity is going to be a table-shaped artifact. Worth
+  deciding the column convention now since it'll be reused across 6 phases:
+
+   | Rule           | Input             | Expected            |
+   |----------------|-------------------|---------------------|
+   | non-empty      | ""                | { ok: false, ... }  |
+   | no lead ws     | " foo"            | { ok: false, ... }  |
+   | case-insens.   | equalsCI("A","a") | true                |
+   | …
+
+  Or one section per rule with prose. Up to you, but the format Phase 1 chooses
+  is the template every other phase inherits.
+
+  ---
+  So the open list before this is propose-ready is roughly: a, b, c, d, e, f
+  (most are 30-second calls). And then there's the bigger meta-question of the
+  OpenSpec change name and capability shape — does this land as one change with
+  one spec, or split (e.g. format-validators, error-model, reset-endpoint as
+  separate capabilities)? OpenSpec convention is per-capability specs, so this
+  matters for the archive shape later.
+
+  Want to knock the small ones out, or jump to thinking about the
+  capability/spec layout?
+
+✻ Churned for 1m 18s
+
+❯ I'm fine with any of the implementation choices, so just choose yourself.     
+  Let's use per-capability specs.                                               
+
+⏺ Locked in. Here's what I'm going with on the smalls:
+
+   a) reason shape  →  { tag, message }
+                       tests assert on tag; throw site decides what humans see
+
+   b) reset pattern →  (1) each subsystem exports reset(); /reset handler
+                       composes them. Adding state in phase N is one line.
+
+   c) equalsCI      →  src/format/compare.ts, imported by both validators
+
+   d) unknowns      →  onError catches non-ApiError → emits envelope with
+                       code "internal_error" at 500. Contract holds always.
+
+   e) health        →  GET /health → { status: "ok", version }
+
+   f) plan shape    →  table:  Rule | Input | Expected | Notes
+                       becomes the Phase 2..N template
+
+  Capability split — proposed shape
+
+  Four specs. The toolchain/skeleton stuff doesn't get its own spec — it's
+  already pinned by toolchain-supplement.md and the rest is implementation, not
+  behavior.
+
+  openspec/specs/
+    ├── error-model/spec.md          §15.6 envelope, ApiError class,
+    │                                 code→status mapping, onError catchall
+    │
+    ├── taxon-name-format/spec.md    §3.4 rules + case-insensitive
+    │                                 comparison applied to taxon names
+    │
+    ├── username-format/spec.md      §4 format rules + case-insensitive
+    │                                 comparison applied to usernames
+    │                                 (registry layer is P2's concern)
+    │
+    └── state-reset/spec.md          /reset endpoint contract:
+                                      fresh-boot equivalence, no auth gate,
+                                      extensibility pattern (subsystem-exports)
+
+  Why split the two validators rather than fold them into one format-validators
+  spec:
+
+  - they describe rules over different entities (taxa vs users)
+  - they'll evolve independently — future phases add taxon-name uniqueness,
+  ownership-on-rename, etc. that have nothing to do with usernames
+  - the shared rule (case-insensitive comparison) is a one-line reference in
+  each, not a structural concern
+
+  The equalsCI utility is implementation, not spec — both specs just say
+  "comparison is case-insensitive."
+
+  What the change proposal looks like
+
+  openspec/changes/add-phase-1-scaffold/
+    ├── proposal.md      why, what, scope, deferred
+    ├── design.md        the six small decisions, the validator surface,
+    │                    the ApiError/onError seam, reset composition pattern
+    ├── tasks.md         the implementation checklist
+    └── specs/
+        ├── error-model/spec.md          (ADDED — new capability)
+        ├── taxon-name-format/spec.md    (ADDED — new capability)
+        ├── username-format/spec.md      (ADDED — new capability)
+        └── state-reset/spec.md          (ADDED — new capability)
+
+  All four specs are net-new on this change (nothing exists in specs/ yet). At
+  archive, they move into openspec/specs/ as the living spec.
+
+  One thing worth naming explicitly
+
+  The state-reset spec has a clause that's almost a meta-rule for every later
+  phase:
+
+  ▎ Every phase that introduces new in-memory state MUST extend /reset to clear 
+  ▎ that state, and MUST verify in tests that /reset returns to fresh-boot 
+  ▎ equivalence.
+
+  That's a forward obligation. It's stated in §15 of the PRD ("every phase that
+  introduces new in-memory state must keep reset clearing that state") and in
+  CLAUDE.md ("Every phase that adds state confirms reset clears that state").
+  Worth landing the rule in this spec since later changes will be required to
+  satisfy it.
+
+  ---
+  Shall I draft the proposal + design + tasks + four spec files? Or do you want
+  to talk through any of these first — e.g. the state-reset spec's forward
+  obligation, or the design.md contents?
+
+✻ Sautéed for 58s
+
+❯ draft the proposal                                                            
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Bash(openspec --help 2>&1 | head -50)
+  ⎿  Usage: openspec [options] [command]
+
+     AI-native system for spec-driven development
+     … +34 lines (ctrl+o to expand)
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Bash(openspec instructions proposal 2>&1 | head -100)
+  ⎿  - Generating instructions...
+
+     ✖ Error: No changes found. Create one with: openspec new change <name>
+
+⏺ Bash(openspec instructions design 2>&1 | head -100)
+  ⎿  - Generating instructions...
+
+     ✖ Error: No changes found. Create one with: openspec new change <name>
+
+⏺ Bash(openspec instructions tasks 2>&1 | head -100)
+  ⎿  - Generating instructions...
+
+     ✖ Error: No changes found. Create one with: openspec new change <name>
+
+⏺ Bash(openspec instructions spec 2>&1 | head -100)
+  ⎿  - Generating instructions...
+
+     ✖ Error: No changes found. Create one with: openspec new change <name>
+
+⏺ Bash(openspec new --help 2>&1)
+  ⎿  Usage: openspec new [options] [command]
+
+     Create new items
+     … +7 lines (ctrl+o to expand)
+
+⏺ Bash(openspec schema 2>&1 | head -20 && echo "---" && openspec schemas 2>&1 |
+      head -20)
+  ⎿  Usage: openspec schema [options] [command]
+
+     Manage workflow schemas [experimental]
+     … +19 lines (ctrl+o to expand)
+⏺ Bash(openspec templates 2>&1 | head -40)
+  ⎿  - Loading templates...
+     Schema: spec-driven
+     Source: package
+     … +13 lines (ctrl+o to expand)
+
+  Read 4 files (ctrl+o to expand)
+
+⏺ Bash(openspec new change --help 2>&1)
+  ⎿  Usage: openspec new change [options] <name>
+
+     Create a new change directory
+     … +5 lines (ctrl+o to expand)
+
+⏺ Bash(openspec new change add-phase-1-scaffold --description "Phase 1: scaffold
+       the server, error model, format validators, and reset endpoint")
+  ⎿  - Creating change 'add-phase-1-scaffold'...
+     ✔ Created change 'add-phase-1-scaffold' at openspec/changes/add-phase-
+     1-scaffold/ (schema: spec-driven)
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ Bash(openspec instructions proposal --change add-phase-1-scaffold 2>&1 | head
+      -200)
+  ⎿  - Generating instructions...
+     <artifact id="proposal" change="add-phase-1-scaffold" schema="spec-dri
+     ven">
+     … +66 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions specs --change add-phase-1-scaffold 2>&1 | head
+      -80)
+  ⎿  - Generating instructions...
+     <artifact id="specs" change="add-phase-1-scaffold" schema="spec-driven
+     ">
+     … +76 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions design --change add-phase-1-scaffold 2>&1 | head
+      -60)
+  ⎿  - Generating instructions...
+     <artifact id="design" change="add-phase-1-scaffold" schema="spec-drive
+     n">
+     … +56 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions tasks --change add-phase-1-scaffold 2>&1 | head
+      -60)
+  ⎿  - Generating instructions...
+     <artifact id="tasks" change="add-phase-1-scaffold" schema="spec-driven
+     ">
+     … +57 lines (ctrl+o to expand)
+⏺ Write(openspec/changes/add-phase-1-scaffold/proposal.md)
+  ⎿  Wrote 83 lines to openspec/changes/add-phase-1-scaffold/proposal.md
+      2 ## Why
+      3 Phase 1 of the Collaborative Taxon Tree Server stands up the cros
+      4 machinery every later phase reuses: the HTTP/error surface, the t
+        wo pure
+        tract. validators (taxon name and username), and the `/reset` con
+      6 Nailing these contracts now prevents drift in Phases 2–7, where t
+      7 taxa storage, proposals, and review actions all depend on a stabl
+        e error
+        ly returnsa stable validator surface, and a `/reset` that genuine
+      9 the server to fresh-boot state.
+     … +113 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-1-scaffold/design.md)
+  ⎿  Wrote 231 lines to openspec/changes/add-phase-1-scaffold/design.md
+       2 ## Context
+         r (see1 is the first phase of the Collaborative Taxon Tree Serve
+       4 `prd/phase-1-scaffold.md` and `prd/prd.md` §§2, 3.4, 4, 15, 15.6
+       5 repository currently contains only the PRD, the toolchain supple
+         ment, a
+         hanges/`,sconfig.json`, and empty `openspec/specs/`, `openspec/c
+         son`, not-plans/` directories. There is no `src/`, no `package.j
+       8 running server.
+      10 The deliverables for Phase 1 are cross-cutting: the error envelo
+         pe, the
+     … +297 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-1-scaffold/specs/error-model/spec.md)
+  ⎿  Wrote 132 lines to
+     openspec/changes/add-phase-1-scaffold/specs/error-model/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: Error responses use a single JSON envelope
+       5 Every error response from the server SHALL have a JSON body of t
+         he form
+          <object> } }`.code": <string>, "message": <string>, "details"?:
+       7 The `code` SHALL be one of the values enumerated in the
+          `message`e vocabulary and HTTP status mapping* requirement. The
+       9 SHALL be a human-readable string identifying the failure. The op
+      10 `details` field, when present, SHALL be a JSON object carrying a
+         dditional
+     … +160 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-1-scaffold/specs/taxon-name-format/spec.md)
+  ⎿  Wrote 109 lines to
+     openspec/changes/add-phase-1-scaffold/specs/taxon-name-format/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: Taxon-name format rules
+       4 
+       5 A taxon name SHALL be a string that:
+       6 
+       7 1. is **non-empty**, and
+       8 2. **neither begins nor ends with whitespace**.
+       9 
+      10 The system SHALL provide a pure function — referred to below as 
+         the
+     … +124 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-1-scaffold/specs/username-format/spec.md)
+  ⎿  Wrote 106 lines to
+     openspec/changes/add-phase-1-scaffold/specs/username-format/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: Username format rules
+       4 
+       5 A username SHALL be a string that:
+       6 
+       7 1. is **non-empty**, and
+       8 2. **neither begins nor ends with whitespace**.
+       9 
+      10 The system SHALL provide a pure function — referred to below as 
+         the
+     … +115 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-1-scaffold/specs/state-reset/spec.md)
+  ⎿  Wrote 149 lines to
+     openspec/changes/add-phase-1-scaffold/specs/state-reset/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: POST /reset restores fresh-boot state
+       4 
+         lhe server SHALL expose a `POST /reset` endpoint that returns al
+       6 in-memory state to the state the server would have immediately a
+         fter a
+         ontain:tart. After a successful `POST /reset` the server SHALL c
+       8 
+       9 - no taxa and no edges,
+      10 - no proposals and no derived changes,
+     … +168 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/add-phase-1-scaffold/tasks.md)
+  ⎿  Wrote 66 lines to openspec/changes/add-phase-1-scaffold/tasks.md
+      2 ## 1. Project scaffold
+      3 - [ ] 1.1 Add `package.json` with `"type": "module"`, dev deps `t
+        ono`cript` (5.x) and `@types/node` (Node 24 line), runtime dep `h
+      4 - [ ] 1.2 Verify the shared `tsconfig.json` at repo root is the o
+      5 - [ ] 1.3 Create the source layout: `src/` with placeholder `inde
+        x.ts`, `test/` with placeholder `smoke.test.ts`, ensure `dist/` i
+      6 - [ ] 1.4 Document the single build/test command in the repo READ
+        ME or top-level docs: `npx tsc && node --test "dist/**/*.test.js"
+      7 - [ ] 1.5 Smoke-test the toolchain: introduce a deliberate type e
+        rror, confirm `npx tsc` fails with no emit; revert; confirm c
+     … +119 lines (ctrl+o to expand)
+⏺ Bash(openspec validate add-phase-1-scaffold --strict 2>&1)
+  ⎿  Error: Exit code 1
+     Change 'add-phase-1-scaffold' has issues
+     ✗ [ERROR] username-format/spec.md: ADDED "Validation distinguishes 
+     malformed from absent" must contain SHALL or MUST
+     Next steps:
+       - Ensure change has deltas in specs/: use headers ## 
+     ADDED/MODIFIED/REMOVED/RENAMED Requirements
+       - Each requirement MUST include at least one #### Scenario: block
+       - Debug parsed deltas: openspec change show <id> --json --deltas-only
+
+⏺ Update(openspec/changes/add-phase-1-scaffold/specs/username-format/spec.md)
+  ⎿  Added 12 lines, removed 9 lines
+      49  - **WHEN** the validator is called with `"alice smith"`
+      50  - **THEN** it returns `{ ok: true }`
+      51  
+      52 -### Requirement: Validation distinguishes malformed from absent
+      52 +### Requirement: Validation MUST distinguish malformed from abs
+         +ent                                                            
+      53  
+      54 -The username validator operates on a **string** input. The deci
+         -sion of                                                        
+      55 -whether an incoming request carries an absent / empty `X-Userna
+         -me` header                                                     
+      56 -(denoting the null user, per PRD §4) versus a present-but-malfo
+         -rmed                                                           
+      57 -username is a **distinct concern** owned by the HTTP middleware
+      58 -(introduced in Phase 2). The validator itself SHALL apply the f
+         -ormat                                                          
+      59 -rules to whatever string is passed to it; a present-but-malform
+         -ed                                                             
+      60 -username SHALL surface as a validation failure and SHALL NOT be
+         - silently                                                      
+      61 -coerced to the null user by the validator.                     
+      54 +The username validator SHALL operate on a **string** input. It 
+         +SHALL                                                          
+      55 +apply the format rules to whatever string is passed to it, and 
+         +a                                                              
+      56 +present-but-malformed username SHALL surface as a validation fa
+         +ilure.                                                         
+      57 +The validator SHALL NOT silently coerce a malformed username in
+         +to a                                                           
+      58 +"null user" value of any kind.                                 
+      59  
+      60 +The decision of whether an incoming request carries an absent /
+         + empty                                                         
+      61 +`X-Username` header (denoting the null user, per PRD §4) versus
+         + a                                                             
+      62 +present-but-malformed username is a distinct concern owned by t
+         +he HTTP                                                        
+      63 +middleware (introduced in Phase 2) and MUST NOT be made by this
+      64 +capability's validator.                                        
+      65 +                                                               
+      66  This requirement establishes the boundary between this capabili
+          ty
+      67  (format) and the future Phase 2 capability (registry membership
+           and
+      68  header parsing). Documenting the boundary now prevents implemen
+          tations
+
+⏺ Bash(openspec validate add-phase-1-scaffold --strict 2>&1)
+  ⎿  Change 'add-phase-1-scaffold' is valid
+
+⏺ Bash(openspec show add-phase-1-scaffold 2>&1 | head -80)
+  ⎿  Warning: Ignoring flags not applicable to change: scenarios
+     ## Why
+     … +77 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Drafted and validated. Here's what landed:
+
+  openspec/changes/add-phase-1-scaffold/
+  ├── .openspec.yaml
+  ├── README.md
+  ├── proposal.md            why, what changes, 4 new capabilities, impact
+  ├── design.md              the 8 decisions, alternatives, risks, open
+  questions
+  ├── tasks.md               10 task groups, all phases of implementation
+  └── specs/
+      ├── error-model/spec.md         4 requirements · envelope, codes,
+  ApiError, global handler
+      ├── taxon-name-format/spec.md   2 requirements · §3.4 rules, equalsCI
+      ├── username-format/spec.md     3 requirements · §4 rules,
+  malformed-vs-absent, equalsCI
+      └── state-reset/spec.md         5 requirements · contract, exemption,
+  serialization,
+                                                       forward obligation, error
+   envelope
+
+  openspec validate add-phase-1-scaffold --strict → valid.
+
+  A few things worth noting before you exit explore mode:
+
+  1. internal_error is a §15.6 extension. PRD §15.6 names only four codes; the
+  spec adds internal_error for the unspecified 500 path so the envelope contract
+   holds unconditionally. Called out in design.md and in the error-model spec's
+  code table.
+  2. equalsCI is shared by both validator capabilities. The taxon-name-format
+  spec defines it; the username-format spec uses a [[taxon-name-format]]
+  wiki-link to reference it. If you'd rather have a dedicated comparison
+  capability or duplicate the spec text, that's a small refactor.
+  3. state-reset carries a forward obligation binding every later phase.
+  Phase 2..N each need a one-line composition into resetAll() and a "reset
+  clears my state" test. Captured as a normative requirement so future drift
+  checks flag misses.
+  4. Tasks step 2.2 is the freeze gate for test-plans/phase-1-initial.md —
+  commit it before starting any implementation. The final plan diffs against it.
+
+  Want to keep exploring (e.g. tightening any spec, splitting equalsCI into its
+  own capability), or are we ready to exit explore mode and start applying?
+
+✻ Sautéed for 6m 5s
+
+❯ Write the initial test plan for phase-1 to `test-plans/phase-1-initial.md` —  
+  what you                                                                      
+  believe needs testing for this phase and why, derived from the spec before    
+  you write                                                                     
+  code. This file will be frozen.                                               
+
+⏺ I'll derive the test plan from the four spec files we just wrote, organized
+  capability-by-capability with a "Why" preamble per section and Rule | Input | 
+  Expected | Notes rows. Boundary cases the spec implies but doesn't enumerate
+  are pulled in explicitly.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Write(test-plans/phase-1-initial.md)
+  ⎿  Wrote 291 lines to test-plans/phase-1-initial.md
+       2 # Phase 1 — Initial test plan (frozen)
+       3 > **Status: frozen.** This plan was written from the OpenSpec ch
+       4 > `add-phase-1-scaffold` (specs: `error-model`, `taxon-name-form
+         at`,
+         gan and ise-format`, `state-reset`) **before** implementation be
+       6 > not edited afterward. The companion file `phase-1-final.md` su
+       7 > this one and carries a `## Changelog` listing every row added,
+          removed,
+       9 > or changed during implementation, with the reason for each.
+      10 ## Why this plan exists
+     … +432 lines (ctrl+o to expand)
+
+⏺ Frozen test plan written to test-plans/phase-1-initial.md. The shape:
+
+  1. error-model              12 rows  envelope contract + unexpected-throw path
+  2. taxon-name-format        16 + 10  format rules + equalsCI predicate
+  3. username-format          10 +  3  format mirror + malformed-vs-absent
+  boundary
+  4. state-reset               9 + tracker  exemption verification +
+  forward-obligation
+  5. Scaffold / integration    8        build, health, unknown-route envelope
+  6. Deliberate non-coverage   table    explicit scope-creep guard
+  7. Operational checklist     gates    end-of-phase gates per tasks.md
+
+  A few framing choices worth flagging since they're now locked in by the
+  freeze:
+
+  - Failure assertions key on reason.tag, not just ok === false. PRD §13 wants
+  "the specified behavior when input is rejected, not merely that it is
+  rejected." Tag values become a public contract — if the implementation chooses
+   different tag strings (e.g. "begins-with-whitespace" instead of
+  "leading-whitespace"), that's a freeze-breaking change recorded in the final
+  plan's changelog.
+  - Section 6 (deliberate non-coverage) makes scope creep visible. If Phase 1
+  implementation ends up testing X-Username parsing because it felt natural,
+  that's a tracked deviation in the changelog rather than silent drift.
+  - The equalsCI predicate is tested under taxon-name-format only, with a small
+  usage-smoke under username-format. The predicate is shared (one implementation
+   in src/format/compare.ts); duplicating the full suite would just be noise.
+  - "Wrong HTTP method" rows accept either 404 or 405 because the PRD doesn't
+  pin a status — only that the envelope must hold. If the implementation later
+  wants to standardize on one, that becomes a follow-on spec change rather than
+  a freeze violation.
+  - Operational gates (§7) aren't behavioral tests but are part of "done." They
+  live here so the freeze captures them and the changelog can record any that
+  slip.
+
+  The freeze is in effect the moment you commit this file alongside the
+  proposal. After that, adjustments go to phase-1-final.md's changelog.
+
+✻ Cogitated for 2m 53s
+
+❯ apply the proposal                                                            
+
+⏺ Exiting explore mode and applying the change.
+
+⏺ Skill(opsx:apply)
+  ⎿  Successfully loaded skill
+
+⏺ Using change: add-phase-1-scaffold. Override with /opsx:apply <other>.
+
+⏺ Bash(openspec status --change add-phase-1-scaffold --json 2>&1)
+  ⎿  {
+       "changeName": "add-phase-1-scaffold",
+       "schemaName": "spec-driven",
+     … +27 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions apply --change add-phase-1-scaffold --json 2>&1)
+  ⎿  {
+       "changeName": "add-phase-1-scaffold",
+       "changeDir": "/Users/joe/repos/sdd-cmp-cc-openspec-openlore/openspec
+     … +213 lines (ctrl+o to expand)
+
+⏺ Reading the toolchain config and repo state before starting.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Bash(node --version && npm --version && which tsc 2>&1 | head -3)  ⎿  v24.2.0
+     11.7.0
+     /Users/joe/.nvm/versions/node/v24.2.0/bin/tsc
+
+  Searched for 1 pattern, listed 1 directory (ctrl+o to expand)
+
+⏺ Implementing: add-phase-1-scaffold (schema: spec-driven)
+
+  37 tasks total. Starting with project scaffold.
+
+⏺ Write(package.json)
+  ⎿  Wrote 23 lines to package.json
+       2   "name": "collaborative-taxon-tree-server",
+       3   "version": "0.1.0",
+       4   "private": true,
+       5   "type": "module",
+       6   "description": "Collaborative Taxon Tree Server — Phase 1 scaf
+         fold",
+       7   "license": "SEE LICENSE IN LICENSE",
+       8   "engines": {
+       9     "node": ">=24.0.0"
+      10   },
+     … +14 lines (ctrl+o to expand)
+
+⏺ Bash(npm install 2>&1 | tail -30)
+  ⎿  added 4 packages, and audited 5 packages in 1s
+
+     found 0 vulnerabilities
+
+⏺ Bash(ls /Users/joe/repos/sdd-cmp-cc-openspec-openlore/node_modules/ | head -20
+       && echo "---" && npx hono --version 2>&1 | head -3 && cat
+      /Users/joe/repos/sdd-cmp-cc-…)
+  ⎿  @types
+     hono
+     typescript
+     … +6 lines (ctrl+o to expand)
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(mkdir -p /Users/joe/repos/sdd-cmp-cc-openspec-openlore/src
+      /Users/joe/repos/sdd-cmp-cc-openspec-openlore/src/errors
+      /Users/joe/repos/sdd-cmp-cc-openspec-openlor…)
+  ⎿  ok
+
+  Read 1 file (ctrl+o to expand)
+⏺ Write(README.md)
+  ⎿  Wrote 53 lines to README.md
+       2 # Collaborative Taxon Tree Server
+       3 Implementation of the server specified in `prd/prd.md` (with too
+         lchain mechanics
+          OpenSpec`prd/toolchain-supplement.md`). Built phase by phase as
+       5 changes; see `openspec/changes/` for active proposals and `opens
+         pec/specs/` for
+       7 the living specification.
+       8 ## Toolchain
+       9 
+      10 - Node.js **24** (LTS line)
+     … +51 lines (ctrl+o to expand)
+
+⏺ Now the toolchain smoke test (task 1.5) with a throwaway file.
+
+⏺ Write(src/smoke-tmp.ts)
+  ⎿  Wrote 1 lines to src/smoke-tmp.ts
+      1 export const tmp: string = "ok";
+
+⏺ Bash(rm -rf dist && npx tsc && echo "EMIT_OK" && ls dist/src/ 2>&1)
+  ⎿  EMIT_OK
+     smoke-tmp.js
+     smoke-tmp.js.map
+
+⏺ Update(src/smoke-tmp.ts)
+  ⎿  Added 1 line, removed 1 line
+      1 -export const tmp: string = "ok";                                
+      1 +export const tmp: string = 42;                                  
+
+⏺ Bash(rm -rf dist && npx tsc; echo "EXIT=$?"; ls dist 2>&1 || echo "no dist
+      (expected)")
+  ⎿  src/smoke-tmp.ts(1,14): error TS2322: Type 'number' is not assignable
+     to type 'string'.
+     EXIT=1
+     … +2 lines (ctrl+o to expand)
+
+⏺ Toolchain verified — type errors block emit. Removing the throwaway.
+
+⏺ Bash(rm /Users/joe/repos/sdd-cmp-cc-openspec-openlore/src/smoke-tmp.ts && echo
+       "removed")
+  ⎿  removed
+
+⏺ Group 1 done. Group 2 — create the final test plan skeleton (initial plan is
+  already frozen).
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Bash(cp /Users/joe/repos/sdd-cmp-cc-openspec-openlore/test-plans/phase-1-initi
+      al.md
+      /Users/joe/repos/sdd-cmp-cc-openspec-openlore/test-plans/phase-1-final.md
+      && echo…)
+  ⎿  copied
+
+⏺ Update(test-plans/phase-1-final.md)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-1-final.md)
+  ⎿  Added 7 lines, removed 7 lines
+       1 -# Phase 1 — Initial test plan (frozen)                         
+       1 +# Phase 1 — Final test plan                                    
+       2  
+       3 -> **Status: frozen.** This plan was written from the OpenSpec c
+         -hange                                                          
+       4 -> `add-phase-1-scaffold` (specs: `error-model`, `taxon-name-for
+         -mat`,                                                          
+       5 -> `username-format`, `state-reset`) **before** implementation b
+         -egan and is                                                    
+       6 -> not edited afterward. The companion file `phase-1-final.md` s
+         -upersedes                                                      
+       7 -> this one and carries a `## Changelog` listing every row added
+         -, removed,                                                     
+       8 -> or changed during implementation, with the reason for each.  
+       3 +> **Status: in progress.** This plan supersedes `phase-1-initia
+         +l.md`                                                          
+       4 +> (frozen) and reflects what was actually tested by the time Ph
+         +ase 1                                                          
+       5 +> closed. Every row that differs from the initial plan is recor
+         +ded in                                                         
+       6 +> the `## Changelog` section at the end of this file, with a on
+         +e-line                                                         
+       7 +> reason. Rows that are unchanged from the initial plan appear 
+         +here                                                           
+       8 +> verbatim.                                                    
+       9  
+      10  ## Why this plan exists
+      11  
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-1-final.md)
+  ⎿  Added 10 lines
+      289  - [ ] `test-plans/phase-1-final.md` exists and its `## Changel
+           og`
+      290        section lists every row added, removed, or revised relat
+           ive to
+      291        this frozen plan, with a one-line reason each.
+      292 +                                                              
+      293 +---                                                           
+      294 +                                                              
+      295 +## Changelog                                                  
+      296 +                                                              
+      297 +> Each bullet records one delta from the frozen `phase-1-initi
+          +al.md`,                                                       
+      298 +> with format `+/-/~ <description> — <reason>`:               
+      299 +> `+` = row added, `-` = row removed, `~` = row revised.      
+      300 +                                                              
+      301 +(populated during implementation)                             
+
+⏺ Group 3 — error model. Building ApiError, status-map, the onError handler, and
+   the Hono app skeleton in one pass.
+
+⏺ Write(src/errors/api-error.ts)
+  ⎿  Wrote 22 lines to src/errors/api-error.ts
+       1 export type ApiErrorCode =
+       2   | "validation_error"
+       3   | "forbidden"
+       4   | "not_found"
+       5   | "conflict"
+       6   | "internal_error";
+       7 
+       8 export class ApiError extends Error {
+       9   readonly code: ApiErrorCode;
+      10   readonly details?: Record<string, unknown>;
+     … +12 lines (ctrl+o to expand)
+
+⏺ Write(src/errors/status-map.ts)
+  ⎿  Wrote 14 lines to src/errors/status-map.ts
+       2 import type { ContentfulStatusCode } from "hono/utils/http-statu
+         s";
+       3 
+       4 const STATUS: Record<ApiErrorCode, ContentfulStatusCode> = {
+       5   validation_error: 400,
+       6   forbidden: 403,
+       7   not_found: 404,
+       8   conflict: 409,
+       9   internal_error: 500,
+      10 };
+     … +5 lines (ctrl+o to expand)
+⏺ Write(src/errors/handler.ts)
+  ⎿  Wrote 37 lines to src/errors/handler.ts
+       1 import type { Context } from "hono";
+       2 import { ApiError, type ApiErrorCode } from "./api-error.js";
+       3 import { statusForCode } from "./status-map.js";
+       4 
+       5 export interface ErrorEnvelope {
+       6   error: {
+       7     code: ApiErrorCode;
+       8     message: string;
+       9     details?: Record<string, unknown>;
+      10   };
+     … +30 lines (ctrl+o to expand)
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -30; echo "EXIT=$?")
+  ⎿  EXIT=0
+
+⏺ Write(src/app.ts)
+  ⎿  Wrote 27 lines to src/app.ts
+       1 import { Hono } from "hono";
+       2 import { onError, notFoundHandler } from "./errors/handler.js";
+       3 import { resetAll } from "./reset/handler.js";
+       4 import packageJson from "../package.json" with { type: "json" };
+       5 
+       6 export function createApp(): Hono {
+       7   const app = new Hono();
+       8 
+       9   app.onError(onError);
+      10   app.notFound(notFoundHandler);
+     … +18 lines (ctrl+o to expand)
+
+⏺ Write(src/reset/handler.ts)
+  ⎿  Wrote 19 lines to src/reset/handler.ts
+       2  * Composed reset of every form of in-memory state in the server
+          (PRD §15).
+       4  * Phase 1 owns no domain state, so the body is empty. This is t
+         he **seam**:
+         s function tor phase that introduces in-memory state extends thi
+       6  * clear it. The composition is explicit (no registration side e
+       7  * the set of cleared subsystems is visible here.
+       8  *
+         source order):tributors (each adds one `await xReset()` call in 
+      10  *   Phase 2  — user registry
+     … +15 lines (ctrl+o to expand)
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -30; echo "EXIT=$?")
+  ⎿  EXIT=0
+
+⏺ Now the error envelope tests.
+
+⏺ Write(test/errors/envelope.test.ts)
+  ⎿  Wrote 137 lines to test/errors/envelope.test.ts
+       2 import assert from "node:assert/strict";Each } from "node:test";
+       3 import { Hono } from "hono";
+       4 import { ApiError, type ApiErrorCode } from "../../src/errors/ap
+         i-error.js";
+       5 import { onError, notFoundHandler } from "../../src/errors/handl
+       6 er.js";
+       7 function buildApp(throwFn: () => never): Hono {
+       8   const app = new Hono();
+       9   app.onError(onError);
+      10   app.notFound(notFoundHandler);
+     … +143 lines (ctrl+o to expand)
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -30; echo "EXIT=$?")
+  ⎿  EXIT=0
+
+⏺ Bash(node --test "dist/**/*.test.js" 2>&1 | tail -40)
+  ⎿  ▶ error envelope: ApiError → mapped status
+       ✔ validation_error maps to 400 (13.036458ms)
+       ✔ forbidden maps to 403 (0.605958ms)
+     … +31 lines (ctrl+o to expand)
+
+⏺ The non-Error throw isn't reaching onError because Hono's error handler is
+  typed (err: Error, ...) and the framework doesn't normalize. I'll add a
+  normalizing middleware so the envelope contract holds unconditionally.
+
+⏺ Update(src/errors/handler.ts)
+  ⎿  Added 1 line, removed 1 line
+      1 -import type { Context } from "hono";                            
+      1 +import type { Context, MiddlewareHandler } from "hono";         
+      2  import { ApiError, type ApiErrorCode } from "./api-error.js";
+      3  import { statusForCode } from "./status-map.js";
+      4  
+
+⏺ Update(src/errors/handler.ts)
+  ⎿  Added 13 lines
+      35      statusForCode("not_found"),
+      36    );
+      37  }
+      38 +                                                               
+      39 +// JS lets you `throw` any value — including strings, numbers, 
+         +objects.                                                       
+      40 +// Hono's onError signature only fires for Error instances, so 
+         +we normalize                                                   
+      41 +// non-Error throws into Error here. This keeps the envelope co
+         +ntract                                                         
+      42 +// unconditional regardless of what an inner handler throws.   
+      43 +export const normalizeThrows: MiddlewareHandler = async (_c, ne
+         +xt) => {                                                       
+      44 +  try {                                                        
+      45 +    await next();                                              
+      46 +  } catch (thrown) {                                           
+      47 +    if (thrown instanceof Error) throw thrown;                 
+      48 +    throw new Error(String(thrown));                           
+      49 +  }                                                            
+      50 +};                                                             
+
+⏺ Update(src/app.ts)
+  ⎿  Added 2 lines, removed 1 line
+       1  import { Hono } from "hono";
+       2 -import { onError, notFoundHandler } from "./errors/handler.js";
+       2 +import { onError, notFoundHandler, normalizeThrows } from "./er
+         +rors/handler.js";                                              
+       3  import { resetAll } from "./reset/handler.js";
+       4  import packageJson from "../package.json" with { type: "json" }
+          ;
+       5  
+       6  export function createApp(): Hono {
+       7    const app = new Hono();
+       8  
+       9 +  app.use("*", normalizeThrows);                               
+      10    app.onError(onError);
+      11    app.notFound(notFoundHandler);
+      12  
+
+⏺ Update(test/errors/envelope.test.ts)
+  ⎿  Added 2 lines, removed 1 line
+       2  import assert from "node:assert/strict";
+       3  import { Hono } from "hono";
+       4  import { ApiError, type ApiErrorCode } from "../../src/errors/a
+          pi-error.js";
+       5 -import { onError, notFoundHandler } from "../../src/errors/hand
+         -ler.js";                                                       
+       5 +import { onError, notFoundHandler, normalizeThrows } from "../.
+         +./src/errors/handler.js";                                      
+       6  
+       7  function buildApp(throwFn: () => never): Hono {
+       8    const app = new Hono();
+       9 +  app.use("*", normalizeThrows);                               
+      10    app.onError(onError);
+      11    app.notFound(notFoundHandler);
+      12    app.get("/boom", () => throwFn());
+
+⏺ Update(test/errors/envelope.test.ts)
+  ⎿  Added 1 line, removed 4 lines
+       93    });
+       94  
+       95    it("non-Error throw (string) → internal_error / 500", async 
+           () => {
+       96 -    const app = new Hono();                                   
+       97 -    app.onError(onError);                                     
+       98 -    app.get("/boom", () => {                                  
+       99 -      // eslint-disable-next-line @typescript-eslint/no-throw-
+          -literal                                                       
+       96 +    const app = buildApp(() => {                              
+       97        throw "surprise" as unknown as Error;
+       98      });
+       99      const res = await app.request("/boom");
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -10 && node --test "dist/**/*.test.js"
+       2>&1 | tail -20)
+  ⎿    ✔ includes details verbatim when supplied (0.29275ms)
+       ✔ omits details key entirely when not supplied (0.240042ms)
+     ✔ error envelope: details handling (0.597208ms)
+     … +17 lines (ctrl+o to expand)
+
+⏺ All 12 envelope tests pass. Group 3 done.
+
+⏺ Group 4 — equalsCI utility.
+⏺ Write(src/format/compare.ts)
+  ⎿  Wrote 8 lines to src/format/compare.ts
+         bothse-insensitive equality. PRD §3.4 (names) and §4 (usernames)
+      2 // require this comparison. The predicate does NOT trim, collapse
+         whitespace,
+      3 // or otherwise normalize: stored strings keep their original cas
+        ing, and
+      4 // equality is strict modulo letter case only.
+      5 export function equalsCI(a: string, b: string): boolean {
+      6   if (a.length !== b.length) return false;
+      7   return a.toLowerCase() === b.toLowerCase();
+      8 }
+     … +1 line (ctrl+o to expand)
+
+⏺ Write(test/format/compare.test.ts)
+  ⎿  Wrote 52 lines to test/format/compare.test.ts
+       1 import { describe, it } from "node:test";
+       2 import assert from "node:assert/strict";
+       3 import { equalsCI } from "../../src/format/compare.js";
+       4 
+       5 describe("equalsCI", () => {
+       6   it("identical strings are equal", () => {
+       7     assert.equal(equalsCI("Fantasy", "Fantasy"), true);
+       8   });
+       9 
+      10   it("differ only in case (all lower) → equal", () => {
+     … +47 lines (ctrl+o to expand)
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -10 && node --test "dist/**/*.test.js"
+       2>&1 | tail -15)
+  ⎿    ✔ different strings → not equal (0.051ms)
+       ✔ trailing whitespace difference → not equal (predicate does not tri
+     m) (0.043708ms)
+     … +14 lines (ctrl+o to expand)
+
+⏺ Group 5 — taxon-name validator. The format rule is identical between taxa and
+  usernames, so I'll factor the format check into a small shared helper that
+  both validators wrap.
+
+⏺ Write(src/format/check.ts)
+  ⎿  Wrote 46 lines to src/format/check.ts
+         .4, §4):d structural format rule used by both validators (PRD §3
+       2 //   - non-empty
+       4 //   - neither begins nor ends with whitespace
+       5 // "Whitespace" follows the Unicode definition recognized by JS 
+       6 // ASCII space, tab, CR, LF, FF, VT, NBSP, and other Unicode whi
+         tespace.
+       8 // The shape returned here is internal; each caller wraps it int
+         o its own
+          so thedator return value (validateTaxonName / validateUsername)
+      10 // caller-visible vocabulary stays tied to its capability.
+     … +45 lines (ctrl+o to expand)
+
+⏺ Write(src/format/taxon-name.ts)
+  ⎿  Wrote 21 lines to src/format/taxon-name.ts
+       2 // Pure: no throws, no HTTP, no §15.6 error codes. The throw sit
+         e (HTTP
+       3 // handler) is responsible for mapping a failure to ApiError.
+       4 //
+       5 // Canonical reason tags returned on failure:
+       7 //   - "leading-whitespace"   — input begins with whitespace
+       8 //   - "trailing-whitespace"  — input ends with whitespace
+       9 //
+      10 // For a string that is entirely whitespace the implementation c
+         hooses
+     … +13 lines (ctrl+o to expand)
+
+⏺ Write(test/format/taxon-name.test.ts)
+  ⎿  Wrote 70 lines to test/format/taxon-name.test.ts
+       2 import assert from "node:assert/strict";;
+       3 import { validateTaxonName, type TaxonNameResult } from "../../s
+         rc/format/taxon-name.js";
+       4 
+       5 function expectOk(r: TaxonNameResult): void {
+       6   assert.deepEqual(r, { ok: true });
+       7 }
+       8 
+       9 function expectFail(r: TaxonNameResult, tag: string): void {
+      10   assert.equal(r.ok, false);
+     … +77 lines (ctrl+o to expand)
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -10 && node --test "dist/**/*.test.js"
+       2>&1 | tail -10)
+  ⎿    ✔ re-exports equalsCI from the same module (0.108625ms)
+     ✔ validateTaxonName: result shape (0.13325ms)
+     ℹ tests 38
+     … +7 lines (ctrl+o to expand)
+
+⏺ All 38 tests pass. Group 5 done; on to username validator.
+
+⏺ Write(src/format/username.ts)
+  ⎿  Wrote 21 lines to src/format/username.ts
+         y membershipformat validator (PRD §4 format rules only — registr
+       2 // is a Phase 2 concern). Pure: no throws, no HTTP, no §15.6 cod
+       3 //.
+       4 // Canonical reason tags returned on failure (same vocabulary as
+       5 //   - "empty"
+       6 //   - "leading-whitespace"
+       8 //   - "trailing-whitespace"
+       9 // The trichotomy *(absent · malformed · present-well-formed-unr
+      10 // is NOT represented here. The validator sees a string; absence
+          of the
+     … +15 lines (ctrl+o to expand)
+
+⏺ Write(test/format/username.test.ts)
+  ⎿  Wrote 86 lines to test/format/username.test.ts
+       2 import assert from "node:assert/strict";;
+       3 import { validateUsername, equalsCI, type UsernameResult } from 
+         "../../src/format/username.js";
+       4 
+       5 function expectOk(r: UsernameResult): void {
+       6   assert.deepEqual(r, { ok: true });
+       7 }
+       8 
+       9 function expectFail(r: UsernameResult, tag: string): void {
+      10   assert.equal(r.ok, false);
+     … +86 lines (ctrl+o to expand)
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -10 && node --test "dist/**/*.test.js"
+       2>&1 | tail -8)
+  ⎿  ℹ tests 52
+     ℹ suites 14
+     ℹ pass 52
+     … +5 lines (ctrl+o to expand)
+
+⏺ 52/52 pass. Group 6 done.
+
+⏺ Group 7 — /reset tests. (Code already exists in app.ts and reset/handler.ts;
+  just tests now.)
+
+⏺ Write(test/reset/reset.test.ts)
+  ⎿  Wrote 90 lines to test/reset/reset.test.ts
+       1 import { describe, it } from "node:test";
+       2 import assert from "node:assert/strict";
+       3 import { createApp } from "../../src/app.js";
+       4 
+       5 describe("POST /reset: empty server", () => {
+       6   it("returns 204 with empty body", async () => {
+       7     const app = createApp();
+       8     const res = await app.request("/reset", { method: "POST" });
+       9     assert.equal(res.status, 204);
+      10     const text = await res.text();
+     … +85 lines (ctrl+o to expand)
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -10 && node --test "dist/**/*.test.js"
+       2>&1 | tail -8)
+  ⎿  ℹ tests 61
+     ℹ suites 18
+     ℹ pass 61
+     … +5 lines (ctrl+o to expand)
+⏺ 61/61. Group 7 done; on to health endpoint + server entry.
+
+⏺ Write(src/server.ts)
+  ⎿  Wrote 8 lines to src/server.ts
+      1 import { serve } from "@hono/node-server";
+      2 import { app } from "./app.js";
+      3 
+      4 const port = Number(process.env.PORT ?? 3000);
+      5 
+      6 serve({ fetch: app.fetch, port }, (info) => {
+      7   console.log(`listening on http://localhost:${info.port}`);
+      8 });
+
+⏺ Bash(npm install @hono/node-server 2>&1 | tail -5)
+  ⎿  added 1 package, and audited 6 packages in 971ms
+
+     found 0 vulnerabilities
+
+⏺ Now the health test.
+
+⏺ Write(test/health.test.ts)
+  ⎿  Wrote 26 lines to test/health.test.ts
+       1 import { describe, it } from "node:test";
+       2 import assert from "node:assert/strict";
+       3 import { createApp } from "../src/app.js";
+       4 
+       5 describe("GET /health", () => {
+       6   it("returns 200", async () => {
+       7     const app = createApp();
+       8     const res = await app.request("/health");
+       9     assert.equal(res.status, 200);
+      10   });
+     … +19 lines (ctrl+o to expand)
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -10 && node --test "dist/**/*.test.js"
+       2>&1 | tail -8)
+  ⎿  ℹ tests 64
+     ℹ suites 19
+     ℹ pass 64
+     … +5 lines (ctrl+o to expand)
+
+⏺ Group 9 — app integration test (boot, routes resolve, unknown-route envelope).
+
+⏺ Write(test/app.test.ts)
+  ⎿  Wrote 42 lines to test/app.test.ts
+       1 import { describe, it } from "node:test";
+       2 import assert from "node:assert/strict";
+       3 import { createApp } from "../src/app.js";
+       4 
+       5 describe("Hono app: routes resolve", () => {
+       6   it("/health resolves (not 404)", async () => {
+       7     const app = createApp();
+       8     const res = await app.request("/health");
+       9     assert.notEqual(res.status, 404);
+      10     assert.equal(res.status, 200);
+     … +37 lines (ctrl+o to expand)
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | head -10 && node --test "dist/**/*.test.js"
+       2>&1 | tail -10)
+  ⎿    ✔ GET /reset returns 404 or 405 with the standard envelope (1.330708
+     ms)
+     ✔ POST /reset: wrong method (1.399375ms)
+     … +8 lines (ctrl+o to expand)
+
+⏺ 68/68 in-process tests pass. Let me also boot the actual server and exercise
+  both endpoints to confirm end-to-end.
+
+⏺ Bash(PORT=3457 node dist/src/server.js 2>&1)
+  ⎿  Running in the background (↓ to manage)
+
+⏺ Bash(until curl -s -o /dev/null -w "%{http_code}" http://localhost:3457/health
+       2>/dev/null | grep -q "200"; do sleep 0.2; done; echo "up")
+  ⎿  up
+
+⏺ Bash(echo "=== GET /health ===" && curl -sS -i http://localhost:3457/health &&
+       echo "" && echo "=== POST /reset ===" && curl -sS -i -X POST
+      http://localhost:3457/res…)
+  ⎿  === GET /health ===
+     HTTP/1.1 200 OK
+     content-type: application/json
+     … +37 lines (ctrl+o to expand)
+
+⏺ End-to-end behavior matches spec: health OK, reset 204 (including with
+  malformed X-Username), unknown path emits the envelope. Stopping the server.
+
+⏺ Bash(kill bjyui6tu9 2>/dev/null; pkill -f "dist/src/server.js" 2>/dev/null;
+      sleep 0.5; echo "stopped")
+  ⎿  stopped
+
+⏺ Background command "Start server in background" failed with exit code 144
+
+⏺ Final full-clean run (task 9.2: rm -rf dist && npx tsc && node --test 
+  "dist/**/*.test.js").
+
+⏺ Bash(rm -rf dist && npx tsc && echo "BUILD_OK" && node --test
+      "dist/**/*.test.js" 2>&1 | tail -12)
+  ⎿  BUILD_OK
+     ✔ POST /reset: idempotence (0.388792ms)
+     ▶ POST /reset: wrong method
+     … +11 lines (ctrl+o to expand)
+⏺ Group 10 — final closeout. Updating the final plan, then validating.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-1-final.md)
+  ⎿  Added 4 lines, removed 1 line
+       1  # Phase 1 — Final test plan
+       2  
+       3 -> **Status: in progress.** This plan supersedes `phase-1-initia
+         -l.md`                                                          
+       3 +> **Status: closed.** This plan supersedes `phase-1-initial.md`
+       4  > (frozen) and reflects what was actually tested by the time Ph
+          ase 1
+       5  > closed. Every row that differs from the initial plan is recor
+          ded in
+       6  > the `## Changelog` section at the end of this file, with a on
+          e-line
+       7  > reason. Rows that are unchanged from the initial plan appear 
+          here
+       8  > verbatim.
+       9 +>                                                              
+      10 +> Final test count: **68 tests, 21 suites, 0 failures.** Single
+         + command:                                                      
+      11 +> `npm test` (equivalently `npx tsc && node --test "dist/**/*.t
+         +est.js"`).                                                     
+      12  
+      13  ## Why this plan exists
+      14  
+
+⏺ Update(test-plans/phase-1-final.md)
+  ⎿  Added 6 lines, removed 6 lines
+      283  These are not behavioral tests but are required gates per
+      284  `tasks.md` and the toolchain supplement:
+      285  
+      286 -- [ ] `npx tsc` succeeds with no errors and no warnings.      
+      287 -- [ ] `node --test "dist/**/*.test.js"` runs every test in thi
+          -s plan                                                        
+      288 -      and reports zero failures.                              
+      289 -- [ ] `openspec validate add-phase-1-scaffold --strict` report
+          -s valid.                                                      
+      290 -- [ ] `check_spec_drift` (openlore MCP / CLI) reports no drift
+          - between                                                      
+      286 +- [x] `npx tsc` succeeds with no errors and no warnings.      
+      287 +- [x] `node --test "dist/**/*.test.js"` runs every test in thi
+          +s plan                                                        
+      288 +      and reports zero failures. (68 tests, 21 suites, 0 failu
+          +res.)                                                         
+      289 +- [x] `openspec validate add-phase-1-scaffold --strict` report
+          +s valid.                                                      
+      290 +- [x] `check_spec_drift` (openlore MCP / CLI) reports no drift
+          + between                                                      
+      291        this change's specs and the implemented code.
+      292 -- [ ] `test-plans/phase-1-final.md` exists and its `## Changel
+          -og`                                                           
+      292 +- [x] `test-plans/phase-1-final.md` exists and its `## Changel
+          +og`                                                           
+      293        section lists every row added, removed, or revised relat
+           ive to
+      294        this frozen plan, with a one-line reason each.
+      295  
+
+⏺ Update(test-plans/phase-1-final.md)
+  ⎿  Added 44 lines, removed 1 line
+      301  > with format `+/-/~ <description> — <reason>`:
+      302  > `+` = row added, `-` = row removed, `~` = row revised.
+      303  
+      304 -(populated during implementation)                             
+      304 +### Implementation-driven additions                           
+      305 +                                                              
+      306 +- `~ Content-Type assertion for error envelopes` — Initial pla
+          +n had one                                                     
+      307 +  row covering "Content-Type is application/json for all error
+          + envelopes."                                                  
+      308 +  Implementation split this into two explicit assertions (one 
+          +for                                                           
+      309 +  ApiError-driven responses, one for unexpected-throw response
+          +s) to make                                                    
+      310 +  the regression target for each path visible. Same coverage, 
+          +finer                                                         
+      311 +  granularity.                                                
+      312 +- `+ taxon-name-format: "re-exports equalsCI from the same mod
+          +ule"` —                                                       
+      313 +  Added during implementation because the spec / tasks called 
+          +for the                                                       
+      314 +  re-export but the initial plan had no test asserting it. Wit
+          +hout this,                                                    
+      315 +  a regression that drops the re-export would compile and pass
+          +.                                                             
+      316 +- `~ "Validator not called with undefined" boundary` — Initial
+          + plan                                                         
+      317 +  documented this as "compile-time guarantee via tsc, no runti
+          +me test                                                       
+      318 +  needed." Implementation left this as documented; no runtime 
+          +test was                                                      
+      319 +  added. Recorded here so the freeze captures the deliberate n
+          +on-test.                                                      
+      320 +                                                              
+      321 +### Implementation detail surfaced during testing             
+      322 +                                                              
+      323 +- `+ "normalize non-Error throws" middleware in src/errors/han
+          +dler.ts` —                                                    
+      324 +  Discovered during implementation that Hono's `onError` signa
+          +ture                                                          
+      325 +  `(err: Error, c) => ...` does not fire for non-`Error` throw
+          +s (e.g.                                                       
+      326 +  `throw "surprise"`); the framework lets the throw escape. Ad
+          +ded a                                                         
+      327 +  small middleware (`normalizeThrows`) that wraps every reques
+          +t in                                                          
+      328 +  `try/catch` and converts non-Error throws into `new Error(St
+          +ring(x))`                                                     
+      329 +  so that `onError` always sees an `Error` instance. This make
+          +s the                                                         
+      330 +  initial plan's row "non-Error throw (string) → internal_erro
+          +r / 500"                                                      
+      331 +  pass; the test now covers both the middleware and the envelo
+          +pe. No                                                        
+      332 +  spec change required — the spec demanded the envelope behavi
+          +or, and                                                       
+      333 +  this is the mechanism that delivers it.                     
+      334 +                                                              
+      335 +### Frozen rows that landed unchanged                         
+      336 +                                                              
+      337 +- All error-model status-mapping rows (5 codes × 1 test each).
+      338 +- All ApiError details-handling rows (2).                     
+      339 +- The unexpected-Error / non-Error throw / logger rows (3).   
+      340 +- All taxon-name-format format-rule rows (16).                
+      341 +- All username-format format-rule rows (10) and shape-closure 
+          +rows (2 of 3;                                                 
+      342 +  the third — compile-time guarantee — remains a documented no
+          +n-test).                                                      
+      343 +- All equalsCI predicate rows (10).                           
+      344 +- All state-reset exemption rows (7), idempotence row (1), and
+      345 +  wrong-HTTP-method row (1).                                  
+      346 +- All scaffold / integration rows (8) except where superseded 
+          +above.                                                        
+      347 +- Section 6 "Areas deliberately not tested" is unchanged.     
+
+⏺ Now flip every checkbox in tasks.md and run validation.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Running the closeout validations.
+
+⏺ Bash(openspec validate add-phase-1-scaffold --strict 2>&1)
+  ⎿  Change 'add-phase-1-scaffold' is valid
+
+⏺ Bash(openspec list 2>&1)
+  ⎿  Changes:
+       add-phase-1-scaffold     0/37 tasks    32m ago
+
+  Called openlore (ctrl+o to expand)
+
+⏺ Spec drift clean. Now flipping the task checkboxes in tasks.md.
+
+⏺ Write(openspec/changes/add-phase-1-scaffold/tasks.md)
+  ⎿  Added 36 lines, removed 36 lines
+       1  ## 1. Project scaffold
+       2  
+       3 -- [ ] 1.1 Add `package.json` with `"type": "module"`, dev deps 
+         -`typescript` (5.x) and `@types/node` (Node 24 line), runtime de
+         -p `hono`                                                       
+       4 -- [ ] 1.2 Verify the shared `tsconfig.json` at repo root is the
+         - one distributed with the toolchain supplement (do not customiz
+         -e)                                                             
+       5 -- [ ] 1.3 Create the source layout: `src/` with placeholder `in
+         -dex.ts`, `test/` with placeholder `smoke.test.ts`, ensure `dist
+         -/` is git-ignored                                              
+       6 -- [ ] 1.4 Document the single build/test command in the repo RE
+         -ADME or top-level docs: `npx tsc && node --test "dist/**/*.test
+         -.js"`                                                          
+       7 -- [ ] 1.5 Smoke-test the toolchain: introduce a deliberate type
+         - error, confirm `npx tsc` fails with no emit; revert; confirm c
+         -lean typecheck emits `dist/`                                   
+       3 +- [x] 1.1 Add `package.json` with `"type": "module"`, dev deps 
+         +`typescript` (5.x) and `@types/node` (Node 24 line), runtime de
+         +p `hono`                                                       
+       4 +- [x] 1.2 Verify the shared `tsconfig.json` at repo root is the
+         + one distributed with the toolchain supplement (do not customiz
+         +e)                                                             
+       5 +- [x] 1.3 Create the source layout: `src/` with placeholder `in
+         +dex.ts`, `test/` with placeholder `smoke.test.ts`, ensure `dist
+         +/` is git-ignored                                              
+       6 +- [x] 1.4 Document the single build/test command in the repo RE
+         +ADME or top-level docs: `npx tsc && node --test "dist/**/*.test
+         +.js"`                                                          
+       7 +- [x] 1.5 Smoke-test the toolchain: introduce a deliberate type
+         + error, confirm `npx tsc` fails with no emit; revert; confirm c
+         +lean typecheck emits `dist/`                                   
+       8  
+       9  ## 2. Initial test plan (frozen at end of step 2)
+      10  
+      11 -- [ ] 2.1 Write `test-plans/phase-1-initial.md` from the four s
+         -pecs in this change, using the table format `Rule | Input | Exp
+         -ected | Notes`                                                 
+      11 +- [x] 2.1 Write `test-plans/phase-1-initial.md` from the four s
+         +pecs in this change, using the table format `Rule | Input | Exp
+         +ected | Notes`                                                 
+      12  - [ ] 2.2 Commit `phase-1-initial.md` — this commit marks the f
+          reeze; do not edit this file afterward
+      13 -- [ ] 2.3 Create `test-plans/phase-1-final.md` as a copy of the
+         - initial plan plus an empty `## Changelog` section at the end  
+      13 +- [x] 2.3 Create `test-plans/phase-1-final.md` as a copy of the
+         + initial plan plus an empty `## Changelog` section at the end  
+      14  
+      15  ## 3. Error model capability (`specs/error-model`)
+      16  
+      17 -- [ ] 3.1 Implement `src/errors/api-error.ts` exporting `ApiErr
+         -or` (extends `Error`) and the `ApiErrorCode` string-literal uni
+         -on (`validation_error | forbidden | not_found | conflict | inte
+         -rnal_error`)                                                   
+      18 -- [ ] 3.2 Implement `src/errors/status-map.ts` exporting `statu
+         -sForCode(code): number` mapping each code to its HTTP status pe
+         -r the spec                                                     
+      19 -- [ ] 3.3 Implement `src/errors/handler.ts` exporting the Hono 
+         -`onError` handler that emits the envelope for `ApiError` and fo
+         -r unexpected throws (mapped to `internal_error` / 500), and log
+         -s the original throw on the unexpected path                    
+      20 -- [ ] 3.4 Wire the handler into the Hono app in `src/app.ts`   
+      21 -- [ ] 3.5 Write `test/errors/envelope.test.ts` covering: ApiErr
+         -or → envelope at mapped status (one test per code); ApiError wi
+         -thout `details` omits the field; ApiError with `details` includ
+         -es it verbatim; non-ApiError throw → internal_error/500 envelop
+         -e; original throw is observable in logs                        
+      17 +- [x] 3.1 Implement `src/errors/api-error.ts` exporting `ApiErr
+         +or` (extends `Error`) and the `ApiErrorCode` string-literal uni
+         +on (`validation_error | forbidden | not_found | conflict | inte
+         +rnal_error`)                                                   
+      18 +- [x] 3.2 Implement `src/errors/status-map.ts` exporting `statu
+         +sForCode(code): number` mapping each code to its HTTP status pe
+         +r the spec                                                     
+      19 +- [x] 3.3 Implement `src/errors/handler.ts` exporting the Hono 
+         +`onError` handler that emits the envelope for `ApiError` and fo
+         +r unexpected throws (mapped to `internal_error` / 500), and log
+         +s the original throw on the unexpected path                    
+      20 +- [x] 3.4 Wire the handler into the Hono app in `src/app.ts`   
+      21 +- [x] 3.5 Write `test/errors/envelope.test.ts` covering: ApiErr
+         +or → envelope at mapped status (one test per code); ApiError wi
+         +thout `details` omits the field; ApiError with `details` includ
+         +es it verbatim; non-ApiError throw → internal_error/500 envelop
+         +e; original throw is observable in logs                        
+      22  
+      23  ## 4. Comparison utility
+      24  
+      25 -- [ ] 4.1 Implement `src/format/compare.ts` exporting `equalsCI
+         -(a, b): boolean`                                               
+      26 -- [ ] 4.2 Write `test/format/compare.test.ts` covering: identic
+         -al strings; same letters different case; different strings; whi
+         -tespace differences are NOT collapsed (predicate does not trim 
+         -or normalize)                                                  
+      25 +- [x] 4.1 Implement `src/format/compare.ts` exporting `equalsCI
+         +(a, b): boolean`                                               
+      26 +- [x] 4.2 Write `test/format/compare.test.ts` covering: identic
+         +al strings; same letters different case; different strings; whi
+         +tespace differences are NOT collapsed (predicate does not trim 
+         +or normalize)                                                  
+      27  
+      28  ## 5. Taxon-name format capability (`specs/taxon-name-format`)
+      29  
+      30 -- [ ] 5.1 Implement `src/format/taxon-name.ts` exporting `valid
+         -ateTaxonName(s: string): { ok: true } | { ok: false, reason: { 
+         -tag, message } }`; re-export `equalsCI` for callers that prefer
+         - a single import                                               
+      31 -- [ ] 5.2 Decide and document the canonical tag values: `"empty
+         -"`, `"leading-whitespace"`, `"trailing-whitespace"`            
+      32 -- [ ] 5.3 Write `test/format/taxon-name.test.ts` covering each 
+         -scenario in the spec: valid; empty; leading space; trailing spa
+         -ce; leading tab; trailing newline; whitespace-only; internal wh
+         -itespace permitted                                             
+      33 -- [ ] 5.4 Verify the validator returns the documented tag for e
+         -very failure case (snapshot the tag, not just truthiness)      
+      30 +- [x] 5.1 Implement `src/format/taxon-name.ts` exporting `valid
+         +ateTaxonName(s: string): { ok: true } | { ok: false, reason: { 
+         +tag, message } }`; re-export `equalsCI` for callers that prefer
+         + a single import                                               
+      31 +- [x] 5.2 Decide and document the canonical tag values: `"empty
+         +"`, `"leading-whitespace"`, `"trailing-whitespace"`            
+      32 +- [x] 5.3 Write `test/format/taxon-name.test.ts` covering each 
+         +scenario in the spec: valid; empty; leading space; trailing spa
+         +ce; leading tab; trailing newline; whitespace-only; internal wh
+         +itespace permitted                                             
+      33 +- [x] 5.4 Verify the validator returns the documented tag for e
+         +very failure case (snapshot the tag, not just truthiness)      
+      34  
+      35  ## 6. Username format capability (`specs/username-format`)
+      36  
+      37 -- [ ] 6.1 Implement `src/format/username.ts` exporting `validat
+         -eUsername(s: string): { ok: true } | { ok: false, reason: { tag
+         -, message } }`                                                 
+      38 -- [ ] 6.2 Use the same tag vocabulary as `taxon-name`: `"empty"
+         -`, `"leading-whitespace"`, `"trailing-whitespace"`             
+      39 -- [ ] 6.3 Write `test/format/username.test.ts` covering each sc
+         -enario in the spec: valid; empty; leading whitespace; trailing 
+         -whitespace; whitespace-only; internal whitespace permitted     
+      40 -- [ ] 6.4 Confirm via tests that the validator does not return 
+         -any "null-user" shape — only `{ ok: true }` or `{ ok: false, re
+         -ason }`                                                        
+      37 +- [x] 6.1 Implement `src/format/username.ts` exporting `validat
+         +eUsername(s: string): { ok: true } | { ok: false, reason: { tag
+         +, message } }`                                                 
+      38 +- [x] 6.2 Use the same tag vocabulary as `taxon-name`: `"empty"
+         +`, `"leading-whitespace"`, `"trailing-whitespace"`             
+      39 +- [x] 6.3 Write `test/format/username.test.ts` covering each sc
+         +enario in the spec: valid; empty; leading whitespace; trailing 
+         +whitespace; whitespace-only; internal whitespace permitted     
+      40 +- [x] 6.4 Confirm via tests that the validator does not return 
+         +any "null-user" shape — only `{ ok: true }` or `{ ok: false, re
+         +ason }`                                                        
+      41  
+      42  ## 7. State-reset capability (`specs/state-reset`)
+      43  
+      44 -- [ ] 7.1 Implement `src/reset/handler.ts` exporting `resetAll(
+         -)` — at Phase 1 this is the empty composition; the function exi
+         -sts so later phases extend it                                  
+      45 -- [ ] 7.2 Implement the `POST /reset` route in `src/app.ts` tha
+         -t calls `resetAll()` and returns `204 No Content`; route is reg
+         -istered BEFORE any future authorization middleware             
+      46 -- [ ] 7.3 Add a comment at the `resetAll` declaration site list
+         -ing what future phases will add (registry, taxa, proposals, que
+         -ues, ID generators) — this is the seam, kept visible           
+      47 -- [ ] 7.4 Write `test/reset/reset.test.ts` covering: reset on e
+         -mpty server → 204; reset with no `X-Username` → 204; reset with
+         - empty `X-Username` → 204; reset with unregistered username → 2
+         -04; reset with malformed username (whitespace-only, trailing sp
+         -ace) → 204                                                     
+      44 +- [x] 7.1 Implement `src/reset/handler.ts` exporting `resetAll(
+         +)` — at Phase 1 this is the empty composition; the function exi
+         +sts so later phases extend it                                  
+      45 +- [x] 7.2 Implement the `POST /reset` route in `src/app.ts` tha
+         +t calls `resetAll()` and returns `204 No Content`; route is reg
+         +istered BEFORE any future authorization middleware             
+      46 +- [x] 7.3 Add a comment at the `resetAll` declaration site list
+         +ing what future phases will add (registry, taxa, proposals, que
+         +ues, ID generators) — this is the seam, kept visible           
+      47 +- [x] 7.4 Write `test/reset/reset.test.ts` covering: reset on e
+         +mpty server → 204; reset with no `X-Username` → 204; reset with
+         + empty `X-Username` → 204; reset with unregistered username → 2
+         +04; reset with malformed username (whitespace-only, trailing sp
+         +ace) → 204                                                     
+      48  
+      49  ## 8. Health endpoint and HTTP entry point
+      50  
+      51 -- [ ] 8.1 Implement `GET /health` returning `200 { status: "ok"
+         -, version }` where `version` reads from `package.json` (compile
+         --time literal or runtime read — either is acceptable per design
+         -.md)                                                           
+      52 -- [ ] 8.2 Implement `src/server.ts` as the process entry: impor
+         -ts `app`, listens on a configurable port (default 3000)        
+      53 -- [ ] 8.3 Write `test/health.test.ts` covering: 200 status; bod
+         -y shape `{ status: "ok", version: <string> }`; `Content-Type: a
+         -pplication/json`                                               
+      51 +- [x] 8.1 Implement `GET /health` returning `200 { status: "ok"
+         +, version }` where `version` reads from `package.json` (compile
+         +-time literal or runtime read — either is acceptable per design
+         +.md)                                                           
+      52 +- [x] 8.2 Implement `src/server.ts` as the process entry: impor
+         +ts `app`, listens on a configurable port (default 3000)        
+      53 +- [x] 8.3 Write `test/health.test.ts` covering: 200 status; bod
+         +y shape `{ status: "ok", version: <string> }`; `Content-Type: a
+         +pplication/json`                                               
+      54  
+      55  ## 9. Integration sanity
+      56  
+      57 -- [ ] 9.1 Write `test/app.test.ts` confirming the Hono app boot
+         -s, routes `/health` and `/reset`, and 404s an unknown path with
+         - the standard error envelope                                   
+      58 -- [ ] 9.2 Run the full build/test command end-to-end on a clean
+         - checkout: `rm -rf dist && npx tsc && node --test "dist/**/*.te
+         -st.js"` — all tests pass                                       
+      57 +- [x] 9.1 Write `test/app.test.ts` confirming the Hono app boot
+         +s, routes `/health` and `/reset`, and 404s an unknown path with
+         + the standard error envelope                                   
+      58 +- [x] 9.2 Run the full build/test command end-to-end on a clean
+         + checkout: `rm -rf dist && npx tsc && node --test "dist/**/*.te
+         +st.js"` — all tests pass                                       
+      59  
+      60  ## 10. Final test plan and Phase 1 close-out
+      61  
+      62 -- [ ] 10.1 Update `test-plans/phase-1-final.md` to reflect what
+         - was actually tested (rows that diverge from the frozen `phase-
+         -1-initial.md`)                                                 
+      63 -- [ ] 10.2 Add to the `## Changelog` section of `phase-1-final.
+         -md`: for each row added/removed/changed since the initial plan,
+         - one bullet `+/- <description> — <reason>`                     
+      64 -- [ ] 10.3 Run `openspec validate add-phase-1-scaffold --strict
+         -` and confirm no errors                                        
+      65 -- [ ] 10.4 Run `openspec list` and confirm the change appears a
+         -s completable                                                  
+      66 -- [ ] 10.5 (Per CLAUDE.md) `check_spec_drift` via openlore MCP 
+         -/ CLI; address any drift before archiving                      
+      62 +- [x] 10.1 Update `test-plans/phase-1-final.md` to reflect what
+         + was actually tested (rows that diverge from the frozen `phase-
+         +1-initial.md`)                                                 
+      63 +- [x] 10.2 Add to the `## Changelog` section of `phase-1-final.
+         +md`: for each row added/removed/changed since the initial plan,
+         + one bullet `+/- <description> — <reason>`                     
+      64 +- [x] 10.3 Run `openspec validate add-phase-1-scaffold --strict
+         +` and confirm no errors                                        
+      65 +- [x] 10.4 Run `openspec list` and confirm the change appears a
+         +s completable                                                  
+      66 +- [x] 10.5 (Per CLAUDE.md) `check_spec_drift` via openlore MCP 
+         +/ CLI; address any drift before archiving                      
+
+⏺ Bash(openspec list 2>&1 && echo "---" && openspec status --change
+      add-phase-1-scaffold --json 2>&1 | grep -E "(isComplete|status)" | head
+      -10)
+  ⎿  Changes:
+       add-phase-1-scaffold     36/37 tasks   just now
+     ---
+     … +5 lines (ctrl+o to expand)
+
+⏺ Implementation Complete
+
+  Change: add-phase-1-scaffold
+  Schema: spec-driven
+  Progress: 36/37 tasks complete (one user-action task — see note below)
+
+  What landed
+
+  src/
+  ├── app.ts                         Hono app, error-handler wiring, /reset,
+  /health
+  ├── server.ts                      process entry (PORT env, default 3000)
+  ├── errors/
+  │   ├── api-error.ts               ApiError + ApiErrorCode union
+  │   ├── status-map.ts              code → HTTP status
+  │   └── handler.ts                 onError + notFoundHandler + normalizeThrows
+  ├── format/
+  │   ├── check.ts                   shared boundary-format rule (§3.4, §4)
+  │   ├── compare.ts                 equalsCI predicate
+  │   ├── taxon-name.ts              validateTaxonName + re-exports equalsCI
+  │   └── username.ts                validateUsername + re-exports equalsCI
+  └── reset/
+      └── handler.ts                 resetAll() — empty composition at Phase 1
+
+  test/   (68 tests · 21 suites · 0 failures)
+  ├── app.test.ts                    routes resolve, unknown-path envelope
+  ├── health.test.ts                 /health shape + content-type
+  ├── errors/envelope.test.ts        12 tests — codes, details, throws,
+  content-type
+  ├── format/compare.test.ts         10 tests — equalsCI contract
+  ├── format/taxon-name.test.ts      16 tests — §3.4 rules + tags
+  ├── format/username.test.ts        14 tests — §4 rules + closed return shape
+  └── reset/reset.test.ts            9 tests — exemption, idempotence, wrong
+  method
+
+  package.json                      Node ≥24, ESM, hono + @hono/node-server
+  README.md                         build/run/test commands
+  test-plans/
+  ├── phase-1-initial.md            (frozen — written before any code)
+  └── phase-1-final.md              (status: closed; changelog populated)
+
+  Verification gates passed
+
+  - npm test → 68/68 pass
+  - openspec validate add-phase-1-scaffold --strict → valid
+  - openspec list → 36/37 tasks
+  - check_spec_drift → 0 issues
+  - End-to-end smoke (boot server, curl /health, /reset, /no-such-path) →
+  spec-compliant
+
+  One thing waiting on you
+
+  Task 2.2 (Commit phase-1-initial.md — this commit marks the freeze) remains
+  unchecked. The file is conceptually frozen — I wrote it before any code and
+  have not edited it since — but the git commit is yours to make. The change
+  can't be honestly closed out without that commit landing.
+
+  Notable implementation details
+
+  - normalizeThrows middleware was added in src/errors/handler.ts after the test
+   for "non-Error throw → internal_error / 500" failed: Hono's onError(err: 
+  Error, c) doesn't fire for non-Error throws. The middleware wraps every
+  request and converts non-Errors into new Error(String(x)) so the envelope
+  contract holds unconditionally. Documented in phase-1-final.md's changelog.
+  - src/format/check.ts factors the boundary-format rule (non-empty, no
+  leading/trailing whitespace) shared by both validators. Each validator wraps
+  it with its own label so error messages stay capability-specific while the
+  rule lives in one place.
+  - resetAll() carries a visible block comment listing what future phases will
+  compose into it (registry, taxa, proposals, queues, ID generator) per the
+  design-doc seam decision.
+
+  After you commit, /opsx:archive add-phase-1-scaffold will move the four spec
+  deltas from the change folder into openspec/specs/ as the living spec.
+
+✻ Sautéed for 10m 47s
+
+※ recap: Building the Collaborative Taxon Tree Server phase by phase. Phase 1 scaffold (error model, validators, /reset, /health) is implemented with 68/68 tests passing. Next: commit `test-plans/phase-1-initial.md` to lock the freeze, then archive the change. (disable recaps in /config)
+
+❯ /opsx:archive add-phase-1-scaffold                                            
+
+⏺ Bash(openspec status --change add-phase-1-scaffold --json 2>&1)
+  ⎿  {
+       "changeName": "add-phase-1-scaffold",
+       "schemaName": "spec-driven",
+     … +27 lines (ctrl+o to expand)
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Bash(git status --short 2>&1 | head -50 && echo "---" && git log --oneline -5
+      2>&1)
+  ⎿  ---
+     3163a0f Final phase 1 tests
+     2b243aa Added phase 1 test plans
+     … +3 lines (ctrl+o to expand)
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Git state is clean — both phase-1 commits landed already. Let me check whether
+   task 2.2's freeze-commit is among them, then check the archive command's
+  behavior.
+
+⏺ Bash(git show --stat 2b243aa 2>&1 | head -20)
+  ⎿  commit 2b243aa7e9cf712582de7dd92abf76524f6d1121
+     Author: Joseph T. Lapp <arachnojoe@gmail.com>
+     Date:   Mon May 25 15:18:46 2026 -0400
+     … +15 lines (ctrl+o to expand)
+
+⏺ Bash(openspec archive --help 2>&1)
+  ⎿  Usage: openspec archive [options] [change-name]
+
+     Archive a completed change and update main specs
+     … +9 lines (ctrl+o to expand)
+
+⏺ Freeze commit 2b243aa includes test-plans/phase-1-initial.md. Task 2.2 was
+  satisfied — flipping the checkbox.
+
+⏺ Update(openspec/changes/add-phase-1-scaffold/tasks.md)
+  ⎿  Added 1 line, removed 1 line
+       9  ## 2. Initial test plan (frozen at end of step 2)
+      10  
+      11  - [x] 2.1 Write `test-plans/phase-1-initial.md` from the four s
+          pecs in this change, using the table format `Rule | Input | Exp
+          ected | Notes`
+      12 -- [ ] 2.2 Commit `phase-1-initial.md` — this commit marks the f
+         -reeze; do not edit this file afterward                         
+      12 +- [x] 2.2 Commit `phase-1-initial.md` — this commit marks the f
+         +reeze; do not edit this file afterward                         
+      13  - [x] 2.3 Create `test-plans/phase-1-final.md` as a copy of the
+           initial plan plus an empty `## Changelog` section at the end
+      14  
+      15  ## 3. Error model capability (`specs/error-model`)
+
+⏺ Sync assessment before archiving:
+
+  Delta specs in this change → main spec targets
+  ───────────────────────────────────────────────
+  error-model         ADDED  →  openspec/specs/error-model/        (will be
+  CREATED)
+  state-reset         ADDED  →  openspec/specs/state-reset/        (will be
+  CREATED)
+  taxon-name-format   ADDED  →  openspec/specs/taxon-name-format/  (will be
+  CREATED)
+  username-format     ADDED  →  openspec/specs/username-format/    (will be
+  CREATED)
+
+  All four are net-new capabilities — nothing in openspec/specs/ to merge
+  against. Sync writes four new living-spec files.
+
+⏺ User answered Claude's questions:
+  ⎿  · How should I archive add-phase-1-scaffold? → Sync specs then archive 
+     (recommended)
+
+⏺ Bash(openspec archive add-phase-1-scaffold -y 2>&1)
+  ⎿  Proposal warnings in proposal.md (non-blocking):
+       ⚠ Consider splitting changes with more than 10 deltas
+     Task status: ✓ Complete
+     … +18 lines (ctrl+o to expand)
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Bash(openspec list && echo "---" && openspec list --specs 2>&1)
+  ⎿  No active changes found.
+     ---
+     Specs:
+     … +4 lines (ctrl+o to expand)
+
+⏺ Archive Complete
+
+  Change: add-phase-1-scaffold
+  Schema: spec-driven
+  Archived to: openspec/changes/archive/2026-05-25-add-phase-1-scaffold/
+  Specs: ✓ Synced to main specs
+
+  openspec/specs/                          (newly created)
+  ├── error-model/spec.md          4 requirements
+  ├── state-reset/spec.md          5 requirements
+  ├── taxon-name-format/spec.md    2 requirements
+  └── username-format/spec.md      3 requirements
+
+  openspec/changes/                        (no active changes)
+  └── archive/
+      └── 2026-05-25-add-phase-1-scaffold/
+          (proposal, design, tasks, specs, README, .openspec.yaml)
+
+  All 37 tasks complete. All 14 requirements net-added. openspec reports no
+  active changes.
+
+  One non-blocking warning from the archiver: "Consider splitting changes with 
+  more than 10 deltas" — Phase 1 carries 14 added requirements across 4
+  capabilities, which is above OpenSpec's recommended-per-change threshold.
+  Worth keeping in mind for Phase 2+ — but Phase 1 was always going to be
+  cross-cutting since it lays the contracts every later phase reuses.
+
+  Phase 2 (X-Username middleware + user registry) is the natural next change.
+  The forward-obligations are now living-spec requirements: the registry must
+  extend resetAll() and the test plan must verify /reset clears it.
+
+✻ Cooked for 1m 35s
+
+※ recap: Building the Collaborative Taxon Tree Server phase by phase via OpenSpec; Phase 1 (scaffold, error envelope, format validators, /reset) is implemented, tested 68/68 green, and archived. Next: start Phase 2 (X-Username middleware and user registry). (disable recaps in /config)
+
+❯ /usage 
+  ⎿  Settings dialog dismissed
+
+❯ /usage 
+  ⎿  Settings dialog dismissed

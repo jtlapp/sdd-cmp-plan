@@ -1,0 +1,1060 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-only
+
+❯ We're building the system described in `prd/prd.md` (with                     
+  `prd/toolchain-supplement.md`, incorporated                                   
+  by reference and equally binding for toolchain/test mechanics). We work in    
+  sequential                                                                    
+  phases. This phase is Phase 6 — implement only what                           
+  `prd/phase-6-single-review.md` puts in scope, and                             
+  respect its "explicitly deferred" list. `prd/prd.md` is authoritative; where  
+  the brief                                                                     
+  restates a requirement, the PRD's wording governs. `prd/sample-taxonomy.md`   
+  is                                                                            
+  non-normative naming data for tests only.                                     
+                                                                                
+  Read `prd/phase-6-single-review.md` and the PRD sections it cites, then tell  
+  me your plan for this                                                         
+  phase before you start coding. Raise anything in the spec that's unclear or   
+  that you'd                                                                    
+  have to decide yourself.                                                      
+                                                                                
+
+  Read 19 files, listed 3 directories (ctrl+o to expand)
+
+⏺ I've read prd/phase-6-single-review.md, the cited PRD sections (§5, §10.3,
+  §11.2–§11.4, §12.1, §12.3, §15.5), the Appendix A walkthroughs, and surveyed
+  the Phase 5 code I'll build on (src/proposals.ts, src/routes/proposals.ts,
+  src/routes/queue.ts, src/invariants.ts, src/routes/writes.ts). Here's my plan.
+
+  Phase 6 plan
+
+  Two new endpoints (new src/routes/reviews.ts)
+
+  - POST /changes/{id}/accept — §12.1, §15.5
+  - POST /changes/{id}/reject — §12.3, §15.5
+
+  Both run under the existing writerGates (identity → requireWriter) and
+  withWriteLock. Resource resolution order: 404 if the change id is unknown →
+  403 if caller ≠ change.reviewer → 409 if change is not currently queued.
+
+  Core review logic (new src/review.ts)
+
+  Acceptance applies the change tentatively, runs evaluateAll(getState()) on the
+   candidate state to honor §10.3 (the existing module already iterates every
+  tree, which covers the cross-tree clauses for renames and grafts), and rolls
+  back on any violation. On success it transitions state = "accepted", dequeues
+  it from the reviewer's queue, and runs promotion for direct payload-children.
+  Per op:
+
+  - rename → mutate taxon.name.
+  - add-create → mint a new taxon with owner = accepting reviewer (§5/§12.1
+  ownership transfer), attach under payload-parent.
+  - add-graft → attach existing taxon under payload-parent (no ownership change,
+   §9.3).
+  - detach → remove the parent→child edge.
+
+  Reject simply transitions state = "rejected", dequeues it, and (only when the
+  rejected change is an add/graft) recursively marks every payload descendant
+  invalid and removes them from any queues they sit in — see ambiguity #1 below.
+
+  Promotion (§11.3) at acceptance time
+
+  On accepting an add/graft, walk its direct payload-children. For each
+  operative child whose nearest decision-dep ancestor was this accepted change,
+  transition latent → queued and resolve its reviewer:
+  - rename → owner of renamed taxon (already known).
+  - add/detach whose payload-parent is the just-created taxon → the accepting
+  reviewer (since they now own it). Otherwise → owner of the payload-parent
+  taxon.
+
+  Push the promoted change onto its reviewer's queue in change-id order (the
+  existing single ordered list per reviewer already gives "submission order"
+  naturally because change ids were assigned at submission).
+
+  Small support changes in src/proposals.ts
+
+  - Expose Map<ChangeId, PayloadNode> (or store a payloadNode ref on Change) so
+  review code can walk the subtree for promotion and rejection-propagation.
+  - A dequeue(changeId, reviewer) helper, since
+  acceptance/rejection/invalidation all need to remove from the per-reviewer
+  ordered list.
+
+  Tests (new test/ files, all under the same freshApp/register/helper 
+  convention)
+
+  Planned groupings:
+  1. accept.test.ts — single accept happy paths for each op; ownership transfer
+  on create; mutation applied to live state observable via GET /trees/{root}.
+  2. acceptValidation.test.ts — cycle, in-tree duplicate, name clash within
+  target tree, name clash in another tree containing the renamed/grafted taxon —
+   all 409, change stays queued.
+  3. promotion.test.ts — latent→queued boundary cases including the Appendix A.1
+   nested-create → newly-owned-by-Bob shape,
+  reviewer-resolution-at-promotion-time when payload-parent is the just-created
+  taxon, sibling independence, and "promoted child is itself an add → its
+  grand-children remain latent."
+  4. reject.test.ts — basic reject; descendant invalidation for add/graft
+  rejection; queued sub-descendants get dequeued; rename/detach rejection cases
+  (see ambiguity #1).
+  5. reviewAuth.test.ts — null/unregistered/malformed caller; non-reviewer 403;
+  non-queued state (latent / accepted / rejected) 409; unknown change id 404.
+  6. reviewIntegration.test.ts — Appendix A.1 minus the cascade (so: Bob accepts
+   the Urban Fantasy create as a single accept, then later Bob accepts
+  Paranormal Romance as a separate single accept; Alice accepts the c1 rename;
+  Bob accepts the c3 rename). Multi-owner, multi-tree interleavings to cover the
+   brief's "exercise the loop against multi-owner, multi-tree state."
+  7. reviewReset.test.ts — /reset still clears everything after accepts/rejects
+  have run.
+
+  Test-plan artifacts
+
+  - test-plans/phase-6-initial.md written before I start coding and frozen at
+  commit.
+  - test-plans/phase-6-final.md at the end, with a changelog of
+  additions/changes.
+
+  Explicitly deferred (per the brief)
+
+  Cascade accept, dismiss, lazy validity, self-invalidation auto-dismiss,
+  external-invalidation "queued but invalid" sub-state, the invalid disposition
+  path beyond simple rejection-propagation. An acceptance that fails validation
+  just 409s with a reason and the change stays queued; Phase 7 will replace that
+   with proper case-2/case-3 handling.
+
+  Ambiguities I'd like to nail down before coding
+
+  1. Reject-propagation scope. §12.3 says "All of its payload descendants become
+   invalid (§11.4 case 1)," but §11.4 case 1 only describes add/graft-ancestor
+  rejection. I read this as: only rejecting an add/graft cascades-invalidates
+  descendants; rejecting a rename does nothing to its descendants (they had an
+  existence dep on the renamed taxon, which still exists with its old name).
+  Detach is always a leaf so the question is moot for it. Confirm?
+  2. Acceptance-failure state transition. The brief says "fails with a reason"
+  and defers case-2/case-3. I'm planning: 409 conflict response, change stays in
+   queued, no state transition. Reviewer can retry or reject. Confirm?
+  3. Promotion when an existence dep has been broken. §11.3 says promote
+  dependents "provided their existence dependencies also currently hold." If a
+  latent descendant's existence-dep ancestor no longer names a taxon present at
+  that position (e.g. someone deleted it between submission and now), I plan to
+  leave it latent (not promote, not invalidate) for Phase 6 — invalidation in
+  this shape is Phase 7's case 2/3 territory. Confirm?
+  4. Non-queued accept/reject status code. Acting on a change that exists but
+  isn't in queued state (latent/accepted/rejected) — I'll return 409 conflict
+  ("change is not in queued state"), reserving 403 for "you aren't the reviewer
+  at all." Confirm?
+
+  Want me to proceed once you've answered (or with my defaults if you'd rather
+  not micromanage)?
+
+✻ Worked for 3m 40s
+
+※ recap: Building Phase 6 of the taxon-tree server: single-decision review loop (accept/reject, promotion, ownership transfer on create). I've presented a plan and four spec ambiguities; waiting on your answers before coding. (disable recaps in /config)
+
+❯ For 1, your 'read' is correct. For 2, sounds good. For 3, why would you leave 
+   it latent? Is there any way for it to ever be accepted in the future? For 4, 
+   sounds good.                                                                 
+
+⏺ Good catch on #3 — "leave latent" is wrong. The reasoning: once an
+  existence-dep position is broken (the named taxon was deleted, or detached out
+   of the target tree), there's no path back. The proposer's plan is anchored at
+   a specific in-tree position; even if someone later re-grafts the taxon, the
+  system can't know that's "the same plan." So a latent descendant whose
+  existence dep has broken can never legitimately become queued.
+
+  I'll invalidate it instead: state = "invalid" (no queue impact since it was
+  never queued). This is symmetric with §11.4 case 1's "they can never satisfy
+  their dependencies" reasoning. It isn't case 2 or case 3 (both of which are
+  about queued changes — the explicitly-deferred bits), so it doesn't trespass
+  on Phase 7.
+
+  So the updated rule at promotion time, walking the just-accepted add/graft's
+  direct payload-children:
+  - existence deps hold → promote to queued, resolve reviewer
+  - existence deps don't hold → mark invalid, recursively invalidate that
+  subtree's payload-descendants (same shape as the rejection cascade in #1)
+
+  Plan otherwise unchanged. Proceeding to write the frozen
+  test-plans/phase-6-initial.md first, then implementation.
+
+✻ Sautéed for 36s
+
+❯ proceed with writing the initial test plan                                    
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Now I'll write the frozen initial test plan for Phase 6.
+
+⏺ Write(test-plans/phase-6-initial.md)
+  ⎿  Wrote 704 lines to test-plans/phase-6-initial.md
+       2 # Phase 6 — Initial Test Plan (FROZEN)
+       3 This plan is written from the spec (`prd/prd.md` §5, §10.3, §11.
+       4 §11.4 case 1, §11.5, §12.1, §12.3, §13, §14, §15.5, §15.6) and
+       5 `prd/phase-6-single-review.md` **before implementation begins**.
+          Once any
+         dited.entation code lands, this file is frozen and must not be e
+       7 The phase's `phase-6-final.md` supersedes it and records what wa
+       8 tested, with a changelog of differences.
+       9 
+      10 ## Scope under test
+     … +815 lines (ctrl+o to expand)
+
+⏺ Wrote test-plans/phase-6-initial.md. The plan covers:
+
+  - 10 test groups mirroring the Phase-5 structure: accept happy paths,
+  rename-acceptance validation (incl. cross-tree clash), add/graft validation
+  (cycle, in-tree dup, name clash), promotion (with reviewer-resolution at
+  promotion time and existence-dep-failure invalidation), reject (with the
+  decision-#1 filter — only add/graft cascades), auth/state guards, cross-phase
+  integration (Appendix A.1 + A.2 walkthroughs), status-view rendering for the
+  new dispositions, reset, and write-serialization.
+  - 10 resolved spec ambiguities documented up front — the four you confirmed
+  (reject filter, accept-fail stays queued, promote-or-invalidate on
+  existence-dep break, 409 on non-queued) plus the HTTP-shape,
+  reviewer-at-promotion-time, reason-content, coherence-across-endpoints,
+  latent-renames-already-have-reviewer, and no-mutation-on-failed-accept
+  decisions.
+  - An honest note in group 4 about the promotion-time-existence-dep-failure
+  shape being tricky to construct; if the chosen shape doesn't work cleanly in
+  code the final plan will record the alternative in its changelog.
+
+  Ready to commit this as the frozen artifact, then start implementing? Or do
+  you want to review/adjust the plan first?
+
+✻ Baked for 3m 48s
+
+❯ I committed it. Proceed.                                                      
+
+⏺ I'll implement Phase 6 now. Starting with the data-model additions to
+  src/proposals.ts, then the review module, routes, and tests.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Now I'll modify src/proposals.ts to add Phase 6 essentials: tracking the
+  nearest add-ancestor on each change, a payload-node lookup, a liveTaxonId slot
+   for newly-created taxa, a reason slot, and queue-management exports.
+
+⏺ Update(src/proposals.ts)
+  ⎿  Added 25 lines, removed 4 lines
+       84     *  (create or graft). Equivalently: has a decision dependen
+           cy.
+       85     *  §11.3 says queued ⇔ this is false at submission. */
+       86    readonly hasDecisionDepAncestor: boolean;
+       87 +  /** Change id of the **nearest** add/graft ancestor on the p
+          +ayload                                                        
+       88 +   *  path, or null if none. Used by Phase 6 promotion to find
+          + a change's                                                   
+       89 +   *  direct dependents: when add A is accepted, the changes p
+          +romoted                                                       
+       90 +   *  are exactly those whose `nearestAddAncestorChangeId === 
+          +A.id`. */                                                     
+       91 +  readonly nearestAddAncestorChangeId: ChangeId | null;       
+       92    /** For rename: the renamed taxon. For add-graft: the grafte
+           d taxon.
+       93     *  For add-create: undefined. For detach: the detached taxo
+           n. */
+       94    readonly taxonId?: TaxonId;
+       95    /** For rename, add-create: the proposed name. */
+       96    readonly name?: string;
+       97    /** For add/detach: the parent taxon under which the op acts
+           .
+       93 -   *  Undefined when the payload-parent is an add-create (id n
+          -ull),                                                         
+       94 -   *  which is unobservable in Phase 5 because such a change i
+          -s always                                                      
+       95 -   *  latent and not surfaced via /queue. */                  
+       96 -  readonly payloadParentTaxonId?: TaxonId;                    
+       98 +   *  Undefined when the payload-parent is an add-create (id n
+          +ull) AND                                                      
+       99 +   *  that add-create hasn't been accepted yet. When the paren
+          +t                                                             
+      100 +   *  add-create is accepted (Phase 6 promotion), the newly-mi
+          +nted                                                          
+      101 +   *  taxon id is patched in here so routing can be resolved. 
+          +*/                                                            
+      102 +  payloadParentTaxonId?: TaxonId;                             
+      103    /** The target tree's root id. Echoed for /queue convenience
+           . */
+      104    readonly targetRootId: TaxonId;
+      105    /** The reviewer per §10.1 (canonical username) for QUEUED c
+           hanges.
+      106     *  null for latent in Phase 5 — promotion (Phase 6) resolve
+           s it. */
+      107    reviewer: string | null;
+      108    state: ChangeState;
+      109 +  /** Set after acceptance. For add-create, the newly-minted t
+          +axon's id;                                                    
+      110 +   *  for add-graft / rename / detach, equals the pre-existing
+          + taxon id                                                     
+      111 +   *  this change refers to. Lets Phase 6's promotion walk rec
+          +over the                                                      
+      112 +   *  live id of an accepted add-create when resolving downstr
+          +eam                                                           
+      113 +   *  routing or existence-dep checks. */                     
+      114 +  liveTaxonId?: TaxonId;                                      
+      115 +  /** §11.5 reason on negative states (rejected / invalid). Ph
+          +ase 6                                                         
+      116 +   *  populates this only for the `invalid` state (rejection-p
+          +ropagation                                                    
+      117 +   *  cause, or promotion-time existence-dep failure). */     
+      118 +  reason?: string;                                            
+      119  }
+      120  
+      121  export interface Proposal {
+     ...
+      126    readonly payload: PayloadNode;
+      127    /** Keyed by change id, iteration order = creation order. */
+      128    readonly changes: Map<ChangeId, Change>;
+      129 +  /** Every payload node in the proposal, keyed by its interna
+          +lId.                                                          
+      130 +   *  Built once at submission so Phase-6 promotion can walk t
+          +he                                                            
+      131 +   *  payload subtree below an accepted change without re-trav
+          +ersing                                                        
+      132 +   *  the whole payload. */                                   
+      133 +  readonly nodesByInternalId: Map<InternalNodeId, PayloadNode>
+          +;                                                             
+      134  }
+      135  
+      136  /** §15.6 maps each of these to its HTTP status the same way t
+           he rest of
+⏺ Now update deriveChanges to track the nearest add-ancestor change id, populate
+   nodesByInternalId, and add the queue mutation + lookup exports.
+
+⏺ Update(src/proposals.ts)
+  ⎿  Added 4 lines, removed 1 line
+      266    // 7) Derive changes + dispositions + reviewers.
+      267    const proposalId = nextProposalId();
+      268    const changes = new Map<ChangeId, Change>();
+      269 +  const nodesByInternalId = new Map<InternalNodeId, PayloadNod
+          +e>();                                                         
+      270    const queuedReviewers: { reviewer: string; changeId: ChangeI
+           d }[] = [];
+      271    deriveChanges(
+      272      payload,
+      273      /*payloadPath=*/ [],
+      273 -    /*ancestorHasAdd=*/ false,                                
+      274 +    /*nearestAddAncestorChangeId=*/ null,                     
+      275      /*payloadParentTaxonId=*/ undefined,
+      276      proposalId,
+      277      targetRootId,
+      278      state,
+      279      changes,
+      280 +    nodesByInternalId,                                        
+      281      queuedReviewers,
+      282    );
+      283  
+     ...
+      289      topTaxonId,
+      290      payload,
+      291      changes,
+      292 +    nodesByInternalId,                                        
+      293    };
+      294    proposals.set(proposalId, proposal);
+      295    for (const c of changes.values()) {
+
+⏺ Update(src/proposals.ts)
+  ⎿  Added 21 lines, removed 19 lines
+      527  function deriveChanges(
+      528    node: PayloadNode,
+      529    ancestorPath: InternalNodeId[],
+      530 -  ancestorHasAdd: boolean,                                    
+      530 +  nearestAddAncestorChangeId: ChangeId | null,                
+      531    payloadParentTaxonId: TaxonId | undefined,
+      532    proposalId: ProposalId,
+      533    targetRootId: TaxonId,
+      534    state: TaxonState,
+      535    changes: Map<ChangeId, Change>,
+      536 +  nodesByInternalId: Map<InternalNodeId, PayloadNode>,        
+      537    queuedReviewers: { reviewer: string; changeId: ChangeId }[],
+      538  ): void {
+      539 +  nodesByInternalId.set(node.internalId, node);               
+      540    const pathHere = [...ancestorPath, node.internalId];
+      541 +  const ancestorHasAdd = nearestAddAncestorChangeId !== null; 
+      542  
+      543    if (node.op !== "no-op") {
+      544      const changeId = nextChangeId();
+     ...
+      558          // Renamed taxon is guaranteed to exist (existence che
+           ck above).
+      559          taxonIdField = node.id ?? undefined;
+      560          nameField = node.name;
+      558 -        if (!isLatent) {                                      
+      559 -          const t = state.taxa.get(node.id as TaxonId);       
+      560 -          // Existence check above guarantees t is defined.   
+      561 -          if (t !== undefined) reviewer = t.owner;            
+      562 -        } else {                                              
+      563 -          // Even latent renames have a well-known reviewer (t
+          -he renamed                                                    
+      564 -          // taxon's owner). Record it for completeness, thoug
+          -h Phase 5                                                     
+      565 -          // does not surface it via /queue.                  
+      566 -          const t = state.taxa.get(node.id as TaxonId);       
+      567 -          if (t !== undefined) reviewer = t.owner;            
+      568 -        }                                                     
+      561 +        // Even latent renames have a well-known reviewer (the
+          + renamed                                                      
+      562 +        // taxon's owner) — recorded at submission. Phase 6 pr
+          +omotion                                                       
+      563 +        // uses it as-is.                                     
+      564 +        const t = state.taxa.get(node.id as TaxonId);         
+      565 +        if (t !== undefined) reviewer = t.owner;              
+      566          break;
+      567        }
+      568        case "add": {
+     ...
+      575            // graft: existing taxon id (the grafted taxon).
+      576            taxonIdField = node.id;
+      577          }
+      581 -        if (!isLatent && payloadParentTaxonId !== undefined) {
+      578 +        if (payloadParentTaxonId !== undefined) {             
+      579            const p = state.taxa.get(payloadParentTaxonId);
+      580            if (p !== undefined) reviewer = p.owner;
+      581          }
+      585 -        // Latent add whose payload-parent is an add-create: r
+          -eviewer                                                       
+      586 -        // stays null (deferred to promotion in Phase 6).     
+      582 +        // Latent add whose payload-parent is an add-create:  
+      583 +        // payloadParentTaxonId is undefined here; the live id
+          + of the                                                       
+      584 +        // newly-created parent is patched in at promotion tim
+          +e.                                                            
+      585          break;
+      586        }
+      587        case "detach": {
+     ...
+      589          // taxon (the detached child) is named by node.id.
+      590          taxonIdField = node.id ?? undefined;
+      591          parentTaxonField = payloadParentTaxonId;
+      594 -        if (!isLatent && payloadParentTaxonId !== undefined) {
+      592 +        if (payloadParentTaxonId !== undefined) {             
+      593            const p = state.taxa.get(payloadParentTaxonId);
+      594            if (p !== undefined) reviewer = p.owner;
+      595          }
+     ...
+      603        op: node.op,
+      604        payloadPath: pathHere,
+      605        hasDecisionDepAncestor: ancestorHasAdd,
+      606 +      nearestAddAncestorChangeId,                             
+      607        taxonId: taxonIdField,
+      608        name: nameField,
+      609        payloadParentTaxonId: parentTaxonField,
+     ...
+      620    // Recurse. The payload-parent taxon for the NEXT level is:
+      621    //   - this node's id, if known (no-op, rename, detach, add-
+           graft);
+      622    //   - undefined, if this is an add-create (no live taxon to
+            anchor on).
+      624 -  // The "ancestor has add" flag propagates downward, sticky. 
+      625 -  const childAncestorHasAdd = ancestorHasAdd || node.op === "a
+          -dd";                                                          
+      623 +  // The "nearest add ancestor" updates to this node's changeI
+          +d if this                                                     
+      624 +  // is an add (create or graft); otherwise it propagates unch
+          +anged.                                                        
+      625 +  const childNearestAdd: ChangeId | null =                    
+      626 +    node.op === "add" ? (node.changeId as ChangeId) : nearestA
+          +ddAncestorChangeId;                                           
+      627    const childParentTaxon: TaxonId | undefined =
+      628      node.id !== null ? node.id : undefined;
+      629  
+     ...
+      631      deriveChanges(
+      632        child,
+      633        pathHere,
+      633 -      childAncestorHasAdd,                                    
+      634 +      childNearestAdd,                                        
+      635        childParentTaxon,
+      636        proposalId,
+      637        targetRootId,
+      638        state,
+      639        changes,
+      640 +      nodesByInternalId,                                      
+      641        queuedReviewers,
+      642      );
+      643    }
+
+⏺ Now add the Phase 6 exports — change lookup, queue mutators, and update the
+  status-tree renderer to include reason.
+
+⏺ Update(src/proposals.ts)
+  ⎿  Added 31 lines, removed 1 line
+      200    const out: Change[] = [];
+      201    for (const id of ids) {
+      202      const c = changeIndex.get(id);
+      203 -    if (c !== undefined) out.push(c);                         
+      203 +    // Defensive: a change in the queue list whose state has d
+          +rifted off                                                    
+      204 +    // "queued" (e.g. invalidated via rejection-propagation in
+          + Phase 6)                                                     
+      205 +    // is filtered here rather than relying on every mutation 
+          +path to                                                       
+      206 +    // also splice the list. The mutators below DO splice on t
+          +ransition,                                                    
+      207 +    // so this is belt-and-suspenders.                        
+      208 +    if (c !== undefined && c.state === "queued") out.push(c); 
+      209    }
+      210    return out;
+      211  }
+      212  
+      213 +/** Lookup by change id. Returns undefined for unknown ids. */
+      214 +export function getChange(id: ChangeId): Change | undefined { 
+      215 +  return changeIndex.get(id);                                 
+      216 +}                                                             
+      217 +                                                              
+      218 +/** Append `changeId` to `reviewer`'s queue if not already pre
+          +sent.                                                         
+      219 + *  Used by Phase 6 promotion to enqueue a newly-promoted chan
+          +ge. */                                                        
+      220 +export function enqueueChange(changeId: ChangeId, reviewer: st
+          +ring): void {                                                 
+      221 +  let q = queuesByReviewer.get(reviewer);                     
+      222 +  if (q === undefined) {                                      
+      223 +    q = [];                                                   
+      224 +    queuesByReviewer.set(reviewer, q);                        
+      225 +  }                                                           
+      226 +  if (!q.includes(changeId)) q.push(changeId);                
+      227 +}                                                             
+      228 +                                                              
+      229 +/** Remove `changeId` from `reviewer`'s queue if present. No-o
+          +p otherwise.                                                  
+      230 + *  Used by Phase 6 accept/reject/invalidation to dequeue. */ 
+      231 +export function dequeueChange(changeId: ChangeId, reviewer: st
+          +ring): void {                                                 
+      232 +  const q = queuesByReviewer.get(reviewer);                   
+      233 +  if (q === undefined) return;                                
+      234 +  const i = q.indexOf(changeId);                              
+      235 +  if (i >= 0) q.splice(i, 1);                                 
+      236 +}                                                             
+      237 +                                                              
+      238  // --- Submission entry point --------------------------------
+           ----------------
+      239  //
+      240  // Called from the POST /proposals route handler inside the wr
+           ite lock.
+
+⏺ Now update the status renderer to surface reason.
+
+⏺ Update(src/proposals.ts)
+  ⎿  Added 5 lines, removed 1 line
+      717  }
+      718  
+      719  export function renderStatusTree(payload: PayloadNode, p: Prop
+           osal): StatusNode {
+      720 +  const change = payload.op === "no-op"                       
+      721 +    ? undefined                                               
+      722 +    : p.changes.get(payload.changeId as ChangeId);            
+      723    const node: StatusNode = {
+      724      op: payload.op,
+      725      id: payload.id,
+      726      disposition: payload.op === "no-op"
+      727        ? "structural"
+      725 -      : (p.changes.get(payload.changeId as ChangeId)?.state ??
+          - "queued"),                                                   
+      728 +      : (change?.state ?? "queued"),                          
+      729    };
+      730    if (payload.name !== undefined) node.name = payload.name;
+      731    if (payload.op !== "no-op" && payload.changeId !== undefined
+           ) {
+      732      node.changeId = payload.changeId;
+      733    }
+      734 +  if (change?.reason !== undefined) node.reason = change.reaso
+          +n;                                                            
+      735    if (payload.children.length > 0) {
+      736      node.children = payload.children.map((c) => renderStatusTr
+           ee(c, p));
+      737    }
+
+⏺ Now create src/review.ts with the accept/reject orchestration.
+
+⏺ Write(src/review.ts)
+  ⎿  Wrote 520 lines to src/review.ts
+         eject),le-decision review loop from PRD §12.1 (accept), §12.3 (r
+         12.111.3 (promotion), §11.4 case 1 (rejection-propagation), §5/§
+         e).(ownership transfer on create-accept), §10.3 (validation scop
+       4 //
+         ons goE+STATE: the orchestration is here; the actual taxa mutati
+       7 // (createTaxonFixture / attachChildFixture / detachChildFixture
+         ), and
+         te.the same Phase-3 invariant module validates the candidate sta
+          theroposal/change state and per-reviewer queues are mutated via
+      10 // helpers exposed by src/proposals.ts.
+     … +593 lines (ctrl+o to expand)
+
+⏺ Fix the misplaced import and clean up the redundant changes-map lookup:
+
+⏺ Update(src/review.ts)
+  ⎿  Added 1 line
+      35    detachChildFixture,
+      36    getState,
+      37    getTaxon,
+      38 +  removeTaxonFixture,                                          
+      39  } from "./taxa.js";
+      40  import type { TaxonId, TaxonState } from "./taxa.js";
+      41  
+
+⏺ Update(src/review.ts)
+  ⎿  Added 4 lines, removed 7 lines
+      209            caller,
+      210            liveTaxonId: created.id,
+      211            rollback: () => {
+      212 -            // Undo the edge first, then drop the taxon. We ca
+          -n't use                                                       
+      213 -            // removeTaxonFixture here without also removing t
+          -he                                                            
+      214 -            // freshly-created id from the taxa map — easier t
+          -o do both                                                     
+      215 -            // inline. (Mirrors the writes.ts edge-add rollbac
+          -k shape.)                                                     
+      212 +            // Undo the edge first, then drop the freshly-crea
+          +ted taxon                                                     
+      213 +            // entirely. removeTaxonFixture also cleans up its
+          + parent                                                       
+      214 +            // index entry, so this is the cleanest reversal. 
+      215              detachChildFixture(parentId, created.id);
+      217 -            // Remove the freshly-created taxon from the store
+          -. Pull                                                        
+      218 -            // the fixture lazily to avoid an import cycle.   
+      219 -            removeFreshlyCreatedTaxon(created.id);            
+      216 +            removeTaxonFixture(created.id);                   
+      217            },
+      218          };
+      219        } else {
+
+⏺ Update(src/review.ts)
+  ⎿  Removed 9 lines
+      257    applied.rollback();
+      258  }
+      259  
+      260 -// Import-cycle workaround: src/taxa.ts exposes removeTaxonFix
+          -ture which                                                    
+      261 -// is the right tool to drop a freshly-created (just-attached)
+          - taxon on                                                     
+      262 -// rollback. We import it lazily inside the closure-producing 
+          -function to                                                   
+      263 -// avoid a top-of-module cycle through deletion.ts.           
+      264 -import { removeTaxonFixture } from "./taxa.js";               
+      265 -function removeFreshlyCreatedTaxon(id: TaxonId): void {       
+      266 -  removeTaxonFixture(id);                                     
+      267 -}                                                             
+      268 -                                                              
+      260  // --- Promotion (§11.3) -------------------------------------
+           ----------------
+      261  //
+      262  // When add/graft A is accepted, its DIRECT dependents are the
+            changes
+
+⏺ Update(src/review.ts)
+  ⎿  Added 4 lines, removed 5 lines
+      284      ) {
+      285        // Only patch when the payload-parent of THIS dependent 
+           is the
+      286        // accepted add itself — i.e. the dependent is a direct 
+           payload
+      287 -      // child of the accepted add. We detect that by checking
+          - that                                                         
+      288 -      // the payload-path of the dependent ends with [..., acc
+          -eptedAdd, c].                                                 
+      289 -      const path = c.payloadPath;                             
+      290 -      const acceptedAddInternal = (proposal.changes.get(accept
+          -edAdd.id) as Change).payloadPath.at(-1);                      
+      291 -      if (path.length >= 2 && path[path.length - 2] === accept
+          -edAddInternal) {                                              
+      287 +      // child of the accepted add. Detected by checking c's p
+          +ath ends                                                      
+      288 +      // with [..., acceptedAdd, c].                          
+      289 +      const acceptedAddInternal = acceptedAdd.payloadPath[acce
+          +ptedAdd.payloadPath.length - 1];                              
+      290 +      if (c.payloadPath.length >= 2 && c.payloadPath[c.payload
+          +Path.length - 2] === acceptedAddInternal) {                   
+      291          c.payloadParentTaxonId = acceptedAdd.liveTaxonId;
+      292        }
+      293      }
+
+⏺ Now create the routes file.
+⏺ Write(src/routes/reviews.ts)
+  ⎿  Wrote 114 lines to src/routes/reviews.ts
+       2 // Review-action routes from PRD §15.5.
+       3 //   POST /changes/{id}/accept   — §12.1 single accept
+       4 //   POST /changes/{id}/reject   — §12.3 reject
+       5 //
+       6 // Both run under the §11.1 write lock and the Phase-2
+       7 // identityWithRegistry + requireWriter chain. Failure mapping p
+         er §15.6:
+       8 //   change id unknown      → 404 not_found
+       9 //   caller ≠ reviewer      → 403 forbidden
+      10 //   change not queued      → 409 conflict
+     … +112 lines (ctrl+o to expand)
+
+⏺ Wire it into the app.
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line
+       6  import { proposalsRouter } from "./routes/proposals.js";
+       7  import { queueRouter } from "./routes/queue.js";
+       8  import { readsRouter } from "./routes/reads.js";
+       9 +import { reviewsRouter } from "./routes/reviews.js";           
+      10  import { usersRouter } from "./routes/users.js";
+      11  import { writesRouter } from "./routes/writes.js";
+      12  import { resetAllState } from "./state.js";
+
+⏺ Update(src/app.ts)
+  ⎿  Added 4 lines
+      49    // §15.2 GET /queue — caller's currently queued changes.
+      50    app.route("/", queueRouter);
+      51  
+      52 +  // §15.5 review actions — POST /changes/{id}/accept and /reje
+         +ct. Gates                                                      
+      53 +  // and the write lock live inside the sub-router.            
+      54 +  app.route("/", reviewsRouter);                               
+      55 +                                                               
+      56    app.notFound((c) =>
+      57      httpError(c, "not_found", `no route matches ${c.req.method}
+           ${new URL(c.req.url).pathname}`),
+      58    );
+
+⏺ Let me run a build to catch any type errors before writing tests.
+
+⏺ Bash(npx tsc 2>&1 | head -100)
+  ⎿  (No output)
+
+⏺ Clean compile. Now extend the test helpers and write the test files.
+
+⏺ Update(test/proposalsTestHelpers.ts)
+  ⎿  Added 46 lines
+      129    return app.request("/queue", { headers });
+      130  }
+      131  
+      132 +export async function acceptChange(                           
+      133 +  app: App,                                                   
+      134 +  caller: string | null,                                      
+      135 +  changeId: string,                                           
+      136 +) {                                                           
+      137 +  const headers: Record<string, string> = {};                 
+      138 +  if (caller !== null) headers["X-Username"] = caller;        
+      139 +  return app.request(`/changes/${changeId}/accept`, {         
+      140 +    method: "POST",                                           
+      141 +    headers,                                                  
+      142 +  });                                                         
+      143 +}                                                             
+      144 +                                                              
+      145 +export async function rejectChange(                           
+      146 +  app: App,                                                   
+      147 +  caller: string | null,                                      
+      148 +  changeId: string,                                           
+      149 +) {                                                           
+      150 +  const headers: Record<string, string> = {};                 
+      151 +  if (caller !== null) headers["X-Username"] = caller;        
+      152 +  return app.request(`/changes/${changeId}/reject`, {         
+      153 +    method: "POST",                                           
+      154 +    headers,                                                  
+      155 +  });                                                         
+      156 +}                                                             
+      157 +                                                              
+      158 +/** Accepts a change and asserts 200. Returns the parsed body.
+          + */                                                           
+      159 +export async function acceptOk(app: App, caller: string, chang
+          +eId: string) {                                                
+      160 +  const res = await acceptChange(app, caller, changeId);      
+      161 +  if (res.status !== 200) {                                   
+      162 +    const text = await res.text();                            
+      163 +    assert.fail(`accept ${changeId} as ${caller} failed (${res
+          +.status}): ${text}`);                                         
+      164 +  }                                                           
+      165 +  return (await res.json()) as { changeId: string; state: "acc
+          +epted" };                                                     
+      166 +}                                                             
+      167 +                                                              
+      168 +/** Rejects a change and asserts 200. */                      
+      169 +export async function rejectOk(app: App, caller: string, chang
+          +eId: string) {                                                
+      170 +  const res = await rejectChange(app, caller, changeId);      
+      171 +  if (res.status !== 200) {                                   
+      172 +    const text = await res.text();                            
+      173 +    assert.fail(`reject ${changeId} as ${caller} failed (${res
+          +.status}): ${text}`);                                         
+      174 +  }                                                           
+      175 +  return (await res.json()) as { changeId: string; state: "rej
+          +ected" };                                                     
+      176 +}                                                             
+      177 +                                                              
+      178  /** Submits a proposal and asserts it succeeded with 201. Retu
+           rns the
+      179   *  parsed response body. Most happy-path tests use this. */
+      180  export async function submitOk(app: App, caller: string, body:
+            unknown) {
+
+  Searched for 1 pattern, read 2 files (ctrl+o to expand)
+
+⏺ Now let me write the test files. I'll start with acceptHappy.test.ts.
+
+⏺ Write(test/acceptHappy.test.ts)
+  ⎿  Wrote 183 lines to test/acceptHappy.test.ts
+         e, Phase-6 single-accept happy paths: each op (rename, add-creat
+       2 // add-graft, detach) accepts end-to-end and produces the docume
+       3 // live-state effect. Covers §12.1, plus the §5/§12.1 ownership 
+         transfer
+       4 // on create-accept and the §9.3 graft-preserves-ownership claus
+       5 e.
+       6 import { test } from "node:test";
+       8 import assert from "node:assert/strict";
+       9 import {
+      10   acceptOk,
+     … +189 lines (ctrl+o to expand)
+
+⏺ Write(test/acceptRenameValidation.test.ts)
+  ⎿  Wrote 172 lines to test/acceptRenameValidation.test.ts
+         es these-6 §10.3 acceptance-time validation for renames — verifi
+       2 // invariant module is invoked over the FULL containing tree(s),
+       3 // the target tree. Phase 6 decision #10 (no mutation on failed 
+         accept)
+       4 // is asserted by reading state before and after a failing accep
+       5 t.
+       6 import { test } from "node:test";
+       8 import assert from "node:assert/strict";
+       9 import {
+      10   acceptChange,
+     … +184 lines (ctrl+o to expand)
+
+⏺ Write(test/acceptAddValidation.test.ts)
+  ⎿  Wrote 257 lines to test/acceptAddValidation.test.ts
+         aft):ase-6 §10.3 acceptance-time validation for add (create + gr
+       2 // cycle, in-tree duplicate, name clash (within the target tree 
+         and
+         ./ within the grafted subtree's contribution to the target tree)
+       4 
+       5 import { test } from "node:test";
+       7 import assert from "node:assert/strict";
+       8 import {
+       9   acceptChange,
+      10   acceptOk,
+     … +260 lines (ctrl+o to expand)
+
+⏺ Write(test/promotion.test.ts)
+  ⎿  Wrote 407 lines to test/promotion.test.ts
+         pendents-6 §11.3 promotion — accepting add/graft moves direct de
+       2 // from latent to queued. Covers reviewer-resolution at promotio
+       3 // (including the ownership-transfer-into-new-parent case from A
+         ppendix
+       4 // A.1), the "only direct dependents promote" rule, and the exis
+       5 // dep-failure → invalid path (Phase 6 decision #3).
+       6 
+       8 import assert from "node:assert/strict";
+       9 
+      10 import {
+     … +457 lines (ctrl+o to expand)
+
+⏺ Tasks are accurate; I'm currently on #4. Continuing with the reject test file.
+
+⏺ Write(test/reject.test.ts)
+  ⎿  Wrote 313 lines to test/reject.test.ts
+         filter:e-6 §12.3 reject + §11.4 case 1 propagation. Decision #1 
+       2 // only add/graft rejection cascades-invalidates descendants. Re
+         name
+         p on thetion leaves descendants alone (they have an existence de
+       4 // renamed taxon, not a decision dep on the rename).
+       5 
+       7 import assert from "node:assert/strict";
+       8 
+       9 import {
+      10   acceptOk,
+     … +339 lines (ctrl+o to expand)
+
+⏺ Write(test/reviewAuth.test.ts)
+  ⎿  Wrote 187 lines to test/reviewAuth.test.ts
+         ect:hase-6 §15.5 authorization + state guards for accept and rej
+       2 // identity middleware (null / unregistered / malformed), review
+         er-match,
+       3 // queued-state requirement, and unknown-id 404.
+       4 
+       6 import assert from "node:assert/strict";
+       7 
+       8 import {
+       9   acceptChange,
+      10   acceptOk,
+     … +189 lines (ctrl+o to expand)
+
+⏺ Write(test/reviewIntegration.test.ts)
+  ⎿  Wrote 393 lines to test/reviewIntegration.test.ts
+         combining6 end-to-end integration: full multi-step walkthroughs 
+       2 // accepts, rejects, and direct actions across multiple reviewer
+         s and
+         ade) and. Covers Appendix A.1 (single-accepts replacing the casc
+       4 // A.2 (graft + reject-detach, leaving a shared taxon).
+       5 
+       7 import assert from "node:assert/strict";
+       8 
+       9 import {
+      10   acceptChange,
+     … +439 lines (ctrl+o to expand)
+  Read 1 file (ctrl+o to expand)
+
+⏺ I'll add a Phase 6 addendum here for two concurrent accepts on the same
+  reviewer.
+
+⏺ Update(test/writeSerialization.test.ts)
+  ⎿  Added 62 lines
+      156    assert.equal(cNums[1]! + 1, cNums[2]!);
+      157  });
+      158  
+      159 +test("write serialization: two POST /changes/.../accept fired 
+          +in the same tick are serialized, both reflected in live state"
+          +, async () => {                                               
+      160 +  const app = await freshApp();                               
+      161 +  // Build a state where two independent renames both validate
+          +. Alice                                                       
+      162 +  // owns root and two leaf children with distinct, non-clashi
+          +ng names.                                                     
+      163 +  const root = (await (await postTaxa(app, "Alice", "Fiction")
+          +).json()) as TaxonRecord;                                     
+      164 +  const c1 = (await (await postTaxa(app, "Alice", "Fantasy")).
+          +json()) as TaxonRecord;                                       
+      165 +  const c2 = (await (await postTaxa(app, "Alice", "Mystery")).
+          +json()) as TaxonRecord;                                       
+      166 +  await app.request(`/taxa/${root.id}/children/${c1.id}`, {   
+      167 +    method: "PUT",                                            
+      168 +    headers: { "X-Username": "Alice" },                       
+      169 +  });                                                         
+      170 +  await app.request(`/taxa/${root.id}/children/${c2.id}`, {   
+      171 +    method: "PUT",                                            
+      172 +    headers: { "X-Username": "Alice" },                       
+      173 +  });                                                         
+      174 +                                                              
+      175 +  // Submit two separate proposals, each with one rename.     
+      176 +  async function submit(taxonId: string, name: string) {      
+      177 +    return app.request("/proposals", {                        
+      178 +      method: "POST",                                         
+      179 +      headers: { "Content-Type": "application/json", "X-Userna
+          +me": "Alice" },                                               
+      180 +      body: JSON.stringify({                                  
+      181 +        targetRootId: root.id,                                
+      182 +        topTaxonId: root.id,                                  
+      183 +        payload: {                                            
+      184 +          op: "no-op",                                        
+      185 +          id: root.id,                                        
+      186 +          children: [{ op: "rename", id: taxonId, name }],    
+      187 +        },                                                    
+      188 +      }),                                                     
+      189 +    });                                                       
+      190 +  }                                                           
+      191 +  const p1 = (await (await submit(c1.id, "Epic Fantasy")).json
+          +()) as {                                                      
+      192 +    payload: { children: { changeId: string }[] };            
+      193 +  };                                                          
+      194 +  const p2 = (await (await submit(c2.id, "Crime Mystery")).jso
+          +n()) as {                                                     
+      195 +    payload: { children: { changeId: string }[] };            
+      196 +  };                                                          
+      197 +  const cId1 = p1.payload.children[0]!.changeId;              
+      198 +  const cId2 = p2.payload.children[0]!.changeId;              
+      199 +                                                              
+      200 +  // Dispatch both accepts in the same tick.                  
+      201 +  const [a1, a2] = await Promise.all([                        
+      202 +    app.request(`/changes/${cId1}/accept`, {                  
+      203 +      method: "POST",                                         
+      204 +      headers: { "X-Username": "Alice" },                     
+      205 +    }),                                                       
+      206 +    app.request(`/changes/${cId2}/accept`, {                  
+      207 +      method: "POST",                                         
+      208 +      headers: { "X-Username": "Alice" },                     
+      209 +    }),                                                       
+      210 +  ]);                                                         
+      211 +  assert.equal(a1.status, 200);                               
+      212 +  assert.equal(a2.status, 200);                               
+      213 +                                                              
+      214 +  // Both renames reflected in live state.                    
+      215 +  const c1After = (await (await app.request(`/taxa/${c1.id}`))
+          +.json()) as TaxonRecord;                                      
+      216 +  const c2After = (await (await app.request(`/taxa/${c2.id}`))
+          +.json()) as TaxonRecord;                                      
+      217 +  assert.equal(c1After.name, "Epic Fantasy");                 
+      218 +  assert.equal(c2After.name, "Crime Mystery");                
+      219 +});                                                           
+      220 +                                                              
+      221  test("write serialization: a parent-add and a follow-up read s
+           ee the consistent post-write state", async () => {
+      222    const app = await freshApp();
+      223    const root = (await (await postTaxa(app, "Alice", "Root")).j
+           son()) as TaxonRecord;
+
+⏺ Build and run tests.
+
+⏺ Bash(npx tsc 2>&1 | head -60)
+  ⎿  (No output)
+
+⏺ Bash(node --test "dist/**/*.test.js" 2>&1 | tail -80)
+  ⎿  ✔ DELETE edge: unknown child → 404 (0.989ms)
+     ✔ DELETE edge: both exist but no edge between them → 404 (decision #3)
+      (0.729208ms)
+     … +79 lines (ctrl+o to expand)
+
+⏺ All 454 tests pass on the first run (52 new Phase 6 tests on top of Phase 5's
+  402). Let me double-check the new Phase 6 tests landed by counting per file.
+
+⏺ Bash(node --test "dist/test/acceptHappy.test.js"
+      "dist/test/acceptRenameValidation.test.js"
+      "dist/test/acceptAddValidation.test.js" "dist/test/promotion.test.js"
+      "di…)
+  ⎿  ✔ Appendix A.1: full walkthrough using single accepts (no cascade) (20
+     .554583ms)
+     ✔ Appendix A.1: variant where Alice accepts c1 rename first (2.1715ms)
+     … +16 lines (ctrl+o to expand)
+
+⏺ 51 Phase 6 tests + 1 added to writeSerialization = 52 new tests, all passing.
+
+⏺ Now write the final test plan with the changelog.
+
+⏺ Write(test-plans/phase-6-final.md)
+  ⎿  Wrote 242 lines to test-plans/phase-6-final.md
+       2 # Phase 6 — Final Test Plan
+       3 This supersedes `phase-6-initial.md` (frozen). It records what w
+         as
+         zenually tested, with a changelog of how it differs from the fro
+       5 initial plan and the reason for each change.
+       6 
+       8 ## Run command
+       9 ```
+      10 npm test                 # tsc && node --test "dist/**/*.test.js
+         "
+     … +249 lines (ctrl+o to expand)
+
+⏺ Bash(git status && echo "---" && git diff --stat)
+  ⎿  On branch main
+     Your branch is up to date with 'origin/main'.
+     … +28 lines (ctrl+o to expand)
+
+⏺ Phase 6 is complete and passing. Summary of what landed:
+
+  Implementation
+  - src/review.ts (new) — accept/reject orchestration: tentative mutation +
+  evaluateAll over the candidate state with rollback, ownership transfer on
+  add-create, §11.3 promotion of direct dependents with reviewer-resolution at
+  promotion time, existence-dep check that invalidates dependents whose
+  payload-position chain is broken, and §11.4 case 1 propagation on add/graft
+  rejection.
+  - src/routes/reviews.ts (new) — POST /changes/{id}/accept and /reject behind
+  identityWithRegistry + requireWriter + write lock.
+  - src/proposals.ts — added nearestAddAncestorChangeId (powers direct-dependent
+   lookup), nodesByInternalId (powers payload walks), mutable liveTaxonId /
+  reason slots on Change, and getChange/enqueueChange/dequeueChange exports.
+  Status renderer now surfaces reason on negative dispositions.
+  - src/app.ts — mounts the new router.
+
+  Tests — 52 new (454 total, all passing):
+  - acceptHappy (4), acceptRenameValidation (4), acceptAddValidation (7),
+  promotion (7), reject (8), reviewAuth (14), reviewIntegration (7), plus a
+  concurrent-accept addendum to writeSerialization (1).
+
+  Test plan — test-plans/phase-6-final.md with changelog covering:
+  parameterized-loop refinement on the auth tests, the keystone shape chosen for
+   the decision-#1 reject test, the existence-dep-failure shape, deliberate "not
+   added" notes for the two redundant promotion tests and three symmetric
+  reject-on-non-queued tests.
+
+  Build is clean (npx tsc succeeds) and the full suite is green.
+
+✻ Cooked for 17m 12s
+
+❯ /usage 
+  ⎿  Settings dialog dismissed

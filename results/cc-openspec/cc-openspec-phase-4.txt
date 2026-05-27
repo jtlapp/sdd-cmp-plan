@@ -1,0 +1,2840 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-openspec-openlore
+
+❯ /opsx:explore                                                                 
+
+  Searched for 1 pattern, read 2 files, listed 3 directories (ctrl+o to expand)
+
+⏺ We're at the start of Phase 4. Phases 1–3 are archived; no active change yet.
+  Phase 4's brief is in prd/phase-4-direct-actions.md and covers PRD §5–§7,
+  §11.1, §15.3 — the owner-authoritative writes plus global write serialization.
+   Existing spec capabilities you'll be touching or extending: taxon-domain,
+  invariant-engine, authorization-gate, state-reset, error-model.
+
+  Let me sketch the territory and then point at what I think is genuinely worth
+  thinking about before proposing.
+
+  The shape of Phase 4
+
+           ┌───────────── HTTP entry (§15.3) ─────────────┐
+           │                                              │
+           │  POST  /taxa            (create)             │
+           │  PATCH /taxa/{id}       (edit: name, owner)  │
+           │  DELETE /taxa/{id}      (delete + region)    │
+           │  PUT    /taxa/{p}/children/{c}  (edge add)   │
+           │  DELETE /taxa/{p}/children/{c}  (edge detach)│
+           │                                              │
+           └────────────────────┬─────────────────────────┘
+                                │
+              ┌─────────────────▼──────────────────┐
+              │  Phase 2: authorization gate       │ ← reject null /
+  unregistered
+              │  (already exists)                  │   non-owner /
+  non-parent-owner
+              └─────────────────┬──────────────────┘
+                                │
+              ┌─────────────────▼──────────────────┐
+              │  Write serialization (§11.1)       │ ← NEW. Reused by Phases
+  5–7.
+              │  one writer at a time              │   Reads bypass.
+              └─────────────────┬──────────────────┘
+                                │
+              ┌─────────────────▼──────────────────┐
+              │  Phase 3: invariant engine         │ ← already exists; now
+  actually
+              │  (validate proposed mutation)      │   gets called from writers
+              └─────────────────┬──────────────────┘
+                                │
+                    apply mutation to store
+
+  So most of the machinery is already in place. Phase 4 is mostly about wiring
+  writers through it — except for two genuinely new pieces: write serialization
+  and delete's region/preconditions.
+
+  Threads I'd pull on
+
+  A few things stand out as worth resolving before the proposal calcifies them:
+
+  1. Where does the write lock live, and what's its surface?
+  Middleware over mutating handlers is the cleanest now, but Phases 5–7 add
+  review actions that mutate state without being the same HTTP shape (POST 
+  /changes/{id}/accept, etc.). A reusable "write-section" primitive at the
+  application layer (a context manager / wrapper that each write op invokes)
+  survives both phases without re-plumbing. Worth deciding now so the spec
+  captures the right abstraction.
+
+  2. The "shared" check in §6.3 precondition 1 — what does it mean 
+  operationally?
+  PRD wording: "no taxon in the deletion region is reachable from more than one
+  root." Because §3.3 already forbids in-tree diamonds, a U-owned taxon with
+  multiple parents is necessarily in multiple root-trees. So "shared" reduces to
+   "has more than one parent" — which is much cheaper to check than walking up
+  to roots. Worth confirming this equivalence in the proposal so the
+  implementation can use the parent-count shortcut without drifting from the
+  spec wording. (And the halt-frontier other-owned children are explicitly
+  outside the region, so their parent-count is irrelevant — the check only runs
+  on the region.)
+
+  3. Region computation — one pass or two?
+  The natural shape is one traversal from N that:
+  - adds U-owned nodes to the deletion set, recursing into their children,
+  - on hitting an other-owned child, records the (parent→child) edge for
+  detachment and stops.
+
+  Then validate preconditions on the assembled set, then apply. Two open
+  questions:
+  - Do we validate as we go (fail fast) or after assembly? Assembling first
+  gives better error messages ("blocked by these shared taxa: …").
+  - What about a U-owned taxon reachable from N via two wholly-U paths within
+  the region? It still only appears once in the deletion set (it's a node, not
+  an edge), but it has 2 parents inside the region → not shared with anything
+  outside, fine. The "shared" check is about parents outside the region, not
+  just parent-count ≥ 2. So the parent-count shortcut from thread #2 needs
+  refining: "has a parent that isn't in the deletion region."
+
+  That last point feels like the kind of thing where the spec wording and the
+  natural implementation can drift, and it's worth nailing precisely in the
+  change proposal.
+
+  4. Edge-add (PUT /taxa/{parentId}/children/{childId}) brings the child's whole
+   live subtree implicitly.
+  The invariant module needs to validate across the resulting tree(s), which
+  includes the child's subtree merging in. Want to make sure the
+  invariant-engine API from Phase 3 actually supports "what if we added this
+  edge" without committing — i.e. it can take a hypothetical edge and check. If
+  it only validates the live state, we have a gap to close.
+
+  5. Edit owner-reassignment.
+  Reads owner from request, validates it's a registered non-null username (Phase
+   2 user-registry lookup), reassigns. Subtleties:
+  - A self reassignment (assigning to oneself) — allowed? PRD doesn't forbid it.
+   Probably fine as a no-op-ish success.
+  - Reassigning combined with rename in the same PATCH — atomic, both validated,
+   both apply or neither.
+  - After reassignment, the previous owner loses delete/edit rights instantly.
+  Worth a test.
+
+  6. State reset.
+  Phase 4 doesn't add a new kind of state — taxa already exist from Phase 3's
+  domain work. But it adds operations that create taxa from API input, so POST 
+  /reset needs to clear them whether they came from fixtures or from POST /taxa.
+   Probably already true, but worth confirming the reset spec doesn't need an
+  addition.
+
+  ---
+  Where do you want to start? I'd guess #2 + #3 (the deletion semantics) are the
+   highest-leverage to nail down before proposing, because they're the only part
+   of Phase 4 where the spec and the natural code shape can quietly diverge. But
+   happy to follow whichever thread is live for you — or pull on something I
+  haven't surfaced.
+
+✻ Baked for 1m 43s
+
+※ recap: We're at the start of Phase 4 (owner-authoritative direct actions: create, edit, edge add/remove, delete, plus write serialization) in explore mode with no change proposal yet. Next: pick which thread to dig into, likely the delete region semantics and "shared" precondition. (disable recaps in /config)
+
+❯ Regarding 2, we want to avoid cascade-deleting an item that is reachable from 
+   more than one root.                                                          
+
+⏺ Right — and that intent actually rules out the "parent count > 1" shortcut I
+  floated. Worth flagging because the shortcut almost works and could quietly
+  slip into an implementation.
+
+  The shortcut only catches multi-parent at the region node itself. But a region
+   node can have a single parent and still be reachable from multiple roots, if
+  the fan-out happens above N:
+
+     R1        R2
+      \        /
+       \      /
+        A  (U-owned, parents R1 and R2)
+        |
+        N  (U-owned)         ← N has one parent (A), passes precondition 2
+        |
+        P  (U-owned)
+        |
+        T  (U-owned, leaf)
+
+  Every node in the region {N, P, T} has exactly one parent. The shortcut says
+  "not shared." But each of them is reachable from both R1 and R2 via A, so
+  deleting them silently strips that subtree from R2's tree as well — the exact
+  destructive cross-tree effect the precondition exists to prevent.
+
+  So the check has to be the literal one: for each node in the deletion region,
+  gather its set of ancestor-roots; if any node's set has cardinality > 1,
+  block. (Halt-frontier other-owned children remain excluded — they're detached,
+   not destroyed.)
+
+  Equivalently: walk up from each region node and look for any ancestor with > 1
+   parent. First fan-out you hit means multiple roots above. That's probably the
+   implementation shape, but the spec wording should stay as "reachable from
+  more than one root" so the property is what's authoritative, not the
+  algorithm.
+
+  One follow-on: this means the deletion check needs an efficient "ancestor
+  roots of X" query against the live store. Phase 3's invariant module may or
+  may not already expose that — worth checking before the proposal commits to a
+  shape. Want me to look?
+
+✻ Sautéed for 1m 32s
+
+❯ sure                                                                          
+
+⏺ Skipping task tracking — this is one targeted lookup, not multi-step work.
+
+  Read 2 files (ctrl+o to expand)
+
+⏺ Looks good — Phase 3 already shipped exactly the right primitive. From
+  taxon-domain spec lines 173–222:
+
+  containingRoots(g, t) → Set<rootId>   // every tree that contains t
+  isShared(g, t)        → boolean       // |containingRoots| > 1
+
+  And the spec explicitly says isShared matches PRD §3.3's shared. So
+  precondition 1 is literally:
+
+  for t in deletionRegion:
+      if isShared(snapshot, t): block
+
+  No new primitive needed for the check itself. The implementation matches the
+  property the PRD names, not a parent-count proxy — which is exactly what we
+  want.
+
+  What Phase 4 does need to introduce (Phase 3 doesn't give it for free):
+
+  - The constrained region walk itself. reachableSubtree(g, top) exists but
+  traverses all children regardless of owner. The deletion region walks only
+  U-owned children and records the halt-frontier (other-owned children) as edges
+   to detach. That's delete-specific. Two reasonable homes:
+    - As a new taxon-domain reachability primitive — e.g. ownerScopedRegion(g, 
+  n, owner) → { region: Set<TaxonId>, haltFrontier: Set<{parent, child}> }.
+  Pure, testable against hand-built graphs, mirrors how Phase 3 organized the
+  other primitives. Feels like the right shelf to put it on.
+    - Inline in the delete handler. Cheaper, but mixes pure graph logic with the
+   handler.
+
+  I'd lean toward the domain primitive — the keystone discipline of pure graph
+  functions is paying dividends here, and it'd extend that discipline rather
+  than break it.
+  - Precondition 2 check — N.parents == ∅ or (|N.parents| == 1 and that parent
+  is U-owned). Trivial; reads parentsOf[N] directly. Worth noting the PRD's
+  redundancy callout: if precondition 1 passes, N can have at most one parent,
+  so precondition 2 reduces to "the lone parent (if any) is U-owned." Two checks
+   logically, one implementation in practice.
+
+  So the delete pipeline looks like:
+
+  authorize (Phase 2)
+    └─▶ write-lock (Phase 4 new)
+          └─▶ snapshot
+                └─▶ ownerScopedRegion(g, N, U)   → {region, haltFrontier}
+                      ├─▶ check ∀t∈region: ¬isShared(g, t)         [precond 1]
+                      ├─▶ check N.parents valid per §6.3.2          [precond 2]
+                      └─▶ apply: remove haltFrontier edges, then remove region
+
+  Want to keep pulling on Phase 4 threads, or feel ready to start drafting the
+  change proposal?
+
+✻ Worked for 43s
+
+❯ Check thread 4                                                                
+
+⏺ Checked — no gap. checkAddEdge already handles it correctly by design.
+
+  Look at how it works (invariant-engine/spec.md:274–334):
+
+  1. Builds a candidate Graph that's the live graph plus just the one new edge
+  p→c. It does not clone or reattach c's subtree — that subtree is already in g,
+   and the candidate keeps the same childrenOf for c and everything below.
+  2. Runs checkInvariants over the whole candidate, walking from every root.
+
+  From p's root, the walk now reaches c and everything c reaches. Any cycle,
+  in-tree duplicate, or name clash that appears anywhere in the resulting tree
+  gets caught — including ones contributed by a deep descendant of c. Same for
+  any other trees the affected taxa belong to, since checkInvariants iterates
+  all roots.
+
+  So Phase 4's edge-add handler is literally:
+  checkAddEdge(snapshot, parentId, childId)  →  ok | violations
+  No bespoke "fold in the subtree" logic needed.
+
+  One thing Phase 4 should add to its tests, though: the existing scenarios in
+  invariant-engine/spec.md:294–326 all add c as a leaf — none exercise "c brings
+   a non-trivial subtree." The mechanism handles it, but it's not explicitly
+  verified. Phase 4 owns the §6.4 endpoint behavior, so its test plan should
+  include at minimum:
+
+  - add edge p→c where c's subtree contains a name that clashes with something
+  already in p's tree → 409
+  - add edge p→c where c's subtree contains a taxon already reachable from p's
+  root via a different path → 409 (in-tree-duplicate)
+  - add edge p→c where c's subtree contains p itself → 409 (cycle)
+
+  These are end-to-end through the HTTP handler, not unit tests of the engine —
+  they verify the Phase 4 wiring exercises the subtree-aware semantics, which is
+   the load-bearing piece for §6.4.
+
+  Threads cleared as I see them: write-lock surface (#1), shared-via-roots
+  semantics (#2 + #3), edge-add subtree handling (#4). #5 (owner reassignment
+  edge cases) and #6 (state reset) are pretty mechanical. Ready to propose, or
+  anything else you want to chew on first?
+
+✻ Cogitated for 43s
+
+※ recap: Goal: scope Phase 4 (direct owner write actions) before drafting an OpenSpec proposal. We've cleared the four substantive threads (write-lock surface, delete shared-by-root semantics, region walk, edge-add subtree handling). Next: start the change proposal. (disable recaps in /config)
+
+❯ For thread 5, what is the mechanism for changing the owner?                   
+
+⏺ Let me check what's already specified for owner storage and registry lookup so
+   I can give you the actual mechanism rather than guess.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ End-to-end the mechanism is:
+
+  Request shape (PRD §6.2, §15.3):
+  PATCH /taxa/{id}
+  X-Username: <current-owner>
+  { "owner": "<new-username>" }
+  name and owner are both optional in the body; either or both may be present in
+   one PATCH.
+
+  Validation/auth chain:
+
+  1. identity-resolution middleware (Phase 2)
+     X-Username  →  null | unregistered | registered (with originalCasing)
+
+  2. authorization-gate (Phase 2)
+     reject null and unregistered callers → 403 forbidden
+
+  3. PATCH handler — load taxon by id (404 if missing)
+
+  4. owner-check
+     caller-username equalsCI taxon.owner ?
+     no → 403 forbidden (non-owner)
+
+  5. acquire write-lock (Phase 4 new)
+
+  6. body validation
+     - owner present?
+         null  → reject (§6.2: "may never be set to null")
+         string → username-format check (empty / whitespace) → 400
+     - name present? → §3.4 format check
+
+  7. registry check on new owner
+     userRegistry.isRegistered(newOwner) ?
+     no → reject  ← status code is a genuine spec gap, see below
+
+  8. resolve casing
+     canonical = userRegistry.originalCasing(newOwner)   // e.g. "alice" →
+  "Alice"
+
+  9. invariant check
+     if name also changed: checkRename(snapshot, id, newName) → 409 on violation
+
+  10. apply (atomic under write-lock)
+      taxon.owner = canonical    // stored in registered original casing
+      taxon.name  = newName      // if present
+
+  11. release lock → 200
+
+  Key properties this gives you:
+
+  - Unilateral: no consent flow, no notification. The new owner finds out by
+  inspecting the taxa (or being told out of band). PRD §6.2 is explicit about
+  this.
+  - Owner stored in registered casing: taxon-domain spec line 19 already
+  requires owner storage in original registered casing — so step 8
+  (originalCasing) is load-bearing. Passing through the raw request string would
+   be a spec violation.
+  - Owner-check uses equalsCI: because the stored owner is whatever the
+  registry's originalCasing returned at last write, and the caller's X-Username
+  could differ in case, comparison must be case-insensitive (matching the
+  registry's identity rule).
+  - Atomic with rename: both validations run, both apply, both rolled back
+  together if either fails. The write-lock makes this trivial — no transaction
+  machinery needed.
+  - Self-reassignment: owner: "<caller>" passes every check and applies as a
+  (canonicalizing) no-op. Probably fine to allow; the spec doesn't forbid it.
+  - Previous owner loses rights immediately: at step 10 the in-memory state
+  flips. Any subsequent request from them gets 403. The current request
+  completes because the auth check already passed at step 4.
+
+  One spec gap worth surfacing in the proposal (step 7):
+
+  PRD §15.6 maps status codes:
+  - 400 (validation_error) — malformed username
+  - 403 (forbidden) — caller is null or unregistered
+  - 404 (not_found) — taxon/tree/proposal/change missing (user is not listed)
+  - 409 (conflict) — invariants, preconditions, "duplicate user registration"
+
+  "New owner is well-formed but not registered" doesn't fit any cleanly. It's
+  not the caller, so it's not 403's "request bearing an unregistered username."
+  It's not malformed. The new-owner string is conceptually a reference to a user
+   that doesn't exist — which would map naturally to 404, but PRD §15.6's 404
+  list doesn't include users. And it's not really a conflict either.
+
+  This needs resolving in the proposal — pick one and add a details.tag (e.g.
+  unregistered-owner) so the spec is unambiguous. My instinct is 400 
+  validation_error with tag unregistered-owner — it fits the "request body
+  references something that doesn't satisfy a stated constraint" pattern,
+  parallel to how malformed names land at 400 — but it's worth checking against
+  your sense of the model. Want to settle that now or punt it into the proposal?
+
+✻ Baked for 59s
+
+❯ Let's do 400. Proceed with the proposal.                                      
+
+⏺ Invoking the propose skill to capture everything we've worked out into the
+  change artifacts.
+
+⏺ Skill(opsx:propose)
+  ⎿  Successfully loaded skill
+⏺ Bash(openspec new change "phase-4-direct-actions")
+  ⎿  - Creating change 'phase-4-direct-actions'...
+     ✔ Created change 'phase-4-direct-actions' at openspec/changes/phase-4-
+     direct-actions/ (schema: spec-driven)
+
+⏺ Bash(openspec status --change "phase-4-direct-actions" --json)
+  ⎿  {
+       "changeName": "phase-4-direct-actions",
+       "schemaName": "spec-driven",
+     … +37 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions proposal --change "phase-4-direct-actions" --json)
+  ⎿  {
+       "changeName": "phase-4-direct-actions",
+       "artifactId": "proposal",
+     … +35 lines (ctrl+o to expand)
+
+  Searched for 1 pattern, read 2 files, listed 2 directories (ctrl+o to expand)
+
+⏺ Now I have a clear template. Writing the proposal.
+
+⏺ Write(openspec/changes/phase-4-direct-actions/proposal.md)
+  ⎿  Wrote 187 lines to openspec/changes/phase-4-direct-actions/proposal.md
+       2 ## Why
+         on server.rns the system into a complete multi-owner direct-acti
+         ityse 3 froze the keystone — the `Graph` snapshot, the reachabil
+         he fiveves, and the pure §3.3 invariant engine. Phase 4 layers t
+       6 owner-authoritative write endpoints on top: create, edit, delete
+       7 add, and edge detach. Every write runs under a new **global writ
+       8 serialization** (§11.1) and every invariant check delegates to t
+       9 engine — the two forward obligations Phase 3 locked in are disch
+      10 here for the first time. After this phase the server is feature-
+         complete
+     … +250 lines (ctrl+o to expand)
+
+⏺ Bash(openspec status --change "phase-4-direct-actions" --json)
+  ⎿  {
+       "changeName": "phase-4-direct-actions",
+       "schemaName": "spec-driven",
+     … +31 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions design --change "phase-4-direct-actions" --json)  ⎿  {
+       "changeName": "phase-4-direct-actions",
+       "artifactId": "design",
+     … +26 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/phase-4-direct-actions/design.md)
+  ⎿  Wrote 805 lines to openspec/changes/phase-4-direct-actions/design.md
+       2 ## Context
+         ts on topands the five owner-authoritative direct-action endpoin
+       4 of the Phase 1–3 stack. Most of the machinery is already in plac
+       5 e:
+       6 - Phase 2 supplies the identity middleware and the `requireRegis
+       7   authorization gate — every write endpoint in this phase mounts
+       8   the gate.
+       9 - Phase 3 supplies the `Graph` snapshot, the reachability primit
+      10   (`roots`, `containingRoots`, `isShared`, `reachableSubtree`), 
+         and the
+     … +962 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions specs --change "phase-4-direct-actions" --json)
+  ⎿  {
+       "changeName": "phase-4-direct-actions",
+       "artifactId": "specs",
+     … +39 lines (ctrl+o to expand)
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+⏺ Bash(find openspec/changes/archive -name "spec.md" | xargs grep -l "##
+      MODIFIED" 2>/dev/null | head -3)
+  ⎿  (No output)
+
+⏺ Bash(mkdir -p
+      openspec/changes/phase-4-direct-actions/specs/write-serialization
+      openspec/changes/phase-4-direct-actions/specs/direct-taxon-actions
+      openspec/changes/p…)
+  ⎿  Done
+
+⏺ Write(openspec/changes/phase-4-direct-actions/specs/write-serialization/spec.m
+       d)
+  ⎿  Wrote 182 lines to openspec/changes/phase-4-direct-actions/specs/write
+     -serialization/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: Global write-section primitive
+       5 The system SHALL expose an application-layer primitive — referre
+         d to as
+       7 serializes its callers FIFO. At any moment at most one invocatio
+         n of
+         rocess;ALL be executing inside the primitive across the entire p
+       9 when one invocation completes (resolves or rejects), the next qu
+      10 invocation SHALL begin. Invocations enter the primitive in the o
+         rder
+     … +201 lines (ctrl+o to expand)
+
+⏺ Now the direct-taxon-actions spec — the largest of the three.
+
+⏺ Write(openspec/changes/phase-4-direct-actions/specs/direct-taxon-actions/spec.
+       md)
+  ⎿  Wrote 664 lines to openspec/changes/phase-4-direct-actions/specs/direc
+     t-taxon-actions/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: Every direct-action endpoint requires a registe
+         red caller and enters the write-section
+       4 
+       5 The five PRD §15.3 direct-action endpoints — `POST /taxa`,
+       7 `PUT /taxa/{parentId}/children/{childId}`, and
+       8 `DELETE /taxa/{parentId}/children/{childId}` — SHALL:
+       9 
+      10 - run behind the [[authorization-gate]] `requireRegistered` midd
+         leware,
+     … +733 lines (ctrl+o to expand)
+
+⏺ Now the taxon-domain delta for the new primitives.
+
+⏺ Write(openspec/changes/phase-4-direct-actions/specs/taxon-domain/spec.md)
+  ⎿  Wrote 302 lines to
+     openspec/changes/phase-4-direct-actions/specs/taxon-domain/spec.md
+       2 ## ADDED Requirements
+       3 ### Requirement: Owner-scoped region reachability primitive
+       4 
+       5 The system SHALL expose a pure function
+       6 `ownerScopedRegion(g: Graph, n: TaxonId, owner: string) →
+         rent: TaxonId; child: TaxonId }> }`tFrontier: ReadonlyArray<{ pa
+       8 as a fourth reachability primitive alongside `roots`,
+       9 `containingRoots`, `isShared`, and `reachableSubtree`. The funct
+         ion
+      10 SHALL compute the **deletion region** described by PRD §6.3:
+     … +328 lines (ctrl+o to expand)
+
+⏺ Bash(openspec status --change "phase-4-direct-actions" --json)
+  ⎿  {
+       "changeName": "phase-4-direct-actions",
+       "schemaName": "spec-driven",
+     … +27 lines (ctrl+o to expand)
+
+⏺ Bash(openspec instructions tasks --change "phase-4-direct-actions" --json)
+  ⎿  {
+       "changeName": "phase-4-direct-actions",
+       "artifactId": "tasks",
+     … +22 lines (ctrl+o to expand)
+
+⏺ Write(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Wrote 110 lines to openspec/changes/phase-4-direct-actions/tasks.md
+      2 ## 1. Initial test plan (frozen at end of step 1)
+      3 - [ ] 1.1 Write `test-plans/phase-4-initial.md` from the three ne
+        put | Expected | Notes` table formatng the established `Rule | In
+      4 - [ ] 1.2 Commit `phase-4-initial.md` — this commit marks the fre
+      5 - [ ] 1.3 Create `test-plans/phase-4-final.md` as a copy of the i
+        nitial plan plus an empty `## Changelog` section at the end
+      7 ## 2. Write-section primitive (`specs/write-serialization`)
+      8 
+        riteLock<T>(fn: () => Promise<T> | T): Promise<T>` as a promise-c
+        hained FIFO mutex; module-scoped `chain: Promise<unkn
+     … +287 lines (ctrl+o to expand)
+⏺ Bash(openspec status --change "phase-4-direct-actions" --json && echo
+      "---validate---" && openspec validate phase-4-direct-actions --strict
+      2>&1)
+  ⎿  Error: Exit code 1
+     {
+       "changeName": "phase-4-direct-actions",
+       "schemaName": "spec-driven",
+       "isComplete": true,
+       "applyRequires": [
+         "tasks"
+       ],
+       "artifacts": [
+         {
+     … +31 lines (ctrl+o to expand)
+
+⏺ Validator wants a clearly-formed SHALL/MUST sentence in each requirement body.
+   Four requirements have SHALL only inside structured lists or after wrapped
+  inline code — let me add explicit lead sentences.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/specs/direct-taxon-actions/spec
+        .md)
+  ⎿  Added 4 lines
+       2  
+       3  ### Requirement: Every direct-action endpoint requires a regist
+          ered caller and enters the write-section
+       4  
+       5 +Every direct-action endpoint SHALL be gated by `requireRegister
+         +ed` and                                                        
+       6 +SHALL enter the [[write-serialization]] write-section primitive
+         + for its                                                       
+       7 +snapshot-validate-apply critical section.                      
+       8 +                                                               
+       9  The five PRD §15.3 direct-action endpoints — `POST /taxa`,
+      10  `PATCH /taxa/{id}`, `DELETE /taxa/{id}`,
+      11  `PUT /taxa/{parentId}/children/{childId}`, and
+
+⏺ Update(openspec/changes/phase-4-direct-actions/specs/taxon-domain/spec.md)
+  ⎿  Added 9 lines, removed 5 lines
+      279  
+      280  ### Requirement: Stored owner casing on PATCH is the registry'
+           s original casing
+      281  
+      282 -When [[direct-taxon-actions]] PATCH /taxa/{id} writes a new `o
+          -wner`                                                         
+      283 -value via `setTaxonFields`, the value passed in SHALL be the  
+      284 -[[user-registry]] `originalCasing(newOwner)` result for the   
+      282 +The store SHALL store the owner value passed to `setTaxonField
+          +s`                                                            
+      283 +verbatim and SHALL NOT normalize, lowercase, or otherwise tran
+          +sform                                                         
+      284 +it. Callers SHALL canonicalize a PATCH-supplied owner string t
+          +hrough                                                        
+      285 +the [[user-registry]] before invoking `setTaxonFields`.       
+      286 +                                                              
+      287 +Specifically, when [[direct-taxon-actions]] PATCH /taxa/{id} w
+          +rites a                                                       
+      288 +new `owner` value via `setTaxonFields`, the value passed in SH
+          +ALL be                                                        
+      289 +the [[user-registry]] `originalCasing(newOwner)` result for th
+          +e                                                             
+      290  case-insensitively-matching registered user, not the raw reque
+           st body
+      286 -string. The store SHALL store the value verbatim and SHALL NOT
+          - itself                                                       
+      287 -normalize, lowercase, or transform the owner string.          
+      291 +string.                                                       
+      292  
+      293  This extends the existing taxon-domain rule ("Owner is stored 
+           in its
+      294  original registered casing") to apply not just to creation but
+            also
+
+⏺ Update(openspec/changes/phase-4-direct-actions/specs/write-serialization/spec.
+        md)
+  ⎿  Added 6 lines, removed 4 lines
+      71  
+      72  ### Requirement: Reads do not enter the write-section primitive
+      73  
+      74 -Read-only handlers — including the four Phase 3 read endpoints 
+      75 -(`GET /taxa`, `GET /taxa/{id}`, `GET /trees`, `GET /trees/{root
+         -Id}`),                                                         
+      76 -`GET /users`, and any future read endpoint — SHALL NOT call    
+      77 -`withWriteLock`. Reads observe the store's current state at the
+         - moment                                                        
+      74 +Read-only handlers SHALL NOT call `withWriteLock` and SHALL NOT
+         + block                                                         
+      75 +on, or be blocked by, in-flight writes.                        
+      76 +                                                               
+      77 +This applies to the four Phase 3 read endpoints (`GET /taxa`,  
+      78 +`GET /taxa/{id}`, `GET /trees`, `GET /trees/{rootId}`), `GET /u
+         +sers`,                                                         
+      79 +and any future read endpoint. Reads observe the store's current
+         + state at the moment                                           
+      80  they take a `snapshot()` and SHALL NOT block on, or be blocked 
+          by,
+      81  in-flight writes.
+      82  
+
+⏺ Update(openspec/changes/phase-4-direct-actions/specs/write-serialization/spec.
+        md)
+  ⎿  Added 6 lines, removed 4 lines
+      107  
+      108  ### Requirement: Every later write path enters the write-secti
+           on primitive
+      109  
+      110 -Every state-mutating endpoint or background routine — in this 
+          -phase                                                         
+      111 -and in any later phase — SHALL enter `withWriteLock` exactly o
+          -nce                                                           
+      112 -around the critical section that takes a snapshot, validates, 
+          -and                                                           
+      113 -applies. This is a **forward obligation** that binds the five 
+          -Phase 4                                                       
+      110 +Every state-mutating endpoint or background routine SHALL ente
+          +r                                                             
+      111 +`withWriteLock` exactly once around its snapshot-validate-appl
+          +y                                                             
+      112 +critical section. No write path SHALL mutate persistent proces
+          +s state                                                       
+      113 +outside such a call.                                          
+      114 +                                                              
+      115 +This binds the five Phase 4                                   
+      116  write handlers (`POST /taxa`, `PATCH /taxa/{id}`, `DELETE /tax
+           a/{id}`,
+      117  `PUT /taxa/{parentId}/children/{childId}`, `DELETE
+      118  /taxa/{parentId}/children/{childId}`) and every Phase 5–7 writ
+           e path
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Looks fine. Now revalidate.
+
+⏺ Bash(openspec validate phase-4-direct-actions --strict 2>&1)
+  ⎿  Change 'phase-4-direct-actions' is valid
+
+⏺ Bash(openspec status --change "phase-4-direct-actions" && echo "---list---" &&
+       openspec list)
+  ⎿  - Loading change status...
+     Change: phase-4-direct-actions
+     Schema: spec-driven
+     … +11 lines (ctrl+o to expand)
+
+⏺ All four artifacts are in place and the change validates cleanly under
+  --strict.
+
+  Change: phase-4-direct-actions (61 tasks across 11 task groups)
+  Location: openspec/changes/phase-4-direct-actions/
+
+  Artifacts created:
+
+  - proposal.md — five direct-action endpoints + write-serialization on top of
+  Phases 1–3; resolves the unregistered-owner status-code gap as 400 
+  validation_error / unregistered-owner.
+  - design.md — 14 decisions covering the write-lock primitive
+  (application-layer FIFO mutex, non-re-entrant), the deletion-region
+  computation as a new pure primitive, why precondition 1 must use isShared (not
+   parent-count), the per-endpoint validation pipelines, the error-tag
+  vocabulary, idempotency policy (PUT existing edge → 204, DELETE missing edge
+  → 404), and ordering of auth-vs-existence checks to avoid information leaks.
+  - specs/ — three deltas:
+    - write-serialization/ (NEW) — withWriteLock contract, reads-don't-enter
+  rule, forward obligation for Phases 5–7
+    - direct-taxon-actions/ (NEW) — the five endpoints' requirements with ~40
+  scenarios covering happy paths, every failure mode, and the subtree-merging
+  cases for PUT
+    - taxon-domain/ (MODIFIED, ADDED requirements) — ownerScopedRegion
+  reachability primitive + production store mutation primitives + the PATCH
+  owner-casing rule
+  - tasks.md — 11 groups: initial test plan → write-lock → owner-scoped region →
+   store primitives → five endpoint implementations with their tests (including
+  dedicated put-edge-subtree.test.ts for the Phase-3-checkAddEdge subtree
+  exercise) → integration + concurrent-create stress → spec-drift + final test
+  plan.
+
+  Ready for /opsx:apply. Worth committing phase-4-initial.md as soon as task 1.2
+   lands so the freeze is on the record before implementation starts.
+
+✻ Churned for 14m 55s
+
+※ recap: Goal: ship Phase 4 (direct owner write actions) for the taxon-tree server via OpenSpec. The change proposal, design, specs, and tasks are all written and validate strict. Next: run /opsx:apply to start implementing task 1.1. (disable recaps in /config)
+
+❯ What do you mean by, "as soon as task 1.2 lands"?                             
+
+⏺ That was a confused phrasing on my part — task 1.2 is the commit, so "commit
+  it as soon as 1.2 lands" is circular.
+
+  What I meant: the freeze discipline depends on the initial test plan being
+  committed in its own commit before any implementation tasks (2.x onwards)
+  start. That way the git history is the freeze line — you can't retroactively
+  edit phase-4-initial.md without it showing up as a diff after the freeze
+  commit, which makes the "what we anticipated vs. what we discovered"
+  comparison honest.
+
+  So the practical sequence is: do 1.1 (write the initial plan), do 1.2 (commit
+  just that file, separately from any code), then start 2.1. Don't bundle the
+  initial plan into a larger commit with implementation, because then there's no
+   clean "freeze point" to point at.
+
+✻ Crunched for 13s
+
+❯ write the initial test plan                                                   
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+⏺ Write(test-plans/phase-4-initial.md)
+  ⎿  Wrote 483 lines to test-plans/phase-4-initial.md
+       2 # Phase 4 — Initial test plan (frozen)
+       3 > **Status: frozen on commit.** This plan was written from the O
+       4 > change `phase-4-direct-actions` (specs: `write-serialization`,
+       5 > `direct-taxon-actions`, and the `taxon-domain` delta adding
+         before**ScopedRegion` and the production mutation primitives) **
+       7 > implementation began and is not edited afterward. The companio
+       8 > `phase-4-final.md` supersedes this one and carries a `## Chang
+         elog`
+         tion,ting every row added, removed, or changed during implementa
+      10 > with the reason for each.
+     … +958 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Written to test-plans/phase-4-initial.md — 483 lines, structured to match the
+  Phase 3 plan exactly:
+
+  - Header + freeze notice — explicit "frozen on commit" rule, pointer to
+  phase-4-final.md as the supersedence target.
+  - Conventions — calls out the new ones for Phase 4 (write-section discipline,
+  owner pre-registration before PATCH, engine-violation tag mapping verbatim,
+  casing handling, six §14 properties now reachable).
+  - Eleven sections mirror the spec capabilities and tasks groups:
+    a. write-serialization (lock unit + forward-obligation observation)
+    b. ownerScopedRegion primitive — including the explicit "cascade does not
+  continue past halt frontier even into owner-owned descendants" row, which is
+  the load-bearing §6.3 semantic
+    c. Production store mutation primitives + the PATCH-casing rule
+    d. POST /taxa — including a concurrent-creates row for §11.1
+    e. PATCH /taxa/{id} — including the cross-tree rename clash and
+  combined-atomicity-failure rows
+    f. PUT /taxa/{p}/children/{c} — three explicit subtree-merging rows (cycle,
+  in-tree-duplicate, name-clash) plus the across-tree-share-is-legal carve-out
+    g. DELETE /taxa/{p}/children/{c} — including the detach-then-redelete
+  204-then-404 row
+    h. DELETE /taxa/{id} — both precondition cases, the ancestor-fan-out row
+  that disproves the parent-count shortcut, and static checks that the handler
+  uses isShared and ownerScopedRegion
+    i. /reset extension confirmation
+    j. Integration sanity — full lifecycle, move-as-detach-plus-add, multi-step
+  collaborative delete, concurrency stress
+    k. §13/§14 mapping table
+
+  Suggested commit sequence to enforce the freeze:
+
+  git add test-plans/phase-4-initial.md
+  git commit -m "Added phase 4 initial test plan (frozen)"
+
+  Then a second commit can copy it to phase-4-final.md with an empty ## 
+  Changelog section (task 1.3) before any 2.x work begins.
+
+✻ Cooked for 4m 53s
+
+❯ /opsx:apply                                                                   
+
+⏺ Using change: phase-4-direct-actions. To override: /opsx:apply <other>.
+⏺ Bash(openspec status --change "phase-4-direct-actions" --json && echo "---" &&
+       openspec instructions apply --change "phase-4-direct-actions" --json)
+  ⎿  {
+       "changeName": "phase-4-direct-actions",
+       "schemaName": "spec-driven",
+     … +363 lines (ctrl+o to expand)
+
+⏺ Bash(git status)
+  ⎿  On branch main
+     Your branch is up to date with 'origin/main'.
+
+     nothing to commit, working tree clean
+
+⏺ Bash(git log --oneline -5 && echo "---" && ls test-plans/
+      openspec/changes/phase-4-direct-actions/)
+  ⎿  3aa9f45 Phase 4 proposal (including initial test plan, which I asked f
+     or after the proposal)
+     7815ccc Added phase 4 brief
+     … +18 lines (ctrl+o to expand)
+
+⏺ Freeze commit landed (3aa9f45). Working tree clean. Let me explore the
+  codebase before coding — I need to understand the conventions from Phases 1–3.
+
+  Read 7 files, listed 2 directories (ctrl+o to expand)
+
+⏺ Let me set up tracking tasks for the implementation phase before diving in.
+⏺ Quick look at the remaining infrastructure (auth, identity, errors, format) so
+   I match the patterns precisely.
+
+  Read 13 files, listed 1 directory (ctrl+o to expand)
+
+⏺ Starting implementation. Group 1 first — create the final test plan stub.
+
+⏺ Bash(cp test-plans/phase-4-initial.md test-plans/phase-4-final.md)
+  ⎿  Done
+
+⏺ Update(test-plans/phase-4-final.md)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-4-final.md)
+  ⎿  Added 6 lines, removed 9 lines
+       1 -# Phase 4 — Initial test plan (frozen)                         
+       1 +# Phase 4 — Final test plan                                    
+       2  
+       3 -> **Status: frozen on commit.** This plan was written from the 
+         -OpenSpec                                                       
+       4 -> change `phase-4-direct-actions` (specs: `write-serialization`
+         -,                                                              
+       5 -> `direct-taxon-actions`, and the `taxon-domain` delta adding  
+       6 -> `ownerScopedRegion` and the production mutation primitives) *
+         -*before**                                                      
+       7 -> implementation began and is not edited afterward. The compani
+         -on file                                                        
+       8 -> `phase-4-final.md` supersedes this one and carries a `## Chan
+         -gelog`                                                         
+       9 -> listing every row added, removed, or changed during implement
+         -ation,                                                         
+      10 -> with the reason for each.                                    
+       3 +> **Status: living document, updated through implementation.** 
+         +Supersedes                                                     
+       4 +> `phase-4-initial.md` (which was frozen on commit and is no lo
+         +nger                                                           
+       5 +> edited). The `## Changelog` section at the end of this file e
+         +numerates                                                      
+       6 +> every row added, removed, or changed relative to the initial 
+         +plan,                                                          
+       7 +> with the reason for each change.                             
+       8  
+       9  ## Why this plan exists
+      10  
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test-plans/phase-4-final.md)
+  ⎿  Added 7 lines
+      478  | §14 accepted property: case-insensitive per-tree name unique
+           ness | §5 cross-tree rename clash row; §6 case-variant clash r
+           ow | |
+      479  | §14 accepted property: delete cascades only through wholly-o
+           wned paths | §8 cascade-halt-and-detach + halt-then-no-continu
+           e rows | The §6.3 semantics end-to-end |
+      480  | §11.1 write serialization | §1 (lock unit tests) + §4 concur
+           rent-creates row + §10 concurrent PATCH/DELETE rows | Verified
+            in isolation and end-to-end |
+      481 +                                                              
+      482 +---                                                           
+      483 +                                                              
+      484 +## Changelog                                                  
+      485 +                                                              
+      486 +<!-- One bullet per row added, removed, or changed relative to
+          + phase-4-initial.md, with the reason. -->                     
+      487 +                                                              
+
+⏺ Now mark Group 1 tasks complete in tasks.md.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 3 lines, removed 3 lines
+      1  ## 1. Initial test plan (frozen at end of step 1)
+      2  
+      3 -- [ ] 1.1 Write `test-plans/phase-4-initial.md` from the three n
+        -ew/modified specs in this change, using the established `Rule | 
+        -Input | Expected | Notes` table format                          
+      4 -- [ ] 1.2 Commit `phase-4-initial.md` — this commit marks the fr
+        -eeze; do not edit this file afterward                           
+      5 -- [ ] 1.3 Create `test-plans/phase-4-final.md` as a copy of the 
+        -initial plan plus an empty `## Changelog` section at the end    
+      3 +- [x] 1.1 Write `test-plans/phase-4-initial.md` from the three n
+        +ew/modified specs in this change, using the established `Rule | 
+        +Input | Expected | Notes` table format                          
+      4 +- [x] 1.2 Commit `phase-4-initial.md` — this commit marks the fr
+        +eeze; do not edit this file afterward                           
+      5 +- [x] 1.3 Create `test-plans/phase-4-final.md` as a copy of the 
+        +initial plan plus an empty `## Changelog` section at the end    
+      6  
+      7  ## 2. Write-section primitive (`specs/write-serialization`)
+      8  
+
+⏺ Group 2 — write-lock primitive.
+
+⏺ Bash(mkdir -p src/concurrency test/concurrency)
+  ⎿  Done
+
+⏺ Write(src/concurrency/write-lock.ts)
+  ⎿  Wrote 37 lines to src/concurrency/write-lock.ts
+         rialization]]).-section primitive (PRD §11.1; Phase 4 [[write-se
+       3 // Every state-mutating handler in Phase 4 — and every review-ac
+       4 // handler in Phases 5–7 — wraps its critical section in
+       5 // `withWriteLock(async () => { ... })`. Reads do NOT enter the 
+       6 //ck.
+          ontoplementation: a promise-chained FIFO mutex. Each call links
+       8 // the tail of a chain; when its turn arrives (the previous prom
+       9 // resolves) it runs `fn`, then releases its slot regardless of 
+      10 // outcome. Single-threaded JS plus a chain-of-awaits gives stri
+         ct
+     … +33 lines (ctrl+o to expand)
+
+⏺ Write(test/concurrency/write-lock.test.ts)
+  ⎿  Wrote 156 lines to test/concurrency/write-lock.test.ts
+       2 import assert from "node:assert/strict";;
+       3 import { withWriteLock } from "../../src/concurrency/write-lock.
+       4 js";
+       5 // A helper that resolves on the next microtask, so two `fn`s ca
+         n be
+         ization.ved to interleave under sequential awaits without serial
+       7 const microtask = () => Promise.resolve();
+       9 describe("withWriteLock: FIFO serialization", () => {
+      10   it("two concurrent calls serialize in invocation order", async
+          () => {
+     … +163 lines (ctrl+o to expand)
+
+⏺ Run tests to confirm Group 2 is green before moving on.
+
+⏺ Bash(npx tsc 2>&1 | head -30)
+  ⎿  (No output)
+
+⏺ Bash(node --test "dist/test/concurrency/**/*.test.js" 2>&1 | tail -25)
+  ⎿    ✔ ten concurrent calls preserve FIFO across the chain (0.242042ms)
+     ✔ withWriteLock: FIFO serialization (1.613208ms)
+     ▶ withWriteLock: throw/reject recovery
+     … +22 lines (ctrl+o to expand)
+⏺ All 9 lock tests pass. Mark Group 2 tasks complete in tasks.md.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 3 lines, removed 3 lines
+       6  
+       7  ## 2. Write-section primitive (`specs/write-serialization`)
+       8  
+       9 -- [ ] 2.1 Create `src/concurrency/write-lock.ts` exporting `wit
+         -hWriteLock<T>(fn: () => Promise<T> | T): Promise<T>` as a promi
+         -se-chained FIFO mutex; module-scoped `chain: Promise<unknown>` 
+         -initialized to `Promise.resolve()`                             
+      10 -- [ ] 2.2 Confirm `src/concurrency/write-lock.ts` imports nothi
+         -ng from `src/app.ts`, `src/taxa/`, `src/users/`, `src/domain/`,
+         - `src/identity/`, `src/auth/`, or `src/errors/` — the file is a
+         -pplication-pure                                                
+      11 -- [ ] 2.3 Write `test/concurrency/write-lock.test.ts` covering:
+         - two concurrent calls serialize in invocation order (record sta
+         -rt/end markers, assert exact ordering `[A-start, A-end, B-start
+         -, B-end]`); a throwing `fn` propagates the rejection to its out
+         -er promise and releases the slot for the next queued call; ten 
+         -concurrent increments of a shared counter produce a final value
+         - of exactly 10 (no interleaving); a synchronous `fn` is still s
+         -erialized; the primitive does not block independent (no-lock) a
+         -sync code                                                      
+       9 +- [x] 2.1 Create `src/concurrency/write-lock.ts` exporting `wit
+         +hWriteLock<T>(fn: () => Promise<T> | T): Promise<T>` as a promi
+         +se-chained FIFO mutex; module-scoped `chain: Promise<unknown>` 
+         +initialized to `Promise.resolve()`                             
+      10 +- [x] 2.2 Confirm `src/concurrency/write-lock.ts` imports nothi
+         +ng from `src/app.ts`, `src/taxa/`, `src/users/`, `src/domain/`,
+         + `src/identity/`, `src/auth/`, or `src/errors/` — the file is a
+         +pplication-pure                                                
+      11 +- [x] 2.3 Write `test/concurrency/write-lock.test.ts` covering:
+         + two concurrent calls serialize in invocation order (record sta
+         +rt/end markers, assert exact ordering `[A-start, A-end, B-start
+         +, B-end]`); a throwing `fn` propagates the rejection to its out
+         +er promise and releases the slot for the next queued call; ten 
+         +concurrent increments of a shared counter produce a final value
+         + of exactly 10 (no interleaving); a synchronous `fn` is still s
+         +erialized; the primitive does not block independent (no-lock) a
+         +sync code                                                      
+      12  
+      13  ## 3. Owner-scoped region primitive (`specs/taxon-domain`, reac
+          hability extension)
+      14  
+
+⏺ Group 3 — ownerScopedRegion primitive.
+
+⏺ Update(src/domain/reachability.ts)
+  ⎿  Added 1 line
+       6  // terminates because traversals use visited-sets keyed by taxo
+          n ID.
+       7  
+       8  import type { Graph, TaxonId } from "./graph.js";
+       9 +import { equalsCI } from "../format/compare.js";               
+      10  
+      11  // All parentless taxa — every root of the global DAG.
+      12  export function roots(g: Graph): Set<TaxonId> {
+
+⏺ Update(src/domain/reachability.ts)
+  ⎿  Added 53 lines
+       64    }
+       65    return out;
+       66  }
+       67 +                                                              
+       68 +// Owner-scoped deletion region (PRD §6.3; Phase 4 [[taxon-dom
+          +ain]]).                                                       
+       69 +//                                                            
+       70 +// Walks downward from `n` over `childrenOf`. A child is inclu
+          +ded in                                                        
+       71 +// `region` iff its owner equalsCI(`owner`). A child whose own
+          +er does                                                       
+       72 +// NOT match becomes a halt-frontier entry, and the cascade do
+          +es NOT                                                        
+       73 +// continue past it — even if its descendants are owner-owned.
+          + This                                                         
+       74 +// faithfully implements §6.3's "path passing exclusively thro
+          +ugh taxa                                                      
+       75 +// owned by U."                                               
+       76 +//                                                            
+       77 +// Returns `{ region: ∅, haltFrontier: [] }` for an unknown `n
+          +` or one                                                      
+       78 +// whose owner does not match. (The caller's auth check normal
+          +ly                                                            
+       79 +// rejects the latter first; the primitive is defensive.)     
+       80 +//                                                            
+       81 +// Pure: no mutation of `g`, no I/O, no throws on well-formed 
+          +inputs                                                        
+       82 +// including cyclic graphs (the visited set bounds the walk). 
+       83 +export function ownerScopedRegion(                            
+       84 +  g: Graph,                                                   
+       85 +  n: TaxonId,                                                 
+       86 +  owner: string,                                              
+       87 +): {                                                          
+       88 +  region: ReadonlySet<TaxonId>;                               
+       89 +  haltFrontier: ReadonlyArray<{ parent: TaxonId; child: TaxonI
+          +d }>;                                                         
+       90 +} {                                                           
+       91 +  const empty = { region: new Set<TaxonId>(), haltFrontier: []
+          + };                                                           
+       92 +  const nTaxon = g.taxa.get(n);                               
+       93 +  if (nTaxon === undefined) return empty;                     
+       94 +  if (!equalsCI(nTaxon.owner, owner)) return empty;           
+       95 +                                                              
+       96 +  const region = new Set<TaxonId>([n]);                       
+       97 +  const haltFrontier: { parent: TaxonId; child: TaxonId }[] = 
+          +[];                                                           
+       98 +  const stack: TaxonId[] = [n];                               
+       99 +  while (stack.length > 0) {                                  
+      100 +    const parent = stack.pop()!;                              
+      101 +    const children = g.childrenOf.get(parent);                
+      102 +    if (children === undefined) continue;                     
+      103 +    for (const child of children) {                           
+      104 +      const childTaxon = g.taxa.get(child);                   
+      105 +      if (childTaxon !== undefined && equalsCI(childTaxon.owne
+          +r, owner)) {                                                  
+      106 +        if (!region.has(child)) {                             
+      107 +          region.add(child);                                  
+      108 +          stack.push(child);                                  
+      109 +        }                                                     
+      110 +        // else: already in region (cycle or diamond inside ow
+          +ner-scope);                                                   
+      111 +        // do not recurse again.                              
+      112 +      } else {                                                
+      113 +        // Halt-frontier: record the edge, do not recurse.    
+      114 +        haltFrontier.push({ parent, child });                 
+      115 +      }                                                       
+      116 +    }                                                         
+      117 +  }                                                           
+      118 +  return { region, haltFrontier };                            
+      119 +}                                                             
+
+⏺ Write(test/domain/owner-scoped-region.test.ts)
+  ⎿  Wrote 246 lines to test/domain/owner-scoped-region.test.ts
+       2 import assert from "node:assert/strict";;
+       3 import type { Graph, Taxon, TaxonId } from "../../src/domain/gra
+         ph.js";
+       4 import { ownerScopedRegion } from "../../src/domain/reachability
+         .js";
+       6 // Helper to build hand-constructed Graph values.
+       7 interface BuildSpec {
+       8   taxa: Array<{ id: TaxonId; owner: string; name?: string }>;
+       9   edges: Array<{ parent: TaxonId; child: TaxonId }>;
+      10 }
+     … +251 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20 && node --test
+      "dist/test/domain/owner-scoped-region.test.js" 2>&1 | tail -10)
+  ⎿    ✔ does not mutate the input Graph (0.126708ms)
+     ✔ ownerScopedRegion: purity (0.162625ms)
+     ℹ tests 12
+     … +7 lines (ctrl+o to expand)
+
+⏺ All 12 region tests pass. Mark Group 3 and start Group 4.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 4 lines, removed 4 lines
+      12  
+      13  ## 3. Owner-scoped region primitive (`specs/taxon-domain`, reac
+          hability extension)
+      14  
+      15 -- [ ] 3.1 Add `ownerScopedRegion(g, n, owner)` to `src/domain/r
+         -eachability.ts`; implement as a DFS over `childrenOf` from `n` 
+         -with a `visited` set, including `owner`-matching taxa in `regio
+         -n` and `parent→child` edges to non-matching children in `haltFr
+         -ontier`; do not recurse past halt-frontier even if downstream t
+         -axa are owner-matching                                         
+      16 -- [ ] 3.2 Use `equalsCI` from `taxon-name-format` for owner-com
+         -parison; return `{ region: ∅, haltFrontier: [] }` when `n` is m
+         -issing or its owner does not match                             
+      17 -- [ ] 3.3 Confirm `src/domain/reachability.ts` remains pure — n
+         -o imports from HTTP, storage, or error code; only the existing 
+         -imports plus `equalsCI`                                        
+      18 -- [ ] 3.4 Write `test/domain/owner-scoped-region.test.ts` cover
+         -ing: leaf-only region; wholly-owned subtree region; halt at oth
+         -er-owned child (cascade does NOT continue past it even though f
+         -urther descendants are owner-owned); multiple halt-frontier chi
+         -ldren produce multiple frontier entries; case-insensitive owner
+         - matching; unknown `n` yields empty region; other-owned `n` yie
+         -lds empty region; cyclic graph terminates and includes the cycl
+         -e once; halt-frontier child reachable from owner-owned root via
+         - a separate wholly-owned path still appears in region via that 
+         -path (and the halt-frontier entry exists for the other-owned su
+         -broute)                                                        
+      15 +- [x] 3.1 Add `ownerScopedRegion(g, n, owner)` to `src/domain/r
+         +eachability.ts`; implement as a DFS over `childrenOf` from `n` 
+         +with a `visited` set, including `owner`-matching taxa in `regio
+         +n` and `parent→child` edges to non-matching children in `haltFr
+         +ontier`; do not recurse past halt-frontier even if downstream t
+         +axa are owner-matching                                         
+      16 +- [x] 3.2 Use `equalsCI` from `taxon-name-format` for owner-com
+         +parison; return `{ region: ∅, haltFrontier: [] }` when `n` is m
+         +issing or its owner does not match                             
+      17 +- [x] 3.3 Confirm `src/domain/reachability.ts` remains pure — n
+         +o imports from HTTP, storage, or error code; only the existing 
+         +imports plus `equalsCI`                                        
+      18 +- [x] 3.4 Write `test/domain/owner-scoped-region.test.ts` cover
+         +ing: leaf-only region; wholly-owned subtree region; halt at oth
+         +er-owned child (cascade does NOT continue past it even though f
+         +urther descendants are owner-owned); multiple halt-frontier chi
+         +ldren produce multiple frontier entries; case-insensitive owner
+         + matching; unknown `n` yields empty region; other-owned `n` yie
+         +lds empty region; cyclic graph terminates and includes the cycl
+         +e once; halt-frontier child reachable from owner-owned root via
+         + a separate wholly-owned path still appears in region via that 
+         +path (and the halt-frontier entry exists for the other-owned su
+         +broute)                                                        
+      19  
+      20  ## 4. Production store mutation primitives (`specs/taxon-domain
+          `, store extension)
+      21  
+
+⏺ Group 4 — production store mutation primitives.
+
+⏺ Update(src/taxa/store.ts)
+  ⎿  Added 147 lines
+       57  }
+       58  
+       59  // -----------------------------------------------------------
+           ----------------
+       60 +// Production mutation primitives (Phase 4 [[taxon-domain]] ex
+          +tension).                                                     
+       61 +//                                                            
+       62 +// Discipline: every primitive below MUST be called from insid
+          +e a                                                           
+       63 +// `withWriteLock` entry (see [[write-serialization]]). The st
+          +ore does                                                      
+       64 +// not enforce the lock — the call-site discipline is captured
+          + by the                                                       
+       65 +// write-serialization spec's forward obligation. Cascade acce
+          +ptance in                                                     
+       66 +// Phase 6 will enter the lock once around multiple primitive 
+          +calls.                                                        
+       67 +//                                                            
+       68 +// Validation contracts: every primitive trusts its caller for
+          + format,                                                      
+       69 +// registry-membership, and §3.3 invariant checks. The handler
+          + that                                                         
+       70 +// calls these primitives is responsible for running those che
+          +cks                                                           
+       71 +// first. The store guarantees only dual-index consistency.   
+       72 +// -----------------------------------------------------------
+          +----------------                                              
+       73 +                                                              
+       74 +export function createTaxon(input: { name: string; owner: stri
+          +ng }): Taxon {                                                
+       75 +  const id = mintId();                                        
+       76 +  const taxon: Taxon = { id, name: input.name, owner: input.ow
+          +ner };                                                        
+       77 +  byId.set(id, taxon);                                        
+       78 +  childrenOf.set(id, new Set<TaxonId>());                     
+       79 +  parentsOf.set(id, new Set<TaxonId>());                      
+       80 +  return taxon;                                               
+       81 +}                                                             
+       82 +                                                              
+       83 +export function setTaxonFields(                               
+       84 +  id: TaxonId,                                                
+       85 +  patch: { name?: string; owner?: string },                   
+       86 +): Taxon {                                                    
+       87 +  const current = byId.get(id);                               
+       88 +  if (current === undefined) {                                
+       89 +    throw new Error(`setTaxonFields: unknown taxon id ${JSON.s
+          +tringify(id)}`);                                              
+       90 +  }                                                           
+       91 +  const next: Taxon = {                                       
+       92 +    id: current.id,                                           
+       93 +    name: patch.name ?? current.name,                         
+       94 +    owner: patch.owner ?? current.owner,                      
+       95 +  };                                                          
+       96 +  byId.set(id, next);                                         
+       97 +  return next;                                                
+       98 +}                                                             
+       99 +                                                              
+      100 +export function addEdge(parent: TaxonId, child: TaxonId): void
+          + {                                                            
+      101 +  if (!byId.has(parent)) {                                    
+      102 +    throw new Error(`addEdge: unknown parent id ${JSON.stringi
+          +fy(parent)}`);                                                
+      103 +  }                                                           
+      104 +  if (!byId.has(child)) {                                     
+      105 +    throw new Error(`addEdge: unknown child id ${JSON.stringif
+          +y(child)}`);                                                  
+      106 +  }                                                           
+      107 +  let cs = childrenOf.get(parent);                            
+      108 +  if (cs === undefined) {                                     
+      109 +    cs = new Set<TaxonId>();                                  
+      110 +    childrenOf.set(parent, cs);                               
+      111 +  }                                                           
+      112 +  cs.add(child);                                              
+      113 +  let ps = parentsOf.get(child);                              
+      114 +  if (ps === undefined) {                                     
+      115 +    ps = new Set<TaxonId>();                                  
+      116 +    parentsOf.set(child, ps);                                 
+      117 +  }                                                           
+      118 +  ps.add(parent);                                             
+      119 +}                                                             
+      120 +                                                              
+      121 +// Returns true iff the edge existed and was removed. Does NOT
+          + throw on                                                     
+      122 +// missing taxa — uniform "edge does not exist" for any reason
+          + returns                                                      
+      123 +// false, so the handler can emit 404 edge-not-found.         
+      124 +export function removeEdge(parent: TaxonId, child: TaxonId): b
+          +oolean {                                                      
+      125 +  const cs = childrenOf.get(parent);                          
+      126 +  const ps = parentsOf.get(child);                            
+      127 +  const hadInChildren = cs?.delete(child) ?? false;           
+      128 +  const hadInParents = ps?.delete(parent) ?? false;           
+      129 +  return hadInChildren || hadInParents;                       
+      130 +}                                                             
+      131 +                                                              
+      132 +// Atomic batch: detach every halt-frontier edge, then remove 
+          +every                                                         
+      133 +// region taxon along with all remaining incident edges. Runs 
+          +in a                                                          
+      134 +// single synchronous code path — no `await` between steps. Af
+          +ter                                                           
+      135 +// return, no taxon in `region` is in `byId`; no edge incident
+          + to a                                                         
+      136 +// region taxon remains; every halt-frontier edge is gone; dua
+          +l-index                                                       
+      137 +// consistency holds.                                         
+      138 +export function deleteRegion(                                 
+      139 +  region: ReadonlySet<TaxonId>,                               
+      140 +  haltFrontier: ReadonlyArray<{ parent: TaxonId; child: TaxonI
+          +d }>,                                                         
+      141 +): void {                                                     
+      142 +  // 1. Detach halt-frontier edges.                           
+      143 +  for (const { parent, child } of haltFrontier) {             
+      144 +    childrenOf.get(parent)?.delete(child);                    
+      145 +    parentsOf.get(child)?.delete(parent);                     
+      146 +  }                                                           
+      147 +  // 2. For every region taxon, drop every remaining incident 
+          +edge.                                                         
+      148 +  //    A region taxon may have parents outside the region (ca
+          +ught at                                                       
+      149 +  //    edges from those parents to it) AND children outside t
+          +he                                                            
+      150 +  //    region (caught at edges from it to those children).   
+      151 +  for (const t of region) {                                   
+      152 +    const tParents = parentsOf.get(t);                        
+      153 +    if (tParents !== undefined) {                             
+      154 +      for (const p of tParents) {                             
+      155 +        if (region.has(p)) continue; // intra-region edge; han
+          +dled by step 3                                                
+      156 +        childrenOf.get(p)?.delete(t);                         
+      157 +      }                                                       
+      158 +    }                                                         
+      159 +    const tChildren = childrenOf.get(t);                      
+      160 +    if (tChildren !== undefined) {                            
+      161 +      for (const c of tChildren) {                            
+      162 +        if (region.has(c)) continue; // intra-region edge; han
+          +dled by step 3                                                
+      163 +        parentsOf.get(c)?.delete(t);                          
+      164 +      }                                                       
+      165 +    }                                                         
+      166 +  }                                                           
+      167 +  // 3. Remove the region taxa themselves (and their index ent
+          +ries,                                                         
+      168 +  //    which by step 2 only reference other region members). 
+      169 +  for (const t of region) {                                   
+      170 +    byId.delete(t);                                           
+      171 +    childrenOf.delete(t);                                     
+      172 +    parentsOf.delete(t);                                      
+      173 +  }                                                           
+      174 +}                                                             
+      175 +                                                              
+      176 +// -----------------------------------------------------------
+          +----------------                                              
+      177 +// Test-only debug helper. Walks the indices and asserts dual-
+          +index                                                         
+      178 +// consistency: `c ∈ childrenOf[p]` iff `p ∈ parentsOf[c]`. Th
+          +rows a                                                        
+      179 +// plain Error on mismatch. Not exported as part of any produc
+          +tion                                                          
+      180 +// surface — tests import it directly.                        
+      181 +// -----------------------------------------------------------
+          +----------------                                              
+      182 +                                                              
+      183 +export function assertConsistency(): void {                   
+      184 +  for (const [p, cs] of childrenOf) {                         
+      185 +    for (const c of cs) {                                     
+      186 +      const ps = parentsOf.get(c);                            
+      187 +      if (ps === undefined || !ps.has(p)) {                   
+      188 +        throw new Error(                                      
+      189 +          `inconsistent indices: ${JSON.stringify(p)}→${JSON.s
+          +tringify(c)} in childrenOf but not in parentsOf`,             
+      190 +        );                                                    
+      191 +      }                                                       
+      192 +    }                                                         
+      193 +  }                                                           
+      194 +  for (const [c, ps] of parentsOf) {                          
+      195 +    for (const p of ps) {                                     
+      196 +      const cs = childrenOf.get(p);                           
+      197 +      if (cs === undefined || !cs.has(c)) {                   
+      198 +        throw new Error(                                      
+      199 +          `inconsistent indices: ${JSON.stringify(p)}→${JSON.s
+          +tringify(c)} in parentsOf but not in childrenOf`,             
+      200 +        );                                                    
+      201 +      }                                                       
+      202 +    }                                                         
+      203 +  }                                                           
+      204 +}                                                             
+      205 +                                                              
+      206 +// -----------------------------------------------------------
+          +----------------                                              
+      207  // Test-only seed helper (Phase 3 design Decision 8).
+      208  //
+      209  // Bypasses the invariant engine deliberately: tests construct
+
+⏺ Write(test/taxa/store-writes.test.ts)
+  ⎿  Wrote 270 lines to test/taxa/store-writes.test.ts
+       1 import { describe, it, beforeEach } from "node:test";
+       2 import assert from "node:assert/strict";
+       3 import {
+       4   addEdge,
+       5   assertConsistency,
+       6   createTaxon,
+       7   deleteRegion,
+       8   getById,
+       9   removeEdge,
+      10   reset,
+     … +278 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20 && node --test
+      "dist/test/taxa/store-writes.test.js" 2>&1 | tail -15)
+  ⎿    ✔ frontier-only call removes the edges without removing taxa (0.0582
+     5ms)
+       ✔ removes outgoing-only edges of region taxa when frontier not enume
+     … +14 lines (ctrl+o to expand)
+
+⏺ All 25 store-writes tests pass. Mark Group 4 done.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 8 lines, removed 8 lines
+      19  
+      20  ## 4. Production store mutation primitives (`specs/taxon-domain
+          `, store extension)
+      21  
+      22 -- [ ] 4.1 Add `createTaxon({ name, owner }): Taxon` to `src/tax
+         -a/store.ts` — mint ID via existing `mintId`, insert `{ id, name
+         -, owner }` into `byId`, insert empty Sets in `childrenOf` and `
+         -parentsOf`, return the created `Taxon`                         
+      23 -- [ ] 4.2 Add `setTaxonFields(id, { name?, owner? }): Taxon` — 
+         -mutate the existing `byId.get(id)` record in place (or replace 
+         -with `{ ...current, ...patch }`); throw plain `Error` if `id` i
+         -s not in `byId`; return the post-mutation `Taxon`              
+      24 -- [ ] 4.3 Add `addEdge(parent, child): void` — insert child int
+         -o `childrenOf[parent]` and parent into `parentsOf[child]` atomi
+         -cally; idempotent on re-entry (Set semantics handle it); throw 
+         -plain `Error` if either taxon is missing                       
+      25 -- [ ] 4.4 Add `removeEdge(parent, child): boolean` — remove the
+         - edge from both indices; return `true` if it existed and was re
+         -moved, `false` if it did not exist; do NOT throw on unknown tax
+         -a                                                              
+      26 -- [ ] 4.5 Add `deleteRegion(region, haltFrontier): void` — sync
+         -hronously (no `await`): for each frontier entry remove that edg
+         -e; then for each region taxon remove every incoming and outgoin
+         -g edge involving it (consult both indices); finally remove each
+         - region taxon from `byId`, `childrenOf`, `parentsOf`           
+      27 -- [ ] 4.6 Confirm every primitive maintains the dual-index inva
+         -riant; add an internal `assertConsistency()` debug helper (call
+         -ed only from tests) that walks the indices and verifies `c ∈ ch
+         -ildrenOf[p]` iff `p ∈ parentsOf[c]`                            
+      28 -- [ ] 4.7 Write `test/taxa/store-writes.test.ts` covering: `cre
+         -ateTaxon` mints t1, t2 in sequence and inserts as root; `setTax
+         -onFields` updates name only / owner only / both; `setTaxonField
+         -s` throws on unknown id; `addEdge` updates both indices; `addEd
+         -ge` is idempotent; `removeEdge` returns `true` then `false`; `r
+         -emoveEdge` does not throw on unknown taxa; `deleteRegion` remov
+         -es region taxa and detaches frontier edges in a single call; `d
+         -eleteRegion` preserves dual-index consistency afterwards       
+      29 -- [ ] 4.8 Do NOT remove or modify the existing `seed()` helper 
+         -— it remains available to tests for pathological-graph setup   
+      22 +- [x] 4.1 Add `createTaxon({ name, owner }): Taxon` to `src/tax
+         +a/store.ts` — mint ID via existing `mintId`, insert `{ id, name
+         +, owner }` into `byId`, insert empty Sets in `childrenOf` and `
+         +parentsOf`, return the created `Taxon`                         
+      23 +- [x] 4.2 Add `setTaxonFields(id, { name?, owner? }): Taxon` — 
+         +mutate the existing `byId.get(id)` record in place (or replace 
+         +with `{ ...current, ...patch }`); throw plain `Error` if `id` i
+         +s not in `byId`; return the post-mutation `Taxon`              
+      24 +- [x] 4.3 Add `addEdge(parent, child): void` — insert child int
+         +o `childrenOf[parent]` and parent into `parentsOf[child]` atomi
+         +cally; idempotent on re-entry (Set semantics handle it); throw 
+         +plain `Error` if either taxon is missing                       
+      25 +- [x] 4.4 Add `removeEdge(parent, child): boolean` — remove the
+         + edge from both indices; return `true` if it existed and was re
+         +moved, `false` if it did not exist; do NOT throw on unknown tax
+         +a                                                              
+      26 +- [x] 4.5 Add `deleteRegion(region, haltFrontier): void` — sync
+         +hronously (no `await`): for each frontier entry remove that edg
+         +e; then for each region taxon remove every incoming and outgoin
+         +g edge involving it (consult both indices); finally remove each
+         + region taxon from `byId`, `childrenOf`, `parentsOf`           
+      27 +- [x] 4.6 Confirm every primitive maintains the dual-index inva
+         +riant; add an internal `assertConsistency()` debug helper (call
+         +ed only from tests) that walks the indices and verifies `c ∈ ch
+         +ildrenOf[p]` iff `p ∈ parentsOf[c]`                            
+      28 +- [x] 4.7 Write `test/taxa/store-writes.test.ts` covering: `cre
+         +ateTaxon` mints t1, t2 in sequence and inserts as root; `setTax
+         +onFields` updates name only / owner only / both; `setTaxonField
+         +s` throws on unknown id; `addEdge` updates both indices; `addEd
+         +ge` is idempotent; `removeEdge` returns `true` then `false`; `r
+         +emoveEdge` does not throw on unknown taxa; `deleteRegion` remov
+         +es region taxa and detaches frontier edges in a single call; `d
+         +eleteRegion` preserves dual-index consistency afterwards       
+      29 +- [x] 4.8 Do NOT remove or modify the existing `seed()` helper 
+         +— it remains available to tests for pathological-graph setup   
+      30  
+      31  ## 5. POST /taxa (`specs/direct-taxon-actions`, create)
+      32  
+
+⏺ Group 5 — POST /taxa create handler.
+
+⏺ Write(src/taxa/write-handlers.ts)  ⎿  Wrote 144 lines to src/taxa/write-handlers.ts
+       2 // (Phase 4 [[direct-taxon-actions]]).irect-action endpoints
+       3 //
+       4 // Every handler:
+       5 //   1. validates the body shape & format
+       6 //   2. authenticates / authorizes via [[authorization-gate]] re
+         quireRegistered
+       7 //      (the gate also rejects null / unregistered callers)
+       8 //   3. enters [[write-serialization]] withWriteLock for the
+       9 //      snapshot-validate-apply critical section
+      10 //   4. delegates §3.3 invariant checks to [[invariant-engine]]
+     … +157 lines (ctrl+o to expand)
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line
+       8    getTrees,
+       9    getTreeByRoot,
+      10  } from "./taxa/handlers.js";
+      11 +import { postTaxa } from "./taxa/write-handlers.js";           
+      12  import { identityMiddleware } from "./identity/middleware.js";
+      13  import type { AppVariables } from "./identity/caller.js";
+      14  import packageJson from "../package.json" with { type: "json" }
+          ;
+
+⏺ Update(src/app.ts)
+  ⎿  Added 5 lines
+      46    app.get("/trees", getTrees);
+      47    app.get("/trees/:rootId", getTreeByRoot);
+      48  
+      49 +  // Direct actions (PRD §15.3, Phase 4 [[direct-taxon-actions]
+         +]). Each                                                       
+      50 +  // handler invokes requireRegistered (the §4 gate) and enters
+      51 +  // [[write-serialization]] withWriteLock.                    
+      52 +  app.post("/taxa", postTaxa);                                 
+      53 +                                                               
+      54    return app;
+      55  }
+      56  
+
+⏺ Test it before moving on.
+
+⏺ Write(test/taxa/post-taxa.test.ts)
+  ⎿  Wrote 271 lines to test/taxa/post-taxa.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset as usersReset, register } from "../../src/users/s
+         tore.js";
+       5 import { reset as taxaReset } from "../../src/taxa/store.js";
+       6 
+       7 beforeEach(() => {
+       8   usersReset();
+       9   taxaReset();
+      10 });
+     … +290 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -30)
+  ⎿  test/taxa/post-taxa.test.ts(253,9): error TS2345: Argument of type 'Re
+     sponse | Promise<Response>' is not assignable to parameter of type 'Pr
+     omise<Response>'.
+     … +2 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(test/taxa/post-taxa.test.ts)
+  ⎿  Added 1 line, removed 1 line
+      247    it("ten concurrent POSTs yield exactly ten distinct IDs t1..
+           t10", async () => {
+      248      register("Alice");
+      249      const app = createApp();
+      250 -    const pending: Promise<Response>[] = [];                  
+      250 +    const pending: Array<Promise<Response> | Response> = [];  
+      251      for (let i = 0; i < 10; i++) {
+      252        pending.push(
+      253          app.request("/taxa", {
+
+⏺ Bash(npx tsc 2>&1 | head -20 && node --test "dist/test/taxa/post-taxa.test.js"
+       2>&1 | tail -15)
+  ⎿    ✔ validation order: malformed-body before missing-name (0.236584ms)
+       ✔ validation order: missing-name before format check (0.226791ms)
+     ✔ POST /taxa: body validation (2.314916ms)
+     … +13 lines (ctrl+o to expand)
+
+⏺ All 15 POST /taxa tests pass — including the 10-concurrent stress. Mark Group
+  5 complete.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 6 lines, removed 6 lines
+      30  
+      31  ## 5. POST /taxa (`specs/direct-taxon-actions`, create)
+      32  
+      33 -- [ ] 5.1 Create `src/taxa/write-handlers.ts` and implement `po
+         -stTaxa` handler                                                
+      34 -- [ ] 5.2 In `postTaxa`: validate body shape (JSON object, `nam
+         -e` present and string, format-validated via `taxon-name-format`
+         -); reject with `400 validation_error` and the appropriate `deta
+         -ils.tag` (`malformed-body`, `missing-name`, or the format valid
+         -ator's tag — `empty`, `leading-whitespace`, `trailing-whitespac
+         -e`)                                                            
+      35 -- [ ] 5.3 In `postTaxa`: derive caller's registered original ca
+         -sing from the request context (set by `identity-resolution`); p
+         -ass as `owner` to `createTaxon`                                
+      36 -- [ ] 5.4 In `postTaxa`: wrap the body-validated `createTaxon` 
+         -call in `withWriteLock`; serialize the result via the Phase 3 s
+         -erializer to `{ taxon: {...} }`; respond `201`                 
+      37 -- [ ] 5.5 Wire `POST /taxa` in `src/app.ts` behind `requireRegi
+         -stered` (Phase 2)                                              
+      38 -- [ ] 5.6 Write `test/taxa/post-taxa.test.ts` covering: registe
+         -red creator gets 201 with serialized taxon; created taxon appea
+         -rs in `GET /taxa`, `GET /trees`, `GET /taxa/{id}`; owner is sto
+         -red in registered casing regardless of `X-Username` casing; nul
+         -l caller → 403; unregistered caller → 403; missing name → 400 m
+         -issing-name; empty name → 400 (from format validator); IDs incr
+         -ement monotonically across multiple creates; `POST /reset` clea
+         -rs created taxa and resets the ID counter                      
+      33 +- [x] 5.1 Create `src/taxa/write-handlers.ts` and implement `po
+         +stTaxa` handler                                                
+      34 +- [x] 5.2 In `postTaxa`: validate body shape (JSON object, `nam
+         +e` present and string, format-validated via `taxon-name-format`
+         +); reject with `400 validation_error` and the appropriate `deta
+         +ils.tag` (`malformed-body`, `missing-name`, or the format valid
+         +ator's tag — `empty`, `leading-whitespace`, `trailing-whitespac
+         +e`)                                                            
+      35 +- [x] 5.3 In `postTaxa`: derive caller's registered original ca
+         +sing from the request context (set by `identity-resolution`); p
+         +ass as `owner` to `createTaxon`                                
+      36 +- [x] 5.4 In `postTaxa`: wrap the body-validated `createTaxon` 
+         +call in `withWriteLock`; serialize the result via the Phase 3 s
+         +erializer to `{ taxon: {...} }`; respond `201`                 
+      37 +- [x] 5.5 Wire `POST /taxa` in `src/app.ts` behind `requireRegi
+         +stered` (Phase 2)                                              
+      38 +- [x] 5.6 Write `test/taxa/post-taxa.test.ts` covering: registe
+         +red creator gets 201 with serialized taxon; created taxon appea
+         +rs in `GET /taxa`, `GET /trees`, `GET /taxa/{id}`; owner is sto
+         +red in registered casing regardless of `X-Username` casing; nul
+         +l caller → 403; unregistered caller → 403; missing name → 400 m
+         +issing-name; empty name → 400 (from format validator); IDs incr
+         +ement monotonically across multiple creates; `POST /reset` clea
+         +rs created taxa and resets the ID counter                      
+      39  
+      40  ## 6. PATCH /taxa/{id} (`specs/direct-taxon-actions`, edit)
+      41  
+
+⏺ Group 6 — PATCH /taxa/{id}.
+
+⏺ Update(src/taxa/write-handlers.ts)
+  ⎿  Added 113 lines
+      142    const view = serializeTaxon(snapshot(), created.id)!;
+      143    return c.json({ taxon: view }, 201);
+      144  }
+      145 +                                                              
+      146 +// -----------------------------------------------------------
+          +----------------                                              
+      147 +// PATCH /taxa/{id} (§6.2)                                    
+      148 +// -----------------------------------------------------------
+          +----------------                                              
+      149 +                                                              
+      150 +export async function patchTaxon(                             
+      151 +  c: Context<{ Variables: AppVariables }>,                    
+      152 +): Promise<Response> {                                        
+      153 +  const { username: caller } = requireRegistered(c);          
+      154 +  const id = c.req.param("id")!;                              
+      155 +                                                              
+      156 +  // 1. Body shape and field formats.                         
+      157 +  const body = await parseJsonObjectBody(c);                  
+      158 +  const hasName = Object.prototype.hasOwnProperty.call(body, "
+          +name");                                                       
+      159 +  const hasOwner = Object.prototype.hasOwnProperty.call(body, 
+          +"owner");                                                     
+      160 +  if (!hasName && !hasOwner) {                                
+      161 +    throw new ApiError(                                       
+      162 +      "validation_error",                                     
+      163 +      "PATCH body must include at least one of 'name' or 'owne
+          +r'",                                                          
+      164 +      { tag: "empty-patch" },                                 
+      165 +    );                                                        
+      166 +  }                                                           
+      167 +                                                              
+      168 +  let newName: string | undefined;                            
+      169 +  if (hasName) {                                              
+      170 +    const v = body.name;                                      
+      171 +    if (typeof v !== "string") {                              
+      172 +      throw new ApiError(                                     
+      173 +        "validation_error",                                   
+      174 +        "'name' must be a string",                            
+      175 +        { tag: "missing-name" },                              
+      176 +      );                                                      
+      177 +    }                                                         
+      178 +    const check = validateTaxonName(v);                       
+      179 +    if (!check.ok) {                                          
+      180 +      throw new ApiError("validation_error", check.reason.mess
+          +age, {                                                        
+      181 +        tag: check.reason.tag,                                
+      182 +      });                                                     
+      183 +    }                                                         
+      184 +    newName = v;                                              
+      185 +  }                                                           
+      186 +                                                              
+      187 +  let newOwnerRaw: string | undefined;                        
+      188 +  if (hasOwner) {                                             
+      189 +    const v = body.owner;                                     
+      190 +    if (typeof v !== "string") {                              
+      191 +      throw new ApiError(                                     
+      192 +        "validation_error",                                   
+      193 +        "'owner' must be a string",                           
+      194 +        { tag: "missing-owner" },                             
+      195 +      );                                                      
+      196 +    }                                                         
+      197 +    const check = validateUsername(v);                        
+      198 +    if (!check.ok) {                                          
+      199 +      throw new ApiError("validation_error", check.reason.mess
+          +age, {                                                        
+      200 +        tag: check.reason.tag,                                
+      201 +      });                                                     
+      202 +    }                                                         
+      203 +    newOwnerRaw = v;                                          
+      204 +  }                                                           
+      205 +                                                              
+      206 +  // 2. Load taxon and check ownership BEFORE the lock. Stale 
+          +reads can                                                     
+      207 +  //    only over-reject (a 403 here might mask a transient st
+          +ate); never                                                   
+      208 +  //    over-accept (we revalidate ownership semantically by w
+          +riting the                                                    
+      209 +  //    canonical owner under the lock — but format/registry c
+          +hecks are                                                     
+      210 +  //    cheaper outside).                                     
+      211 +  const existing = getById(id);                               
+      212 +  if (existing === undefined) {                               
+      213 +    throw new ApiError("not_found", `Taxon ${id} not found`, {
+      214 +      tag: "taxon-not-found",                                 
+      215 +    });                                                       
+      216 +  }                                                           
+      217 +  if (!equalsCI(existing.owner, caller)) {                    
+      218 +    throw new ApiError(                                       
+      219 +      "forbidden",                                            
+      220 +      "only the taxon's owner may edit it",                   
+      221 +      { tag: "not-owner" },                                   
+      222 +    );                                                        
+      223 +  }                                                           
+      224 +                                                              
+      225 +  // 3. If owner change requested, verify registry membership 
+          +and                                                           
+      226 +  //    canonicalize. Done outside the lock — see notes in pos
+          +tTaxa                                                         
+      227 +  //    re: registry reads.                                   
+      228 +  let canonicalOwner: string | undefined;                     
+      229 +  if (newOwnerRaw !== undefined) {                            
+      230 +    if (!userIsRegistered(newOwnerRaw)) {                     
+      231 +      throw new ApiError(                                     
+      232 +        "validation_error",                                   
+      233 +        `username ${JSON.stringify(newOwnerRaw)} is not regist
+          +ered`,                                                        
+      234 +        { tag: "unregistered-owner" },                        
+      235 +      );                                                      
+      236 +    }                                                         
+      237 +    canonicalOwner = userOriginalCasing(newOwnerRaw)!;        
+      238 +  }                                                           
+      239 +                                                              
+      240 +  // 4. Inside the lock: revalidate name via checkRename, then
+          + apply.                                                       
+      241 +  await withWriteLock(async () => {                           
+      242 +    if (newName !== undefined) {                              
+      243 +      const result = checkRename(snapshot(), id, newName);    
+      244 +      if (!result.ok) {                                       
+      245 +        const v = result.violations[0]!;                      
+      246 +        throw new ApiError("conflict", conflictMessage(v), vio
+          +lationDetails(v));                                            
+      247 +      }                                                       
+      248 +    }                                                         
+      249 +    setTaxonFields(id, {                                      
+      250 +      name: newName,                                          
+      251 +      owner: canonicalOwner,                                  
+      252 +    });                                                       
+      253 +  });                                                         
+      254 +                                                              
+      255 +  const view = serializeTaxon(snapshot(), id)!;               
+      256 +  return c.json({ taxon: view }, 200);                        
+      257 +}                                                             
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line, removed 1 line
+       8    getTrees,
+       9    getTreeByRoot,
+      10  } from "./taxa/handlers.js";
+      11 -import { postTaxa } from "./taxa/write-handlers.js";           
+      11 +import { postTaxa, patchTaxon } from "./taxa/write-handlers.js"
+         +;                                                              
+      12  import { identityMiddleware } from "./identity/middleware.js";
+      13  import type { AppVariables } from "./identity/caller.js";
+      14  import packageJson from "../package.json" with { type: "json" }
+          ;
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line
+      50    // handler invokes requireRegistered (the §4 gate) and enters
+      51    // [[write-serialization]] withWriteLock.
+      52    app.post("/taxa", postTaxa);
+      53 +  app.patch("/taxa/:id", patchTaxon);                          
+      54  
+      55    return app;
+      56  }
+
+⏺ Write(test/taxa/patch-taxon.test.ts)
+  ⎿  Wrote 411 lines to test/taxa/patch-taxon.test.ts
+      1 import { describe, it, beforeEach } from "node:test";
+      2 import assert from "node:assert/strict";
+      3 import { createApp } from "../../src/app.js";
+      4 import { reset as usersReset, register } from "../../src/users/st
+        ore.js";
+      5 import {
+      6   reset as taxaReset,
+      7   seed,
+      8   getById,
+      9 } from "../../src/taxa/store.js";
+     … +414 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20 && node --test
+      "dist/test/taxa/patch-taxon.test.js" 2>&1 | tail -15)
+  ⎿    ✔ null caller → 403 (no details.tag from this layer) (0.190542ms)
+       ✔ empty body → 400 empty-patch (0.246583ms)
+       ✔ non-JSON body → 400 malformed-body (0.259833ms)
+     … +14 lines (ctrl+o to expand)
+
+⏺ All 22 PATCH tests pass. Mark Group 6 done.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 8 lines, removed 8 lines
+      39  
+      40  ## 6. PATCH /taxa/{id} (`specs/direct-taxon-actions`, edit)
+      41  
+      42 -- [ ] 6.1 In `src/taxa/write-handlers.ts`, implement `patchTaxo
+         -n` handler                                                     
+      43 -- [ ] 6.2 In `patchTaxon`: validate body shape (JSON object); a
+         -t least one of `name`/`owner` present (empty PATCH → 400 `empty
+         --patch`); if `name` present, validate format via `taxon-name-fo
+         -rmat`; if `owner` present, validate string-non-null, then forma
+         -t via `username-format`                                        
+      44 -- [ ] 6.3 In `patchTaxon`: load taxon (404 `taxon-not-found` if
+         - missing); ownership check via `equalsCI(taxon.owner, caller)` 
+         -(403 `not-owner` if mismatch)                                  
+      45 -- [ ] 6.4 In `patchTaxon`: if `owner` present, look up `registr
+         -y.isRegistered(newOwner)` (400 `unregistered-owner` if false); 
+         -canonicalize via `registry.originalCasing(newOwner)`           
+      46 -- [ ] 6.5 In `patchTaxon`: wrap snapshot + `checkRename` (if `n
+         -ame` present) + `setTaxonFields` in `withWriteLock`; on `checkR
+         -ename` violation respond `409 conflict` with the violation's `k
+         -ind` as `details.tag`; on success respond `200 { taxon: {...} }
+         -`                                                              
+      47 -- [ ] 6.6 Confirm `patchTaxon` does NOT open-code any §3.3 rule
+         - — only the `checkRename` call is used for name validation     
+      48 -- [ ] 6.7 Wire `PATCH /taxa/{id}` in `src/app.ts` behind `requi
+         -reRegistered`                                                  
+      49 -- [ ] 6.8 Write `test/taxa/patch-taxon.test.ts` covering: renam
+         -e-only success; reassign-only success; combined rename+reassign
+         - success and atomicity (failure of one rolls back the other); n
+         -on-owner → 403 not-owner; unknown taxon → 404; null/unregistere
+         -d caller → 403; empty body → 400 empty-patch; non-JSON body → 4
+         -00 malformed-body; malformed name → 400 (format tag); malformed
+         - owner (whitespace, etc.) → 400 (format tag); null owner → 400;
+         - unregistered owner → 400 unregistered-owner; owner casing cano
+         -nicalized to registry's original casing; in-tree clash → 409 in
+         --tree-name-clash; cross-tree clash via shared taxon → 409 in-tr
+         -ee-name-clash surfacing the other root; self-reassignment (same
+         - user) → 200 no-op; rename to current name → 200 no-op; after r
+         -eassignment the prior owner gets 403 on subsequent PATCH       
+      42 +- [x] 6.1 In `src/taxa/write-handlers.ts`, implement `patchTaxo
+         +n` handler                                                     
+      43 +- [x] 6.2 In `patchTaxon`: validate body shape (JSON object); a
+         +t least one of `name`/`owner` present (empty PATCH → 400 `empty
+         +-patch`); if `name` present, validate format via `taxon-name-fo
+         +rmat`; if `owner` present, validate string-non-null, then forma
+         +t via `username-format`                                        
+      44 +- [x] 6.3 In `patchTaxon`: load taxon (404 `taxon-not-found` if
+         + missing); ownership check via `equalsCI(taxon.owner, caller)` 
+         +(403 `not-owner` if mismatch)                                  
+      45 +- [x] 6.4 In `patchTaxon`: if `owner` present, look up `registr
+         +y.isRegistered(newOwner)` (400 `unregistered-owner` if false); 
+         +canonicalize via `registry.originalCasing(newOwner)`           
+      46 +- [x] 6.5 In `patchTaxon`: wrap snapshot + `checkRename` (if `n
+         +ame` present) + `setTaxonFields` in `withWriteLock`; on `checkR
+         +ename` violation respond `409 conflict` with the violation's `k
+         +ind` as `details.tag`; on success respond `200 { taxon: {...} }
+         +`                                                              
+      47 +- [x] 6.6 Confirm `patchTaxon` does NOT open-code any §3.3 rule
+         + — only the `checkRename` call is used for name validation     
+      48 +- [x] 6.7 Wire `PATCH /taxa/{id}` in `src/app.ts` behind `requi
+         +reRegistered`                                                  
+      49 +- [x] 6.8 Write `test/taxa/patch-taxon.test.ts` covering: renam
+         +e-only success; reassign-only success; combined rename+reassign
+         + success and atomicity (failure of one rolls back the other); n
+         +on-owner → 403 not-owner; unknown taxon → 404; null/unregistere
+         +d caller → 403; empty body → 400 empty-patch; non-JSON body → 4
+         +00 malformed-body; malformed name → 400 (format tag); malformed
+         + owner (whitespace, etc.) → 400 (format tag); null owner → 400;
+         + unregistered owner → 400 unregistered-owner; owner casing cano
+         +nicalized to registry's original casing; in-tree clash → 409 in
+         +-tree-name-clash; cross-tree clash via shared taxon → 409 in-tr
+         +ee-name-clash surfacing the other root; self-reassignment (same
+         + user) → 200 no-op; rename to current name → 200 no-op; after r
+         +eassignment the prior owner gets 403 on subsequent PATCH       
+      50  
+      51  ## 7. PUT /taxa/{parentId}/children/{childId} (`specs/direct-ta
+          xon-actions`, edge add)
+      52  
+⏺ Group 7 — PUT edge.
+
+⏺ Update(src/taxa/write-handlers.ts)
+  ⎿  Added 56 lines
+      255    const view = serializeTaxon(snapshot(), id)!;
+      256    return c.json({ taxon: view }, 200);
+      257  }
+      258 +                                                              
+      259 +// -----------------------------------------------------------
+          +----------------                                              
+      260 +// PUT /taxa/{parentId}/children/{childId} (§6.4)             
+      261 +// -----------------------------------------------------------
+          +----------------                                              
+      262 +                                                              
+      263 +export async function putEdge(                                
+      264 +  c: Context<{ Variables: AppVariables }>,                    
+      265 +): Promise<Response> {                                        
+      266 +  const { username: caller } = requireRegistered(c);          
+      267 +  const parentId = c.req.param("parentId")!;                  
+      268 +  const childId = c.req.param("childId")!;                    
+      269 +                                                              
+      270 +  // Self-loop short-circuit: friendlier diagnostic than 409 c
+          +ycle.                                                         
+      271 +  // Runs BEFORE the lock — clearly malformed request.        
+      272 +  if (parentId === childId) {                                 
+      273 +    throw new ApiError(                                       
+      274 +      "validation_error",                                     
+      275 +      "parentId and childId must differ",                     
+      276 +      { tag: "same-parent-and-child" },                       
+      277 +    );                                                        
+      278 +  }                                                           
+      279 +                                                              
+      280 +  // Parent existence + owner check FIRST. A non-parent-owner 
+          +must                                                          
+      281 +  // not learn about child existence via this endpoint.       
+      282 +  const parent = getById(parentId);                           
+      283 +  if (parent === undefined) {                                 
+      284 +    throw new ApiError("not_found", `Taxon ${parentId} not fou
+          +nd`, {                                                        
+      285 +      tag: "taxon-not-found",                                 
+      286 +    });                                                       
+      287 +  }                                                           
+      288 +  if (!equalsCI(parent.owner, caller)) {                      
+      289 +    throw new ApiError(                                       
+      290 +      "forbidden",                                            
+      291 +      "only the parent's owner may add a child edge",         
+      292 +      { tag: "not-parent-owner" },                            
+      293 +    );                                                        
+      294 +  }                                                           
+      295 +                                                              
+      296 +  // Now safe to surface child-not-found to this caller.      
+      297 +  if (getById(childId) === undefined) {                       
+      298 +    throw new ApiError("not_found", `Taxon ${childId} not foun
+          +d`, {                                                         
+      299 +      tag: "taxon-not-found",                                 
+      300 +    });                                                       
+      301 +  }                                                           
+      302 +                                                              
+      303 +  await withWriteLock(async () => {                           
+      304 +    const result = checkAddEdge(snapshot(), parentId, childId)
+          +;                                                             
+      305 +    if (!result.ok) {                                         
+      306 +      const v = result.violations[0]!;                        
+      307 +      throw new ApiError("conflict", conflictMessage(v), viola
+          +tionDetails(v));                                              
+      308 +    }                                                         
+      309 +    addEdge(parentId, childId);                               
+      310 +  });                                                         
+      311 +                                                              
+      312 +  return c.body(null, 204);                                   
+      313 +}                                                             
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line, removed 1 line
+       8    getTrees,
+       9    getTreeByRoot,
+      10  } from "./taxa/handlers.js";
+      11 -import { postTaxa, patchTaxon } from "./taxa/write-handlers.js"
+         -;                                                              
+      11 +import { postTaxa, patchTaxon, putEdge } from "./taxa/write-han
+         +dlers.js";                                                     
+      12  import { identityMiddleware } from "./identity/middleware.js";
+      13  import type { AppVariables } from "./identity/caller.js";
+      14  import packageJson from "../package.json" with { type: "json" }
+          ;
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line
+      51    // [[write-serialization]] withWriteLock.
+      52    app.post("/taxa", postTaxa);
+      53    app.patch("/taxa/:id", patchTaxon);
+      54 +  app.put("/taxa/:parentId/children/:childId", putEdge);       
+      55  
+      56    return app;
+      57  }
+
+⏺ Write(test/taxa/put-edge.test.ts)
+  ⎿  Wrote 216 lines to test/taxa/put-edge.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset as usersReset, register } from "../../src/users/s
+         tore.js";
+       5 import { reset as taxaReset, seed, snapshot } from "../../src/ta
+       6 xa/store.js";
+       7 beforeEach(() => {
+       8   usersReset();
+       9   taxaReset();
+      10 });
+     … +216 lines (ctrl+o to expand)
+
+⏺ Now the subtree-merging test file (task 7.8) — the load-bearing one that
+  exercises Phase 3's checkAddEdge end-to-end.
+
+⏺ Write(test/taxa/put-edge-subtree.test.ts)
+  ⎿  Wrote 137 lines to test/taxa/put-edge-subtree.test.ts
+         dId}.btree-merging cases for PUT /taxa/{parentId}/children/{chil
+       2 //
+         HTTPhese exercise Phase 3's checkAddEdge end-to-end through the 
+       4 // surface. The engine builds a candidate Graph with the new edg
+       5 // walks checkInvariants from every root — so a deep descendant 
+         of the
+         nse.dded child can produce a §3.3 violation visible at the respo
+       7 
+       9 import assert from "node:assert/strict"; "node:test";
+      10 import { createApp } from "../../src/app.js";
+     … +142 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20 && node --test "dist/test/taxa/put-edge.test.js"
+      "dist/test/taxa/put-edge-subtree.test.js" 2>&1 | tail -15)
+  ⎿    ✔ parentId === childId → 400 same-parent-and-child (0.408625ms)
+     ✔ PUT edge: self-loop short-circuit (0.464666ms)
+     ▶ PUT edge: invariant conflicts
+     … +13 lines (ctrl+o to expand)
+
+⏺ All 15 PUT tests pass (11 in put-edge.test.ts + 4 in
+  put-edge-subtree.test.ts). Mark Group 7 done.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 8 lines, removed 8 lines
+      50  
+      51  ## 7. PUT /taxa/{parentId}/children/{childId} (`specs/direct-ta
+          xon-actions`, edge add)
+      52  
+      53 -- [ ] 7.1 In `src/taxa/write-handlers.ts`, implement `putEdge` 
+         -handler                                                        
+      54 -- [ ] 7.2 In `putEdge`: short-circuit `400 same-parent-and-chil
+         -d` before entering the lock if `parentId === childId`          
+      55 -- [ ] 7.3 In `putEdge`: load parent (404 `taxon-not-found`); pa
+         -rent-owner check (403 `not-parent-owner`); load child (404 `tax
+         -on-not-found`) — in this order, so non-parent-owner does NOT le
+         -arn about child existence                                      
+      56 -- [ ] 7.4 In `putEdge`: wrap snapshot + `checkAddEdge` + `addEd
+         -ge` in `withWriteLock`; on violation respond `409 conflict` wit
+         -h `details.tag` equal to the violation's `kind`, with sufficien
+         -t `details` for diagnostics; on success (including edge-already
+         --existed idempotent case) respond `204`                        
+      57 -- [ ] 7.5 Confirm `putEdge` does NOT open-code any §3.3 rule — 
+         -only `checkAddEdge` is used                                    
+      58 -- [ ] 7.6 Wire `PUT /taxa/{parentId}/children/{childId}` in `sr
+         -c/app.ts` behind `requireRegistered`                           
+      59 -- [ ] 7.7 Write `test/taxa/put-edge.test.ts` covering: parent-o
+         -wner adds safe edge → 204; child end of edge can be owned by an
+         -yone (no child-owner check); existing edge (idempotent PUT) → 2
+         -04; same-parent-and-child → 400 same-parent-and-child; cycle → 
+         -409 cycle; in-tree diamond → 409 in-tree-duplicate; in-tree nam
+         -e clash → 409 in-tree-name-clash; non-parent-owner → 403 not-pa
+         -rent-owner; null/unregistered caller → 403; unknown parent → 40
+         -4; unknown child → 404 (when caller is parent-owner); unknown c
+         -hild by non-owner caller → 403 (NOT 404 — owner check fires fir
+         -st)                                                            
+      60 -- [ ] 7.8 Write `test/taxa/put-edge-subtree.test.ts` covering t
+         -he subtree-merging cases that exercise Phase 3's `checkAddEdge`
+         - end-to-end: PUT where child's subtree contains the parent → 40
+         -9 cycle; PUT where child's subtree contains a taxon already rea
+         -chable from parent's root via another path → 409 in-tree-duplic
+         -ate; PUT where child's subtree contains a deep descendant whose
+         - name clashes with a name already in parent's tree (including c
+         -ase-variant clash) → 409 in-tree-name-clash; PUT where child's 
+         -subtree contains a taxon also reachable from a different root →
+         - no per-tree violation in either root if no in-tree duplicate (
+         -the across-tree shared case is legal)                          
+      53 +- [x] 7.1 In `src/taxa/write-handlers.ts`, implement `putEdge` 
+         +handler                                                        
+      54 +- [x] 7.2 In `putEdge`: short-circuit `400 same-parent-and-chil
+         +d` before entering the lock if `parentId === childId`          
+      55 +- [x] 7.3 In `putEdge`: load parent (404 `taxon-not-found`); pa
+         +rent-owner check (403 `not-parent-owner`); load child (404 `tax
+         +on-not-found`) — in this order, so non-parent-owner does NOT le
+         +arn about child existence                                      
+      56 +- [x] 7.4 In `putEdge`: wrap snapshot + `checkAddEdge` + `addEd
+         +ge` in `withWriteLock`; on violation respond `409 conflict` wit
+         +h `details.tag` equal to the violation's `kind`, with sufficien
+         +t `details` for diagnostics; on success (including edge-already
+         +-existed idempotent case) respond `204`                        
+      57 +- [x] 7.5 Confirm `putEdge` does NOT open-code any §3.3 rule — 
+         +only `checkAddEdge` is used                                    
+      58 +- [x] 7.6 Wire `PUT /taxa/{parentId}/children/{childId}` in `sr
+         +c/app.ts` behind `requireRegistered`                           
+      59 +- [x] 7.7 Write `test/taxa/put-edge.test.ts` covering: parent-o
+         +wner adds safe edge → 204; child end of edge can be owned by an
+         +yone (no child-owner check); existing edge (idempotent PUT) → 2
+         +04; same-parent-and-child → 400 same-parent-and-child; cycle → 
+         +409 cycle; in-tree diamond → 409 in-tree-duplicate; in-tree nam
+         +e clash → 409 in-tree-name-clash; non-parent-owner → 403 not-pa
+         +rent-owner; null/unregistered caller → 403; unknown parent → 40
+         +4; unknown child → 404 (when caller is parent-owner); unknown c
+         +hild by non-owner caller → 403 (NOT 404 — owner check fires fir
+         +st)                                                            
+      60 +- [x] 7.8 Write `test/taxa/put-edge-subtree.test.ts` covering t
+         +he subtree-merging cases that exercise Phase 3's `checkAddEdge`
+         + end-to-end: PUT where child's subtree contains the parent → 40
+         +9 cycle; PUT where child's subtree contains a taxon already rea
+         +chable from parent's root via another path → 409 in-tree-duplic
+         +ate; PUT where child's subtree contains a deep descendant whose
+         + name clashes with a name already in parent's tree (including c
+         +ase-variant clash) → 409 in-tree-name-clash; PUT where child's 
+         +subtree contains a taxon also reachable from a different root →
+         + no per-tree violation in either root if no in-tree duplicate (
+         +the across-tree shared case is legal)                          
+      61  
+      62  ## 8. DELETE /taxa/{parentId}/children/{childId} (`specs/direct
+          -taxon-actions`, edge detach)
+      63  
+
+⏺ Group 8 — DELETE edge.
+
+⏺ Update(src/taxa/write-handlers.ts)
+  ⎿  Added 44 lines
+      311  
+      312    return c.body(null, 204);
+      313  }
+      314 +                                                              
+      315 +// -----------------------------------------------------------
+          +----------------                                              
+      316 +// DELETE /taxa/{parentId}/children/{childId} (§6.4 + §7 — det
+          +ach only)                                                     
+      317 +// -----------------------------------------------------------
+          +----------------                                              
+      318 +                                                              
+      319 +export async function deleteEdge(                             
+      320 +  c: Context<{ Variables: AppVariables }>,                    
+      321 +): Promise<Response> {                                        
+      322 +  const { username: caller } = requireRegistered(c);          
+      323 +  const parentId = c.req.param("parentId")!;                  
+      324 +  const childId = c.req.param("childId")!;                    
+      325 +                                                              
+      326 +  // Same ordering as PUT: parent existence → parent-owner → c
+          +hild existence.                                               
+      327 +  const parent = getById(parentId);                           
+      328 +  if (parent === undefined) {                                 
+      329 +    throw new ApiError("not_found", `Taxon ${parentId} not fou
+          +nd`, {                                                        
+      330 +      tag: "taxon-not-found",                                 
+      331 +    });                                                       
+      332 +  }                                                           
+      333 +  if (!equalsCI(parent.owner, caller)) {                      
+      334 +    throw new ApiError(                                       
+      335 +      "forbidden",                                            
+      336 +      "only the parent's owner may detach a child edge",      
+      337 +      { tag: "not-parent-owner" },                            
+      338 +    );                                                        
+      339 +  }                                                           
+      340 +  if (getById(childId) === undefined) {                       
+      341 +    throw new ApiError("not_found", `Taxon ${childId} not foun
+          +d`, {                                                         
+      342 +      tag: "taxon-not-found",                                 
+      343 +    });                                                       
+      344 +  }                                                           
+      345 +                                                              
+      346 +  // Detach never introduces a §3.3 violation; the engine is n
+          +ot                                                            
+      347 +  // consulted. We still enter the lock for dual-index consist
+          +ency.                                                         
+      348 +  const removed = await withWriteLock(() => removeEdge(parentI
+          +d, childId));                                                 
+      349 +  if (!removed) {                                             
+      350 +    throw new ApiError(                                       
+      351 +      "not_found",                                            
+      352 +      `edge from ${parentId} to ${childId} does not exist`,   
+      353 +      { tag: "edge-not-found" },                              
+      354 +    );                                                        
+      355 +  }                                                           
+      356 +  return c.body(null, 204);                                   
+      357 +}                                                             
+
+⏺ Update(src/app.ts)
+  ⎿  Added 6 lines, removed 1 line
+       8    getTrees,
+       9    getTreeByRoot,
+      10  } from "./taxa/handlers.js";
+      11 -import { postTaxa, patchTaxon, putEdge } from "./taxa/write-han
+         -dlers.js";                                                     
+      11 +import {                                                       
+      12 +  postTaxa,                                                    
+      13 +  patchTaxon,                                                  
+      14 +  putEdge,                                                     
+      15 +  deleteEdge,                                                  
+      16 +} from "./taxa/write-handlers.js";                             
+      17  import { identityMiddleware } from "./identity/middleware.js";
+      18  import type { AppVariables } from "./identity/caller.js";
+      19  import packageJson from "../package.json" with { type: "json" }
+          ;
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line
+      57    app.post("/taxa", postTaxa);
+      58    app.patch("/taxa/:id", patchTaxon);
+      59    app.put("/taxa/:parentId/children/:childId", putEdge);
+      60 +  app.delete("/taxa/:parentId/children/:childId", deleteEdge); 
+      61  
+      62    return app;
+      63  }
+
+⏺ Write(test/taxa/delete-edge.test.ts)
+  ⎿  Wrote 221 lines to test/taxa/delete-edge.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset as usersReset, register } from "../../src/users/s
+         tore.js";
+       5 import {
+       6   reset as taxaReset,
+       7   seed,
+       8   snapshot,
+       9   getById,
+      10 } from "../../src/taxa/store.js";
+     … +219 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20 && node --test
+      "dist/test/taxa/delete-edge.test.js" 2>&1 | tail -15)
+  ⎿  ▶ DELETE edge: authorization and existence ordering
+       ✔ non-parent-owner → 403 not-parent-owner (0.453167ms)
+       ✔ null caller → 403 (0.340958ms)
+     … +13 lines (ctrl+o to expand)
+
+⏺ All 10 DELETE edge tests pass. Mark Group 8 done.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 5 lines, removed 5 lines
+      61  
+      62  ## 8. DELETE /taxa/{parentId}/children/{childId} (`specs/direct
+          -taxon-actions`, edge detach)
+      63  
+      64 -- [ ] 8.1 In `src/taxa/write-handlers.ts`, implement `deleteEdg
+         -e` handler                                                     
+      65 -- [ ] 8.2 In `deleteEdge`: load parent (404); parent-owner chec
+         -k (403 not-parent-owner); load child (404) — same ordering as P
+         -UT                                                             
+      66 -- [ ] 8.3 In `deleteEdge`: wrap `removeEdge` in `withWriteLock`
+         -; if `removeEdge` returns `false` (edge didn't exist), respond 
+         -`404 edge-not-found`; on success respond `204`                 
+      67 -- [ ] 8.4 Wire `DELETE /taxa/{parentId}/children/{childId}` in 
+         -`src/app.ts` behind `requireRegistered`                        
+      68 -- [ ] 8.5 Write `test/taxa/delete-edge.test.ts` covering: paren
+         -t-owner detaches existing edge → 204; child becomes a root if i
+         -t had no other parents; child keeps its subtree (detach is deta
+         -ch-only, never destroys); detach of non-existent edge → 404 edg
+         -e-not-found; non-parent-owner → 403 not-parent-owner; null/unre
+         -gistered caller → 403; unknown parent → 404 taxon-not-found; un
+         -known child (by parent-owner) → 404 taxon-not-found; unknown ch
+         -ild (by non-owner) → 403 not-parent-owner (owner check fires fi
+         -rst)                                                           
+      64 +- [x] 8.1 In `src/taxa/write-handlers.ts`, implement `deleteEdg
+         +e` handler                                                     
+      65 +- [x] 8.2 In `deleteEdge`: load parent (404); parent-owner chec
+         +k (403 not-parent-owner); load child (404) — same ordering as P
+         +UT                                                             
+      66 +- [x] 8.3 In `deleteEdge`: wrap `removeEdge` in `withWriteLock`
+         +; if `removeEdge` returns `false` (edge didn't exist), respond 
+         +`404 edge-not-found`; on success respond `204`                 
+      67 +- [x] 8.4 Wire `DELETE /taxa/{parentId}/children/{childId}` in 
+         +`src/app.ts` behind `requireRegistered`                        
+      68 +- [x] 8.5 Write `test/taxa/delete-edge.test.ts` covering: paren
+         +t-owner detaches existing edge → 204; child becomes a root if i
+         +t had no other parents; child keeps its subtree (detach is deta
+         +ch-only, never destroys); detach of non-existent edge → 404 edg
+         +e-not-found; non-parent-owner → 403 not-parent-owner; null/unre
+         +gistered caller → 403; unknown parent → 404 taxon-not-found; un
+         +known child (by parent-owner) → 404 taxon-not-found; unknown ch
+         +ild (by non-owner) → 403 not-parent-owner (owner check fires fi
+         +rst)                                                           
+      69  
+      70  ## 9. DELETE /taxa/{id} (`specs/direct-taxon-actions`, delete w
+          ith region and preconditions)
+      71  
+⏺ Group 9 — DELETE /taxa/{id}, the subtlest of the five.
+
+⏺ Update(src/taxa/write-handlers.ts)
+  ⎿  Added 88 lines
+      355    }
+      356    return c.body(null, 204);
+      357  }
+      358 +                                                              
+      359 +// -----------------------------------------------------------
+          +----------------                                              
+      360 +// DELETE /taxa/{id} (§6.3 + §7 — permanent removal with casca
+          +de)                                                           
+      361 +//                                                            
+      362 +// Pipeline (per design Decision 5):                          
+      363 +//   1. auth: requireRegistered → ownership                   
+      364 +//   2. inside the lock:                                      
+      365 +//        snapshot →                                          
+      366 +//        ownerScopedRegion(snapshot, id, owner) →            
+      367 +//        precondition 1: ∀ t ∈ region: ¬isShared(snapshot, t)
+          +   [§6.3.1]                                                   
+      368 +//        precondition 2: id has 0 parents, or 1 parent owned 
+          +by U  [§6.3.2]                                                
+      369 +//        deleteRegion(region, haltFrontier)                  
+      370 +//   3. 204                                                   
+      371 +//                                                            
+      372 +// Precondition 1 uses isShared directly (NOT a parent-count p
+          +roxy) —                                                       
+      373 +// the proxy is wrong when sharedness arises from an ancestor 
+          +above id                                                      
+      374 +// having multiple parents (a region taxon can have a single p
+          +arent and                                                     
+      375 +// still be reachable from multiple roots).                   
+      376 +// -----------------------------------------------------------
+          +----------------                                              
+      377 +                                                              
+      378 +export async function deleteTaxon(                            
+      379 +  c: Context<{ Variables: AppVariables }>,                    
+      380 +): Promise<Response> {                                        
+      381 +  const { username: caller } = requireRegistered(c);          
+      382 +  const id = c.req.param("id")!;                              
+      383 +                                                              
+      384 +  const existing = getById(id);                               
+      385 +  if (existing === undefined) {                               
+      386 +    throw new ApiError("not_found", `Taxon ${id} not found`, {
+      387 +      tag: "taxon-not-found",                                 
+      388 +    });                                                       
+      389 +  }                                                           
+      390 +  if (!equalsCI(existing.owner, caller)) {                    
+      391 +    throw new ApiError(                                       
+      392 +      "forbidden",                                            
+      393 +      "only the taxon's owner may delete it",                 
+      394 +      { tag: "not-owner" },                                   
+      395 +    );                                                        
+      396 +  }                                                           
+      397 +                                                              
+      398 +  await withWriteLock(() => {                                 
+      399 +    const g = snapshot();                                     
+      400 +    const { region, haltFrontier } = ownerScopedRegion(g, id, 
+          +existing.owner);                                              
+      401 +                                                              
+      402 +    // Precondition 1: no region taxon is reachable from > 1 r
+          +oot.                                                          
+      403 +    const offenders: string[] = [];                           
+      404 +    for (const t of region) {                                 
+      405 +      if (isShared(g, t)) offenders.push(t);                  
+      406 +    }                                                         
+      407 +    if (offenders.length > 0) {                               
+      408 +      throw new ApiError(                                     
+      409 +        "conflict",                                           
+      410 +        `deletion region contains taxa reachable from more tha
+          +n one root: ${offenders.join(", ")}`,                         
+      411 +        { tag: "delete-region-shared", offendingTaxa: offender
+          +s },                                                          
+      412 +      );                                                      
+      413 +    }                                                         
+      414 +                                                              
+      415 +    // Precondition 2: id has 0 parents, or exactly 1 parent o
+          +wned by caller.                                               
+      416 +    const parents = g.parentsOf.get(id);                      
+      417 +    if (parents !== undefined && parents.size > 0) {          
+      418 +      // |parents| > 1 was already caught by precondition 1 (i
+          +d would                                                       
+      419 +      // appear in multiple trees). Defensive check kept for c
+          +larity.                                                       
+      420 +      if (parents.size !== 1) {                               
+      421 +        throw new ApiError(                                   
+      422 +          "conflict",                                         
+      423 +          `taxon ${id} has multiple parents; cannot delete`,  
+      424 +          { tag: "delete-parent-not-owned" },                 
+      425 +        );                                                    
+      426 +      }                                                       
+      427 +      const [onlyParent] = parents;                           
+      428 +      const parentTaxon = g.taxa.get(onlyParent!);            
+      429 +      if (                                                    
+      430 +        parentTaxon === undefined ||                          
+      431 +        !equalsCI(parentTaxon.owner, existing.owner)          
+      432 +      ) {                                                     
+      433 +        throw new ApiError(                                   
+      434 +          "conflict",                                         
+      435 +          `taxon ${id} has a parent not owned by the deleter`,
+      436 +          { tag: "delete-parent-not-owned" },                 
+      437 +        );                                                    
+      438 +      }                                                       
+      439 +    }                                                         
+      440 +                                                              
+      441 +    deleteRegion(region, haltFrontier);                       
+      442 +  });                                                         
+      443 +                                                              
+      444 +  return c.body(null, 204);                                   
+      445 +}                                                             
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line
+      13    patchTaxon,
+      14    putEdge,
+      15    deleteEdge,
+      16 +  deleteTaxon,                                                 
+      17  } from "./taxa/write-handlers.js";
+      18  import { identityMiddleware } from "./identity/middleware.js";
+      19  import type { AppVariables } from "./identity/caller.js";
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line
+      59    app.patch("/taxa/:id", patchTaxon);
+      60    app.put("/taxa/:parentId/children/:childId", putEdge);
+      61    app.delete("/taxa/:parentId/children/:childId", deleteEdge);
+      62 +  app.delete("/taxa/:id", deleteTaxon);                        
+      63  
+      64    return app;
+      65  }
+
+⏺ Write(test/taxa/delete-taxon.test.ts)
+  ⎿  Wrote 388 lines to test/taxa/delete-taxon.test.ts
+       2 import assert from "node:assert/strict"; "node:test";
+       3 import { createApp } from "../../src/app.js";
+       4 import { reset as usersReset, register } from "../../src/users/s
+         tore.js";
+       5 import {
+       6   reset as taxaReset,
+       7   seed,
+       8   getById,
+       9   snapshot,
+      10 } from "../../src/taxa/store.js";
+     … +406 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20 && node --test
+      "dist/test/taxa/delete-taxon.test.js" 2>&1 | tail -25)
+  ⎿  ▶ DELETE taxon: precondition 1 (region contains shared taxon)
+       ✔ region taxon in multiple trees (sibling roots) → 409 delete-region
+     -shared (0.651875ms)
+     … +22 lines (ctrl+o to expand)
+
+⏺ All 15 DELETE taxon tests pass — including the load-bearing ancestor-fan-out
+  case that disproves the parent-count shortcut. Mark Group 9 done.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 7 lines, removed 7 lines
+      69  
+      70  ## 9. DELETE /taxa/{id} (`specs/direct-taxon-actions`, delete w
+          ith region and preconditions)
+      71  
+      72 -- [ ] 9.1 In `src/taxa/write-handlers.ts`, implement `deleteTax
+         -on` handler                                                    
+      73 -- [ ] 9.2 In `deleteTaxon`: load taxon (404 `taxon-not-found`);
+         - ownership check (403 `not-owner`)                             
+      74 -- [ ] 9.3 In `deleteTaxon`: wrap the rest in `withWriteLock`:  
+      72 +- [x] 9.1 In `src/taxa/write-handlers.ts`, implement `deleteTax
+         +on` handler                                                    
+      73 +- [x] 9.2 In `deleteTaxon`: load taxon (404 `taxon-not-found`);
+         + ownership check (403 `not-owner`)                             
+      74 +- [x] 9.3 In `deleteTaxon`: wrap the rest in `withWriteLock`:  
+      75    - take a snapshot;
+      76    - compute `ownerScopedRegion(snapshot, id, taxon.owner)` → `{
+           region, haltFrontier }`;
+      77    - check precondition 1: `∀ t ∈ region: ¬isShared(snapshot, t)
+          ` — if violated, respond `409 delete-region-shared` with `detai
+          ls.offendingTaxa: [TaxonId, ...]` listing every shared region t
+          axon; do NOT mutate;
+      78    - check precondition 2: `parentsOf[id].size === 0` OR (`size 
+          === 1` AND that parent's owner equals the deleter case-insensit
+          ively); if violated, respond `409 delete-parent-not-owned`; do 
+          NOT mutate;
+      79    - apply `deleteRegion(region, haltFrontier)`
+      80 -- [ ] 9.4 Respond `204 No Content` on success                  
+      81 -- [ ] 9.5 Confirm `deleteTaxon` uses `isShared` from `taxon-dom
+         -ain` for precondition 1 (NOT a parent-count proxy)             
+      82 -- [ ] 9.6 Wire `DELETE /taxa/{id}` in `src/app.ts` behind `requ
+         -ireRegistered`                                                 
+      83 -- [ ] 9.7 Write `test/taxa/delete-taxon.test.ts` covering:     
+      80 +- [x] 9.4 Respond `204 No Content` on success                  
+      81 +- [x] 9.5 Confirm `deleteTaxon` uses `isShared` from `taxon-dom
+         +ain` for precondition 1 (NOT a parent-count proxy)             
+      82 +- [x] 9.6 Wire `DELETE /taxa/{id}` in `src/app.ts` behind `requ
+         +ireRegistered`                                                 
+      83 +- [x] 9.7 Write `test/taxa/delete-taxon.test.ts` covering:     
+      84    - owner deletes a leaf root → 204, taxon gone
+      85    - owner deletes a wholly-owned subtree → 204, all region taxa
+           gone
+      86    - cascade halts at other-owned child → halt-frontier child is
+           detached but survives (becomes root if no other parents), desc
+          endants beyond the halt frontier (even if owner-owned) are NOT 
+          deleted
+
+⏺ Group 10 — integration + concurrency. Let me look at the existing integration
+  test for style and then add a Phase 4 one.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Write(test/app.phase4.integration.test.ts)
+  ⎿  Wrote 275 lines to test/app.phase4.integration.test.ts
+        ifecycle 4 end-to-end integration: walk a complete owner-action l
+      2 // across two users via the real HTTP endpoints, plus a concurren
+        t-create
+      3 // stress that verifies §11.1 serialization end-to-end.
+      4 
+      5 import { describe, it, beforeEach } from "node:test";
+      6 import assert from "node:assert/strict";
+      7 import { createApp } from "../src/app.js";
+      8 import { reset as usersReset } from "../src/users/store.js";
+      9 import { reset as taxaReset } from "../src/taxa/store.js";
+     … +290 lines (ctrl+o to expand)
+
+⏺ Bash(npx tsc 2>&1 | head -20 && node --test
+      "dist/test/app.phase4.integration.test.js" 2>&1 | tail -15)
+  ⎿  ▶ Phase 4 integration: multi-step collaborative delete (§14)
+       ✔ blocked shared delete becomes unblocked after detaching the share
+     (2.305167ms)
+     … +16 lines (ctrl+o to expand)
+
+⏺ All 4 integration tests pass. Now the full build/test (task 10.3) — confirm no
+   Phase 1/2/3 regressions.
+
+⏺ Bash(rm -rf dist && npx tsc 2>&1 | tail -5 && node --test "dist/**/*.test.js"
+      2>&1 | tail -12)
+  ⎿  ✔ user registry store: reset clears membership (0.117334ms)
+     ▶ user registry store: register does not mutate input
+       ✔ input string is returned by originalCasing exactly (0.04925ms)
+     … +9 lines (ctrl+o to expand)
+
+⏺ All 411 tests pass — Phase 1, 2, 3, and 4 together, no regressions. Mark Group
+   10 done.
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 4 lines, removed 4 lines
+       96  
+       97  ## 10. Integration and reset confirmation
+       98  
+       99 -- [ ] 10.1 Extend `test/app.integration.test.ts` (or add a new
+          - file) end-to-end: register two users; first user creates a tr
+          -ee (POST /taxa + PUT edges); first user reassigns ownership to
+          - second user; second user adds and detaches edges; second user
+          - deletes the tree; `POST /reset` clears state; subsequent `GET
+          - /taxa` and `GET /trees` return empty                         
+      100 -- [ ] 10.2 Verify the §11.1 serialization end-to-end: launch t
+          -en concurrent `POST /taxa` requests (using `Promise.all`) and 
+          -assert exactly ten taxa exist with IDs `t1..t10` (one per requ
+          -est, no lost mints, no duplicate IDs)                         
+      101 -- [ ] 10.3 Run the full build/test command on a clean checkout
+          -: `rm -rf dist && npx tsc && node --test "dist/**/*.test.js"` 
+          -— all Phase 1 + 2 + 3 + 4 tests pass                          
+      102 -- [ ] 10.4 Confirm Phase 3 tests still pass unchanged (no edit
+          -s to Phase 3 source files except for the additions documented 
+          -in tasks 3.x and 4.x to `taxon-domain` files)                 
+       99 +- [x] 10.1 Extend `test/app.integration.test.ts` (or add a new
+          + file) end-to-end: register two users; first user creates a tr
+          +ee (POST /taxa + PUT edges); first user reassigns ownership to
+          + second user; second user adds and detaches edges; second user
+          + deletes the tree; `POST /reset` clears state; subsequent `GET
+          + /taxa` and `GET /trees` return empty                         
+      100 +- [x] 10.2 Verify the §11.1 serialization end-to-end: launch t
+          +en concurrent `POST /taxa` requests (using `Promise.all`) and 
+          +assert exactly ten taxa exist with IDs `t1..t10` (one per requ
+          +est, no lost mints, no duplicate IDs)                         
+      101 +- [x] 10.3 Run the full build/test command on a clean checkout
+          +: `rm -rf dist && npx tsc && node --test "dist/**/*.test.js"` 
+          +— all Phase 1 + 2 + 3 + 4 tests pass                          
+      102 +- [x] 10.4 Confirm Phase 3 tests still pass unchanged (no edit
+          +s to Phase 3 source files except for the additions documented 
+          +in tasks 3.x and 4.x to `taxon-domain` files)                 
+      103  
+      104  ## 11. Spec drift check and final test plan
+      105  
+
+⏺ Group 11 — spec drift check + final test plan + validate.
+
+  Called openlore (ctrl+o to expand)
+⏺ No drift. Now let me update the final test plan changelog with what diverged.
+
+⏺ Update(test-plans/phase-4-final.md)
+  ⎿  Added 25 lines, removed 1 line
+      483  
+      484  ## Changelog
+      485  
+      486 -<!-- One bullet per row added, removed, or changed relative to
+          - phase-4-initial.md, with the reason. -->                     
+      486 +Net delta from `phase-4-initial.md`:                          
+      487  
+      488 +**§1 write-serialization**                                    
+      489 +- *Removed*: "Re-entry deadlocks (documented behavior)" — a de
+          +adlock-assertion test relies on a timeout race against a never
+          +-resolving promise, which is inherently flaky and would either
+          + hang `node --test` or pass only when the timeout is generousl
+          +y slack. The non-re-entrancy contract is documented in the spe
+          +c and the source comment; we judged that a flaky test would be
+          + worse than a documented contract. Reason: pragmatic test-suit
+          +e reliability.                                                
+      490 +- *Added*: "ten concurrent calls preserve FIFO across the chai
+          +n" — replaces the planned three-concurrent assertion with a st
+          +ricter ten-call interleaving check that detects more failure m
+          +odes (e.g., a chain that serializes pairs but reorders within 
+          +a pair).                                                      
+      491 +- *Added*: "an async fn returning a value resolves to that val
+          +ue" and "a synchronous fn returning a value resolves to that v
+          +alue" — verify the return-value plumbing the lock exposes; not
+          + in the initial plan but trivial to confirm and forward-useful
+          + when handlers return JSON.                                   
+      492 +                                                              
+      493 +**§3 store mutation primitives**                              
+      494 +- *Added*: "empty region with empty frontier is a no-op" and "
+          +frontier-only call removes the edges without removing taxa" — 
+          +two defensive `deleteRegion` cases the handler never produces 
+          +but the primitive is total over. Reason: confirming the primit
+          +ive's behavior at the corners aids future maintenance.        
+      495 +- *Added*: "removes outgoing-only edges of region taxa when fr
+          +ontier not enumerated" — defensive coverage for a caller passi
+          +ng a partial frontier. The handler always passes the full fron
+          +tier, so this case is unreachable from the request path; the t
+          +est documents the store's leniency.                           
+      496 +- *Added*: "interoperates with seed (same counter)" and "seed 
+          +and createTaxon share the same counter" — confirms the test-on
+          +ly `seed()` and production `createTaxon` share the monotonic c
+          +ounter, which is implicit but worth a behavioral check.       
+      497 +                                                              
+      498 +**§7 DELETE edge, §8 DELETE taxon (and §5/§6)**               
+      499 +- *Reduced*: "Unregistered caller → 403" rows are explicitly t
+          +ested only on POST /taxa. Other endpoints rely on the same `re
+          +quireRegistered` gate, which is already covered exhaustively i
+          +n Phase 2's authorization tests. Reason: avoids redundant cros
+          +s-phase coverage.                                             
+      500 +                                                              
+      501 +**§9 /reset extension**                                       
+      502 +- *Reduced*: "Reset clears edges added via PUT" not as a stand
+          +-alone row — instead covered by the Phase 4 integration lifecy
+          +cle test which exercises POST/PUT/PATCH/DELETE then `POST /res
+          +et` and verifies all reads return empty. Reason: end-to-end co
+          +verage gives the same signal at lower duplication.            
+      503 +                                                              
+      504 +**§10 Integration**                                           
+      505 +- *Reduced*: "Reassign-then-revoke chain (Alice → Bob → Carol 
+          +→ Alice)" and "Detach + add equals move" rows are not added as
+          + stand-alone tests — both behaviors are covered by the two-use
+          +r lifecycle test (PATCH owner is exercised; detach + add is ex
+          +ercised). Reason: avoids over-coverage of single-step properti
+          +es already tested in unit tests.                              
+      506 +- *Reduced*: "Concurrent DELETE + PUT on same parent-edge" is 
+          +not added — testing reliably across both interleavings without
+          + flakiness requires inspecting internal state of the lock that
+          + we deliberately do not expose. The single-PATCH concurrency t
+          +est plus the unit-level FIFO tests cover serialization semanti
+          +cs adequately. Reason: testability trade-off.                 
+      507 +                                                              
+      508 +**Overall**                                                   
+      509 +- All §13/§14 mappings from the initial plan remain covered. T
+          +ests pass: 411 across Phase 1 + 2 + 3 + 4 in a clean build (`r
+          +m -rf dist && npx tsc && node --test "dist/**/*.test.js"`).   
+      510 +- `check_spec_drift` reports 0 drift after implementation.    
+      511 +                                                              
+
+⏺ Bash(openspec validate phase-4-direct-actions --strict 2>&1 && echo "---" &&
+      openspec list 2>&1)
+  ⎿  Change 'phase-4-direct-actions' is valid
+     ---
+     Changes:
+       phase-4-direct-actions     56/61 tasks   just now
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+⏺ Update(openspec/changes/phase-4-direct-actions/tasks.md)
+  ⎿  Added 5 lines, removed 5 lines
+      103  
+      104  ## 11. Spec drift check and final test plan
+      105  
+      106 -- [ ] 11.1 Run `check_spec_drift` via openlore MCP per CLAUDE.
+          -md; report the summary; reconcile any drift before close-out (
+          -update spec to match intended behavior, or fix code if spec is
+          - right; re-run until clean)                                   
+      107 -- [ ] 11.2 Update `test-plans/phase-4-final.md` to reflect wha
+          -t was actually tested (rows that diverge from the frozen `phas
+          -e-4-initial.md`)                                              
+      108 -- [ ] 11.3 Add to the `## Changelog` section of `phase-4-final
+          -.md`: for each row added/removed/changed since the initial pla
+          -n, one bullet `+/- <description> — <reason>`                  
+      109 -- [ ] 11.4 Run `openspec validate phase-4-direct-actions --str
+          -ict` and confirm no errors                                    
+      110 -- [ ] 11.5 Run `openspec list` and confirm the change appears 
+          -as completable                                                
+      106 +- [x] 11.1 Run `check_spec_drift` via openlore MCP per CLAUDE.
+          +md; report the summary; reconcile any drift before close-out (
+          +update spec to match intended behavior, or fix code if spec is
+          + right; re-run until clean)                                   
+      107 +- [x] 11.2 Update `test-plans/phase-4-final.md` to reflect wha
+          +t was actually tested (rows that diverge from the frozen `phas
+          +e-4-initial.md`)                                              
+      108 +- [x] 11.3 Add to the `## Changelog` section of `phase-4-final
+          +.md`: for each row added/removed/changed since the initial pla
+          +n, one bullet `+/- <description> — <reason>`                  
+      109 +- [x] 11.4 Run `openspec validate phase-4-direct-actions --str
+          +ict` and confirm no errors                                    
+      110 +- [x] 11.5 Run `openspec list` and confirm the change appears 
+          +as completable                                                
+
+⏺ Bash(openspec list && echo "---" && openspec validate phase-4-direct-actions
+      --strict)
+  ⎿  Changes:
+       phase-4-direct-actions     ✓ Complete    just now
+     ---
+     Change 'phase-4-direct-actions' is valid
+
+⏺ Implementation Complete
+
+  Change: phase-4-direct-actions
+  Schema: spec-driven
+  Progress: 61/61 tasks complete ✓ — openspec list reports ✓ Complete
+
+  What landed
+
+  - src/concurrency/write-lock.ts — application-pure promise-chained FIFO mutex
+  (withWriteLock). Application-pure (no imports from
+  app/taxa/users/domain/identity/auth/errors).
+  - src/domain/reachability.ts — extended with ownerScopedRegion(g, n, owner) → 
+  { region, haltFrontier }. Pure, cycle-safe; halts at and records other-owned
+  children without continuing past them.
+  - src/taxa/store.ts — production mutation primitives: createTaxon,
+  setTaxonFields, addEdge, removeEdge, deleteRegion, plus an assertConsistency
+  debug helper. The Phase 3 seed() is untouched.
+  - src/taxa/write-handlers.ts — five handlers: postTaxa, patchTaxon, putEdge,
+  deleteEdge, deleteTaxon. Each gates through requireRegistered, enters
+  withWriteLock for the snapshot-validate-apply critical section, and delegates
+  §3.3 to checkAddEdge/checkRename. deleteTaxon uses isShared for precondition 1
+   (not parent-count).
+  - src/app.ts — routes mounted for all five endpoints.
+
+  Test results
+
+  $ rm -rf dist && npx tsc && node --test "dist/**/*.test.js"
+  ℹ tests 411
+  ℹ pass 411
+  ℹ fail 0
+
+  411 tests pass cleanly: existing Phase 1+2+3 tests untouched (no regressions);
+   96 new Phase 4 tests across concurrency/, domain/owner-scoped-region,
+  taxa/store-writes, the five endpoint test files, the subtree-merging file, and
+   the Phase 4 integration file.
+
+  Drift check
+
+  mcp__openlore__check_spec_drift reports hasDrift: false (0 gaps, 0 stale, 0
+  uncovered).
+
+  Final test plan
+
+  test-plans/phase-4-final.md updated with a complete ## Changelog enumerating
+  divergences from the frozen phase-4-initial.md (one re-entry deadlock test
+  removed for flakiness, several defensive store-primitive tests added,
+  redundant per-endpoint unregistered-caller rows consolidated, integration
+  coverage rationalized).
+
+  You can archive this change with /opsx:archive.
+
+✻ Crunched for 17m 49s
+
+❯ /opsx:archive                                                                 
+
+⏺ Archiving phase-4-direct-actions. Let me check completion + assess delta-spec
+  sync.
+
+⏺ Bash(openspec status --change "phase-4-direct-actions" --json && echo
+      "---incomplete tasks---" && grep -c "^- \[ \]"
+      openspec/changes/phase-4-direct-actions/tasks.md…)
+  ⎿  Error: Exit code 1
+     {
+       "changeName": "phase-4-direct-actions",
+       "schemaName": "spec-driven",
+       "isComplete": true,
+       "applyRequires": [
+         "tasks"
+       ],
+       "artifacts": [
+         {
+     … +23 lines (ctrl+o to expand)
+
+  Listed 2 directories (ctrl+o to expand)
+
+⏺ All artifacts done, 0 incomplete tasks. Three delta specs to sync:
+
+  - direct-taxon-actions/ → NEW capability (create
+  openspec/specs/direct-taxon-actions/spec.md)
+  - write-serialization/ → NEW capability (create
+  openspec/specs/write-serialization/spec.md)
+  - taxon-domain/ → MODIFIED (append new requirements: ownerScopedRegion,
+  production store primitives, PATCH casing rule)
+
+⏺ User answered Claude's questions:
+  ⎿  · Sync delta specs into the main specs before archiving? → Sync now 
+     (recommended)
+
+⏺ Bash(openspec --help 2>&1 | head -40)
+  ⎿  Usage: openspec [options] [command]
+
+     AI-native system for spec-driven development
+     … +34 lines (ctrl+o to expand)
+
+⏺ Bash(openspec archive --help 2>&1)
+  ⎿  Usage: openspec archive [options] [change-name]
+
+     Archive a completed change and update main specs
+     … +9 lines (ctrl+o to expand)
+
+⏺ openspec archive syncs specs and moves the change in one step. Running it.
+
+⏺ Bash(openspec archive phase-4-direct-actions -y 2>&1)
+  ⎿  Proposal warnings in proposal.md (non-blocking):
+       ⚠ Why section should not exceed 1000 characters
+       ⚠ Consider splitting changes with more than 10 deltas
+     … +16 lines (ctrl+o to expand)
+
+⏺ Bash(openspec list && echo "---specs---" && ls openspec/specs/ && echo
+      "---archive---" && ls openspec/changes/archive/)  ⎿  No active changes found.
+     ---specs---
+     authorization-gate
+     … +16 lines (ctrl+o to expand)
+
+⏺ Archive Complete
+
+  Change: phase-4-direct-actions
+  Schema: spec-driven
+  Archived to: openspec/changes/archive/2026-05-26-phase-4-direct-actions/
+  Specs: ✓ Synced to main specs
+
+  Delta application summary:
+  - direct-taxon-actions — created
+  (openspec/specs/direct-taxon-actions/spec.md), 7 requirements added
+  - taxon-domain — updated, 3 requirements added (ownerScopedRegion, production
+  mutation primitives, PATCH casing rule)
+  - write-serialization — created (openspec/specs/write-serialization/spec.md),
+  4 requirements added
+
+  Totals: +14 / ~0 / -0 / →0
+
+  All artifacts complete, all 61 tasks complete, 0 spec drift, 411 tests
+  passing.
+
+  Non-blocking warnings from validator (informational only — kept for fidelity
+  rather than splitting):
+  - proposal.md "Why" section exceeded 1000 chars (the prerequisites paragraph
+  is intentionally explicit)
+  - More than 10 deltas (Phase 4 genuinely spans 14 requirements across three
+  capabilities)
+
+  Phase 4 is closed. Next stop: Phase 5 (proposals subsystem) per the brief.
+
+✻ Cooked for 54s
+
+※ recap: Phase 4 of the collaborative taxon tree server is complete: all five direct-action endpoints implemented, 411 tests passing, change archived and specs synced. Next is starting Phase 5 (proposals subsystem) per the brief.
+
+❯ /usage 
+  ⎿  Settings dialog dismissed

@@ -1,0 +1,443 @@
+▗ ▗   ▖ ▖  Claude Code v2.1.150
+           Opus 4.7 · Claude Max
+  ▘▘ ▝▝    ~/repos/sdd-cmp-cc-only
+
+❯ We're building the system described in `prd/prd.md` (with                     
+  `prd/toolchain-supplement.md`, incorporated                                   
+  by reference and equally binding for toolchain/test mechanics). We work in    
+  sequential                                                                    
+  phases. This phase is Phase 3 — implement only what                           
+  `prd/phase-3-domain-invariants.md` puts in scope, and                         
+  respect its "explicitly deferred" list. `prd/prd.md` is authoritative; where  
+  the brief                                                                     
+  restates a requirement, the PRD's wording governs. `prd/sample-taxonomy.md`   
+  is                                                                            
+  non-normative naming data for tests only.                                     
+                                                                                
+  Read `prd/phase-2-domain-invariants.md` and the PRD sections it cites, then   
+  tell me your plan for this                                                    
+  phase before you start coding. Raise anything in the spec that's unclear or   
+  that you'd                                                                    
+  have to decide yourself.                                                      
+                                                                                
+
+  Read 13 files, listed 3 directories (ctrl+o to expand)
+
+⏺ Read the Phase 3 brief, the PRD sections it cites (§2, §3.1–§3.4, §15.2, plus
+  §15.6 envelope and §13 testing), the toolchain supplement, and the Phase 1–2
+  code/test-plan style so the new work matches it. Here's the plan and what I'd
+  flag for you before coding.
+
+  Plan
+
+  Scope this phase ships (and only this):
+
+  1. In-memory taxon store — src/taxa.ts. Taxon = { id, name, owner, childIds: 
+  Set<id> }; parent set derived. Server-side ID generator (monotonic,
+  implementation-defined per §2). clear() wired into the existing registerReset
+  seam so POST /reset drains taxa + the ID counter. Exports fixture-only 
+  construction primitives (createTaxonFixture, attachChildFixture) that
+  deliberately do not enforce invariants — Phase 4 will build validating
+  wrappers. No HTTP write endpoint here.
+  2. Reachability layer — src/reachability.ts. Pure functions: roots(state),
+  descendants(taxonId, state), treesContaining(taxonId, state) (upward walk to
+  roots), isShared(taxonId, state) (treesContaining.length > 1), plus an
+  in-tree-traversal helper that visits each reachable taxon and surfaces
+  duplicate-path detection. No HTTP/storage coupling.
+  3. Invariant module — src/invariants.ts. Pure, no I/O. API:
+    - checkNoCycles(state)
+    - checkPerTreeUniqueOccurrence(state) (§3.3 #2 — diamonds within one tree)
+    - checkPerTreeNameUniqueness(state) (§3.3 #3, case-insensitive per §3.4)
+    - evaluateAll(state) → structured pass/fail naming the offending
+  taxon/edge/root/clashing name, sufficient for Phase 4 to surface as 409 
+  conflict reasons.
+  Operates on a whole state (Phase 4 produces the candidate state and
+  re-evaluates — see question G below).
+  4. Read endpoints — src/routes/reads.ts, mounted in app.ts. All four use
+  identityWithRegistry; null can read (§15.2). 404 via the existing envelope for
+   missing ids:
+    - GET /taxa → { taxa: [...] }
+    - GET /taxa/{id} → { id, name, owner, childIds, parentIds }
+    - GET /trees → { trees: [...] }
+    - GET /trees/{rootId} → nested { id, name, owner, children: [ ... ] }
+  5. Two test-plan artifacts (test-plans/phase-3-initial.md frozen before
+  coding, phase-3-final.md with changelog at the end), and tests at four levels:
+   store/ID/reset unit tests, reachability unit tests on hand-built multi-tree
+  DAGs, invariant module unit tests including each violation, and read-endpoint
+  tests through createApp. Run command stays npm test (tsc && node --test 
+  "dist/**/*.test.js").
+
+  Out of scope (deferred per the brief): no mutation endpoints, no
+  proposals/queues, no §15.3–§15.5 surface.
+
+  Spec items I'd have to decide — flagging before I code
+
+  PRD §15.2 names the fields but doesn't pin the JSON shapes. My defaults below
+  match Phase 2's style; tell me if any of these should differ.
+
+  - A. GET /trees/{rootId} shape. Default: recursive nested — { id, name, owner,
+   children: [ {…}, … ] }. Alternative: flat list of all taxa in the tree.
+  (Recursive is well-defined inside a single tree because §3.3 #2 forbids
+  in-tree duplicates; for tests that deliberately violate that, I'd document the
+   chosen traversal behavior — see G.)
+  - B. GET /trees per-entry shape. Default: same field set as GET /taxa/{id} (so
+   a root is just a taxon, with parentIds: []). Alternative: a smaller { rootId,
+   name, owner }.
+  - C. /trees/{id} where the id names an existing non-root taxon. Default: 404 
+  not_found (the /trees/ namespace is rooted at roots, not arbitrary subtrees).
+  Alternative: 200 returning its subtree.
+  - D. Ordering. Default: insertion order (taxa creation order; child IDs in
+  attachment order), matching Phase 2's registry ordering choice. Per-taxon
+  child order is "unordered" in the model (§3.1) but JSON must pick one —
+  flagging.
+  - E. Taxon ID format. Default: opaque monotonic strings, e.g. "t1", "t2".
+  Implementation-defined per §2; tests don't assume specific IDs (per the
+  toolchain supplement).
+  - F. Fixture primitives bypass invariants. Required to let invariant tests
+  construct deliberately invalid graphs (cycle, in-tree diamond, in-tree name
+  clash). Phase 4 will wrap these with validation. Flagging so the construction
+  API isn't mistaken for the future write API.
+  - G. Invariant-module API surface. The brief says "given a candidate state or
+  a proposed change." Default: state-based only (Phase 4 materializes state + 
+  change and calls evaluateAll). Alternative: also expose change-shaped probes
+  (wouldAddEdgeViolate, etc.) now. State-only is simpler and keeps the module
+  purely structural; happy to add change-shaped probes if you want them in
+  Phase 3.
+  - H. shared predicate exposure. Default: not on the read surface — §15.2's
+  field list doesn't include it. Used internally and exported from the
+  reachability module for Phase 4 (deletion preconditions). Flagging because
+  §3.3 names shared as part of the domain, but §15.2 doesn't surface it.
+
+  Tell me which of A–H to flip, and I'll write the frozen phase-3-initial.md
+  first, then implement.
+
+✻ Churned for 2m 30s
+
+❯ write the frozen `phase-3-initial.md`                                         
+
+⏺ Write(test-plans/phase-3-initial.md)
+  ⎿  Wrote 422 lines to test-plans/phase-3-initial.md
+      2 # Phase 3 — Initial Test Plan (FROZEN)
+      3 This plan is written from the spec (`prd/prd.md` §2, §3 incl. §3.
+      4 invariants, §13, §14, §15.2, §15.6 and `prd/phase-3-domain-invari
+        ants.md`)
+      5 **before implementation begins**. Once any implementation code la
+      6 is frozen and must not be edited. The phase's `phase-3-final.md` 
+        supersedes it
+        nces.ecords what was actually tested, with a changelog of differe
+      8 
+      9 ## Scope under test
+     … +609 lines (ctrl+o to expand)
+
+⏺ Wrote test-plans/phase-3-initial.md (frozen). It commits to decisions #1–#10
+  (the A–H I flagged, plus the violation-result shape and the change-vs-state
+  invariant-API choice), covers each §3.3 invariant separately, the cross-tree
+  name-clash path called out as the brief's centerpiece, the read endpoints
+  behind the Phase-2 identity gate, and reset's extension to taxa + the ID
+  counter. Ready to implement against it on your say-so — I'll start with
+  src/taxa.ts (store + fixture primitives + reset) and work outward to
+  reachability, invariants, then the read routes.
+
+✻ Cogitated for 2m 26s
+
+❯ go ahead and implement                                                        
+
+⏺ Implementing now. Let me start by checking how Phase 2 tests are wired so I
+  match conventions.
+
+  Read 4 files (ctrl+o to expand)
+
+⏺ Let me set up task tracking for the implementation.
+
+⏺ Write(src/taxa.ts)
+  ⎿  Wrote 170 lines to src/taxa.ts
+         ry") andmory taxon store from PRD §2 ("All state is held in memo
+       2 // §3.1 (taxon entity).
+       4 // A taxon has:
+       5 //   - a unique, server-assigned ID,
+         lives in name (§3.4 format rules, but enforcement of the format 
+       7 //     validateTaxonName — Phase 1 — and is invoked by the write
+       8 //     adds; this module stores whatever string it is given),
+       9 //   - an owner (a non-null username; Phase 4 will validate the 
+      10 //     registered when it adds writes — fixtures may set any str
+         ing),
+     … +204 lines (ctrl+o to expand)
+⏺ Write(src/reachability.ts)
+  ⎿  Wrote 169 lines to src/reachability.ts
+       2 // Reachability layer from PRD §3.2 and §3.3.
+       3 // Pure functions over a TaxonState snapshot — no I/O, no mutati
+       4 // pass in the state explicitly so the same functions are reusab
+         le by:
+         bout anthe invariant module (src/invariants.ts), which reasons a
+       6 //     arbitrary candidate state,
+         state, the read routes (src/routes/reads.ts), which mirror live 
+       8 //   - Phase 4+ write paths, which will materialize "live + chan
+       9 //     re-evaluate.
+      10 //
+     … +192 lines (ctrl+o to expand)
+
+⏺ Write(src/invariants.ts)
+  ⎿  Wrote 195 lines to src/invariants.ts
+       2 // Invariant module from PRD §3.3 — the keystone of Phase 3.
+       3 // PURE. No I/O, no mutation, no HTTP. Operates on a TaxonState 
+       4 // (which the caller may construct as "live state" or as a candi
+         date
+       5 // "live + proposed change"). Every later write path will call i
+       6 // module rather than re-implementing any invariant check.
+       7 //
+       9 //   1. No cycles. The graph is acyclic.
+      10 //   2. Per-tree uniqueness of occurrence. Within any single tre
+         e, no
+     … +229 lines (ctrl+o to expand)
+
+⏺ Write(src/routes/reads.ts)
+  ⎿  Wrote 151 lines to src/routes/reads.ts
+       2 // Domain read endpoints from PRD §15.2.
+       3 //   GET /taxa             — list all taxa
+       5 //   GET /trees            — list all roots, each identifying a 
+         tree
+       6 //   GET /trees/{rootId}   — retrieve the full tree expanded fro
+       7 //a root
+       8 // All four are behind identityWithRegistry: null users may read
+       9 // well-formed-but-unregistered → 403, malformed X-Username → 40
+         0. The
+      10 // envelope helpers from src/errors.ts surface §15.6 responses.
+     … +166 lines (ctrl+o to expand)
+
+⏺ Now wire the reads router into app.ts.
+
+⏺ Update(src/app.ts)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/app.ts)
+  ⎿  Added 1 line
+      3  import { ApiError, errorBody, httpError, STATUS_BY_CODE } from "
+         ./errors.js";
+      4  import type { AppEnv } from "./identity.js";
+      5  import { identityWithRegistry } from "./middleware/identity.js";
+      6 +import { readsRouter } from "./routes/reads.js";                
+      7  import { usersRouter } from "./routes/users.js";
+      8  import { resetAllState } from "./state.js";
+      9  
+
+⏺ Update(src/app.ts)
+  ⎿  Added 4 lines
+      26    // §15.1 user registry. Per-route middleware lives inside use
+          rsRouter.
+      27    app.route("/", usersRouter);
+      28  
+      29 +  // §15.2 domain reads (taxa + trees). Identity gate applied i
+         +nside the                                                      
+      30 +  // sub-router; null users may read per §15.2.                
+      31 +  app.route("/", readsRouter);                                 
+      32 +                                                               
+      33    app.notFound((c) =>
+      34      httpError(c, "not_found", `no route matches ${c.req.method}
+           ${new URL(c.req.url).pathname}`),
+      35    );
+
+⏺ Let me do a quick build check before writing tests so I catch any typecheck
+  errors early.
+
+⏺ Bash(npx tsc 2>&1)
+  ⎿  (No output)
+
+⏺ Clean build. Now writing the test suites.
+
+⏺ Write(test/taxa.test.ts)
+  ⎿  Wrote 171 lines to test/taxa.test.ts
+         nic IDs,2 + §3.1 — in-memory taxon store, server-assigned monoto
+       2 // insertion-ordered child/parent edges, fixture primitives, res
+       3 //.
+       4 // These are pure unit tests against src/taxa.ts module state. P
+       5 // toolchain supplement, tests that touch the store call clear()
+          (or the
+         s across/reset, in the integration suite) first so no state leak
+       7 // tests.
+       9 import { test } from "node:test";
+      10 import assert from "node:assert/strict";
+     … +186 lines (ctrl+o to expand)
+
+⏺ Write(test/reachability.test.ts)
+  ⎿  Wrote 274 lines to test/reachability.test.ts
+       1 // PRD §3.2, §3.3 — reachability layer over hand-built graphs.
+       2 // Pure unit tests; no HTTP.
+       3 
+       4 import { test } from "node:test";
+       5 import assert from "node:assert/strict";
+       6 
+       7 import {
+       8   attachChildFixture,
+       9   clear,
+      10   createTaxonFixture,
+     … +290 lines (ctrl+o to expand)
+⏺ I left a vestigial test from an earlier restructure. Let me remove it.
+
+⏺ Update(test/reachability.test.ts)
+  ⎿  Removed 16 lines
+      56    assert.deepEqual(roots(getState()), [a.id, b.id]);
+      57  });
+      58  
+      59 -test("reachability: removing the only incoming edge to C makes 
+         -C a root", () => {                                             
+      60 -  fresh();                                                     
+      61 -  const a = createTaxonFixture("A", "u");                      
+      62 -  const c = createTaxonFixture("C", "u");                      
+      63 -  attachChildFixture(a.id, c.id);                              
+      64 -  // Now detach the edge:                                      
+      65 -  const s = getState();                                        
+      66 -  // Use the detach fixture indirectly: via the underlying stor
+         -e mutation                                                     
+      67 -  // doesn't exist as a Set ops here; reuse from the module.   
+      68 -  // (We import detachChildFixture below via the same module.) 
+      69 -  // …but for this test we use the existing edge-detach helper:
+      70 -  void s;                                                      
+      71 -});                                                            
+      72 -                                                               
+      73 -// (We import detachChildFixture for the previous test in a ded
+         -icated test                                                    
+      74 -// to keep the import line readable below.)                    
+      59  test("reachability: detach makes a previously-child taxon a roo
+          t again", async () => {
+      60    const { detachChildFixture } = await import("../src/taxa.js")
+          ;
+      61    fresh();
+
+⏺ Now the invariants test suite.
+
+⏺ Write(test/invariants.test.ts)
+  ⎿  Wrote 426 lines to test/invariants.test.ts
+      2 // PRD §3.3 — the invariant module, the keystone of Phase 3.
+      3 // Exercises each of the three invariants in isolation (pass + fa
+        il) plus
+        sts; nocombined evaluateAll and its violation shape. Pure unit te
+      5 // HTTP, no Phase-4 mutation API. Graphs are constructed via the 
+        fixture
+         point).tives (which do NOT enforce invariants — that's the whole
+      7 
+      8 import { test } from "node:test";
+      9 import assert from "node:assert/strict";
+     … +465 lines (ctrl+o to expand)
+
+⏺ Now reads + integration tests.
+
+⏺ Write(test/reads.test.ts)
+  ⎿  Wrote 331 lines to test/reads.test.ts
+         /{rootId}..2 — GET /taxa, GET /taxa/{id}, GET /trees, GET /trees
+       2 //
+       3 // End-to-end through createApp. Per the toolchain supplement, e
+       4 // resets first then seeds the specific shape via the fixture pr
+         imitives.
+       5 
+       7 import assert from "node:assert/strict";
+       8 
+       9 import { createApp } from "../src/app.js";
+      10 import {
+     … +373 lines (ctrl+o to expand)
+
+⏺ Task #5 is still in_progress; one more test file to write (the integration
+  suite), then I'll mark it done.
+
+⏺ Write(test/domainIntegration.test.ts)
+  ⎿  Wrote 144 lines to test/domainIntegration.test.ts
+         ilt graph +nd smoke through createApp: registration + fixture-bu
+       2 // the four §15.2 reads + reset. Mirrors usersIntegration.test.t
+         s's role for
+       3 // Phase 2.
+       4 
+       6 import assert from "node:assert/strict";
+       7 
+       8 import { createApp } from "../src/app.js";
+       9 import {
+      10   attachChildFixture,
+     … +166 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | tail -120)
+  ⎿  ✔ POST /users: missing username field → 400 validation_error (0.631209
+     ms)
+     ✔ POST /users: non-string username (null, number, object, array) → 400
+     … +117 lines (ctrl+o to expand)
+
+⏺ Two failures, both on the malformed-X-Username tests. The Phase 2 docs warned
+  that NBSP is needed (HTTP strips regular whitespace) — let me check whether
+  the bytes I wrote are NBSP or a regular space.
+
+⏺ Bash(grep -n 'X-Username.*alice' test/reads.test.ts
+      test/domainIntegration.test.ts test/registry.test.ts | head -20 && echo
+      "---" && python3 -c "
+      import re…)
+  ⎿  test/registry.test.ts:205:  const res = await post(app, "/users", { us
+     ername: "Alice" }, { "X-Username": " alice" });
+     test/registry.test.ts:268:  const res = await app.request("/users", {
+     … +10 lines (ctrl+o to expand)
+
+⏺ Confirmed: my new files have regular spaces; the registry file uses NBSP
+  (\xa0). Fixing both files.
+
+⏺ Bash(python3 <<'PY'
+      import io…)
+  ⎿  updated test/reads.test.ts
+     updated test/domainIntegration.test.ts
+
+⏺ Bash(npm test 2>&1 | tail -20)
+  ⎿  ✔ parseUsername: internal whitespace is allowed (0.122166ms)
+     ✔ parseUsername: leading space → malformed (not null) (0.152125ms)
+     ✔ parseUsername: trailing space → malformed (0.112875ms)
+     … +17 lines (ctrl+o to expand)
+
+⏺ All 181 tests pass (94 from Phases 1+2, 87 new in Phase 3). Now writing the
+  final test plan.
+
+⏺ Write(test-plans/phase-3-final.md)
+  ⎿  Wrote 346 lines to test-plans/phase-3-final.md
+       2 # Phase 3 — Final Test Plan
+       3 This supersedes `phase-3-initial.md` (frozen). It records what w
+         as actually
+         al plan andh a changelog of how it differs from the frozen initi
+       5 the reason for each change.
+       6 
+       8 ## Run command
+       9 ```
+      10 npm test                 # tsc && node --test "dist/**/*.test.js
+         "
+     … +410 lines (ctrl+o to expand)
+
+⏺ Bash(npm test 2>&1 | tail -10)
+  ⎿  ✔ integration: POST /users error envelope codes round-trip through §15
+     .6 helpers (1.511791ms)
+     ✔ integration: /reset remains §4-exempt for malformed AND unregistered
+     … +9 lines (ctrl+o to expand)
+
+⏺ Bash(git status && echo "---" && ls src/ test/ test-plans/)
+  ⎿  On branch main
+     Your branch is up to date with 'origin/main'.
+     … +56 lines (ctrl+o to expand)
+
+⏺ Phase 3 complete. 181/181 tests passing (94 inherited from Phases 1–2; 87
+  new).
+
+  Files added:
+  - src/taxa.ts — in-memory store + monotonic ID generation + fixture primitives
+   + reset wiring
+  - src/reachability.ts — pure functions (roots, descendants, treesContaining,
+  isShared, inTreeVisitCounts, inTreeDuplicates)
+  - src/invariants.ts — pure invariant module with structured Violation results
+  - src/routes/reads.ts — four §15.2 read endpoints with revisit-finitization
+  - test/{taxa,reachability,invariants,reads,domainIntegration}.test.ts
+  - test-plans/phase-3-final.md with a changelog of additions vs. the frozen
+  initial plan
+
+  Files modified: src/app.ts (mount readsRouter).
+
+  The keystone invariant module is independently importable, hits all three §3.3
+   invariants including the cross-tree rename path, and never re-derives rules
+  elsewhere — Phase 4's mutation endpoints can compose it directly. Nothing is
+  committed; let me know when you want to commit.
+
+✻ Cogitated for 9m 44s
+
+※ recap: Building Phase 3 (domain model + invariant engine) of the taxon-tree server; implementation and all 181 tests pass, with phase-3-final.md written. Next action: commit the new files when you give the word. (disable recaps in /config)
+❯ /usage 
+  ⎿  Settings dialog dismissed
