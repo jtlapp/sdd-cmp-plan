@@ -1,6 +1,6 @@
 # Spec-Driven Development Tool Comparison Plan
 
-This document describes a plan for comparing spec-driven development tools with each other and with vibe coding not using specs. I wrote a complex Produce Requirements Document (PRD), divided it into phases, and asked each tool to implement the phases, producing artifacts I could use to compare how well the tools did. I responded to any issues and questions the LLM raised that it didn't seem to have a solution for, allowing the LLM to benefit from its due diligence. I posted a separate document explaining the results.
+This document describes a plan for comparing spec-driven development tools with each other and with vibe coding not using specs. I wrote a complex [Produce Requirements Document](prd/prd.md) (PRD), divided it into phases, and asked each tool to implement the phases, producing artifacts I could use to compare how well the tools did. I responded to any issues and questions the LLM raised that it didn't seem to have a solution for, allowing the LLM to benefit from its due diligence. I posted a separate document explaining the results.
 
 ## Objective
 
@@ -138,21 +138,42 @@ graph TD
 
 In reality, the trees would be much more complex, sharing many subtrees having many different owners.
 
-## PRD and Phases
+## PRD Development
 
-TBD
+I developed the [Produce Requirements Document](prd/prd.md) (PRD) using the Claude.ai website. I spent about 4 hours carefully explaining my vision and working with Claude to iron on inconsistencies, doing so over several conversations. My original vision was to produce a common API for all implementations, but I eventually realized that differences in design decisions would change the API, so I only abstractly specified the endpoints.
 
-TBD: Planned to measure refactors for peer-to-peer protocol
+I was planning to create a second PRD for extending the solution into a peer-to-peer protocol. Asking the tools to implement this extension on top of the existing implementation would test the tool's ability to refactor, but I ran out of time.
 
-## Introduced Issues
+## Implementation Phases
 
-TBD
+After developing the PRD, I asked Claude.ai to break its implementation into phases. These are the phases we decided on:
+
+1. **Scaffold, error model, format validators** — stack skeleton, JSON error
+   envelope and status mapping, the two pure format validators (taxon name,
+   username), the test runner, and the `POST /reset` state-reset endpoint used
+   for per-test isolation.
+2. **Users, identity, registry** — registration, `X-Username` parsing, and the
+   400/403 middleware that gates every later write.
+3. **Domain model and the invariant engine** — in-memory store, IDs, edges, the
+   reachability layer, the pure §3.3 invariant module, and the read surface.
+4. **Direct owner actions** — create, edit, edge add/remove, write serialization,
+   with **delete (§6.3)** as a tracked sub-milestone.
+5. **Proposal submission** — payload model, routing, dependency classification,
+   and initial disposition. Stops before any review decision.
+6. **Single review loop** — accept-single, reject, latent→queued promotion, and
+   ownership transfer on accepting a create.
+7. **Cascade + invalidation + integration** — atomic accept-cascade with
+   rollback, the three invalidation modes, dismiss, and end-to-end coverage.
 
 ## Anticipated Complications
 
 TBD
 
-## Process
+## Introduced Issues
+
+TBD
+
+## Implementation Process
 
 Add `CLAUDE.md`
 
