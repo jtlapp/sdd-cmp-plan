@@ -129,12 +129,12 @@ did not test Allium.
 
 | Feature | Native CC | OpenSpec | OpenSpec +<br> OpenLore drift | Allium<br>(unexamined) |
 | --- | --- | --- | --- | --- |
-| Creates specs | no | YES | YES | YES |
+| Creates specs | NO | YES | YES | YES |
 | Maintains specs | n/a | YES | YES | YES |
-| Detects spec drift | n/a | no | YES | YES |
+| Detects spec drift | n/a | NO | YES | YES |
 | Specs only describe behavior | n/a | YES | YES | YES |
 | Planning phase | YES | YES | YES | ? |
-| Conversational planning | no | YES | YES | ? |
+| Conversational planning | NO | YES | YES | ? |
 
 </div>
 
