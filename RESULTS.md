@@ -226,9 +226,8 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
 
 ### Implementation Correctness
 
-- On the **three unambiguous critical gaps** where the PRD picks a winner, OpenSpec aligned **3/3** and Native CC aligned **0/3** (G1 reads-auth gate, G2 failed-accept disposition, G3 owner casing).
+- On the **three unambiguous critical gaps** where the PRD picks a winner, OpenSpec aligned **3/3** and Native CC aligned **0/3**.
 - On the remaining three critical gaps the PRD itself doesn't resolve, both implementations are defensible.
-
 
 ### Test Plan Stability
 
