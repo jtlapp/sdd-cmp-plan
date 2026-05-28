@@ -2,8 +2,8 @@
 
 ## Effort and Cost
 
-| | CC-Only Compute Time | CC-Only API Cost | OpenSpec Compute Time* | OpenSpec API Cost* |
-| Phase 1 |  hrs |  hrs | $  | $  |
+| | CC-Only Compute Time | OpenSpec Compute Time* | CC-Only API Cost | OpenSpec API Cost* |
+| Phase 1 | 0.08 hrs |  hrs | $ 2.11 | $  |
 | Phase 2 |  hrs |  hrs | $  | $  |
 | Phase 3 |  hrs |  hrs | $  | $  |
 | Phase 4 |  hrs |  hrs | $  | $  |

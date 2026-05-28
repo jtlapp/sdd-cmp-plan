@@ -234,6 +234,7 @@ OpenSpec
 - OpenSpec takes a lot more time and is a lot more costly
 - Vanilla CC is better for vibe code a quick solution
 - Allium, having 9 agents vote on each code change, is probably very expensive, best suited for developing a particular component.
+- Vanilla CC is designed to reduce user's effort, minimize user input, especially with multiple choice decisions.
 
 ## Notes
 
