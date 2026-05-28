@@ -298,7 +298,7 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
 Use OpenSpec when:
 
 - Developer experience takes priority
-- The design is not well understood and requires hashing out (OpenSpec pre-implementation test plans were 8% more accurate than Native CC)
+- The design is not well understood and requires hashing out (no critical gaps missed; OpenSpec pre-implementation test plans were 8% more accurate than Native CC)
 - Understanding the solution takes priority over time and cost
 - Learning from AI takes priority over time and cost
 - It's important to have fine control over the implementation
@@ -309,5 +309,6 @@ Use native CC when:
 - The design is well understood with few unresolved issues
 - Choice of implementation is unimportant
 - Understanding the implementation is unimportant
+- It's okay to defer finding gaps to runtime
 
 OpenSpec's success suggests exploring other spec-driven development solutions too, such as [Spec-Kit](https://github.github.com/spec-kit/), [Allium](https://github.com/juxt/allium), [Kiro](https://kiro.dev), [GSD](https://github.com/open-gsd/get-shit-done-redux), and [BMAD](https://github.com/bmad-code-org/bmad-method).
