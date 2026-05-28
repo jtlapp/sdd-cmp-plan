@@ -17,23 +17,129 @@ TBD: Where does this belong?
 - I started with a specification detailing observable behavior but not implementation. Spec-driven development may be more geared toward working with the LLM to define the initial specification, especially one as technical as I defined.
 - The workflows gave opportunities for me to explore aspects of implementation during planning, but I only explored the aspects that the LLM appeared to be indicating were potentially problematic. I think both LLMs would have done better had I done more joint exploration.
 
-## Workflows Tested
+## Workflows Under Comparison
 
-I intended to test OpenSpec, Allium, and vanilla Claude Code, but the effort was too time-consuming and I did not get around to testing Allium. I did however design the test of OpenSpec to be comparable to the intended test of Allium.
+Every workflow in this comparison runs on Claude Code. What differs is the tooling
+layered on top of it: vanilla Claude Code uses none, two workflows add OpenSpec (one
+of them also adding OpenLore), and the last replaces OpenSpec with Allium. To understand
+how OpenSpec and Allium change the experience, it helps to first understand the surfaces
+Claude Code exposes for tools like these to plug into.
 
-TBD: describe the workflows
+### Claude Code
 
-| Feature | Claude Code<br>w/ Planning | OpenSpec | OpenSpec +<br> OpenLore drift | Allium<br>(untested) |
+I assume you already know how to drive Claude Code interactively. What matters here is
+that Claude Code is not a closed tool but an extensible platform, and that spec-driven
+tools like OpenSpec and Allium are not separate programs — they are bundles of
+configuration that occupy Claude Code's extension points. The relevant ones are:
+
+- **`CLAUDE.md`** — a project file Claude reads at the start of every session. It acts
+  as a standing "constitution" for the repository: conventions, architecture, and rules
+  that should always be in context.
+- **Skills / slash commands** — Markdown instruction files that teach Claude a repeatable
+  workflow. Claude can load them automatically when their description matches the task, or
+  you can invoke one explicitly as `/name`. This is how a tool exposes verbs like
+  "propose a change" or "check for drift."
+- **Subagents** — separate Claude Code instances the main session can delegate to, each
+  with its own context window. A tool uses these to do focused work (reading code cold,
+  validating a spec) without polluting your main conversation.
+- **Hooks** — scripts that fire automatically at lifecycle events, letting a tool enforce
+  a rule without anyone remembering to ask.
+- **MCP servers** — connections to external tools and data sources, used when a workflow
+  needs to query something outside the model, such as a knowledge graph of the codebase.
+- **Plugins** — a packaging mechanism that bundles any of the above so a whole setup
+  installs with one command.
+
+With that mental model, each workflow below is really a particular choice of which of
+these surfaces to use and what to put in them.
+
+### OpenSpec
+
+OpenSpec is a spec-driven development framework that adds a lightweight specification
+layer on top of an AI coding assistant. Its premise is that AI assistants are
+unpredictable when the requirements live only in chat history, so OpenSpec has you and
+the assistant agree on what to build, in writing, before any code is written. It is a
+TypeScript CLI; running `openspec init` in a project generates the slash commands and
+guidance files that wire it into Claude Code (and 25+ other assistants).
+
+Its stated philosophy is "fluid not rigid, iterative not waterfall, easy not complex,
+built for brownfield not just greenfield." In practice this means there are no hard phase
+gates: you can revise any artifact at any time, and the tool is designed to work against
+an existing codebase rather than only fresh projects. The organizing idea is a single
+*living specification* that serves as the source of truth and evolves as the system does.
+
+The workflow is organized around discrete changes, each driven by a few slash commands
+(the core profile is propose, explore, apply, sync, and archive):
+
+- **Propose** (`/opsx:propose`) creates a folder for the change under
+  `openspec/changes/<change-name>/` and populates it with the change's artifacts.
+- **Explore** lets you and the assistant interrogate and refine the proposal before
+  committing to it.
+- **Apply** implements the change, working through its task list.
+- **Archive** moves the completed change into `openspec/changes/archive/` and folds its
+  spec edits into the durable specification.
+
+The artifacts OpenSpec produces for each change are plain Markdown and are its most
+distinctive feature:
+
+- **`proposal.md`** — why the change is being made and what is changing.
+- **`specs/`** — the requirements as *delta specs*: sections explicitly marked ADDED,
+  MODIFIED, or REMOVED relative to the current system, typically written as RFC 2119
+  requirements with Given/When/Then scenarios.
+- **`design.md`** — the technical approach.
+- **`tasks.md`** — an implementation checklist the apply step works through.
+
+The delta is the mechanism that makes the specification "living": when a change is
+archived, its ADDED/MODIFIED/REMOVED sections are merged into `openspec/specs/`, so the
+durable spec always reflects what the system currently does rather than what it was
+originally designed to do. Every archived change keeps its full artifact set, giving a
+readable history of how and why the system reached its present state.
+
+What OpenSpec does *not* do on its own is detect when code and spec have silently drifted
+apart after the fact. For that comparison I added OpenLore's `drift` tool to one of the
+OpenSpec workflows. OpenLore produces OpenSpec-compatible living specifications and adds
+automated drift detection — comparing git changes against spec mappings to flag gaps,
+uncovered files, and stale references — and I included it specifically so I could compare
+its drift detection against Allium's `weed` (described below).
+
+### Allium (unexamined)
+
+Allium, from JUXT, takes a different bet than OpenSpec. Where OpenSpec organizes work as
+Markdown change proposals, Allium argues that Markdown itself is the problem: within a
+session meaning drifts as the model pattern-matches on its own output, and across sessions
+the intent evaporates entirely. Its answer is an LLM-native DSL —
+its tagline is "feed your AI something healthier than Markdown" — that captures a system's
+intended behavior in a durable, formal form that resists drift and persists across
+sessions.
+
+The artifacts are **`.allium` files**: formal behavioral specifications that live
+alongside the code rather than inside per-change folders. These are paired with a CLI that
+validates the syntax and draws semantic inferences from it, which lets Allium surface
+design gaps, flag implications you missed, and generate tests from the formal behaviors.
+Work happens through a small set of verbs exposed as skills: `elicit` builds a spec
+through structured conversation, `distill` extracts one from existing code, `tend` grows
+and reshapes the spec as requirements change (and refuses to let vague or ambiguous
+requirements through), and `weed` finds where the spec and the implementation have
+diverged. `tend` and `weed` are also available as autonomous agents that run in their own
+context, keeping the Allium syntax out of the main session.
+
+The key contrast with OpenSpec: OpenSpec is process- and artifact-centric, managing change
+as a lifecycle of Markdown proposals that accumulate into a living spec, whereas Allium is
+artifact-centric in a stricter sense — a single formal spec written in a purpose-built
+language, with the emphasis on continuously keeping that spec and the code aligned
+(`distill`, `tend`, `weed`) rather than on routing discrete change proposals. I designed
+the OpenSpec test to be comparable to an intended Allium test, but I ran out of time and
+did not test Allium.
+
+### Workflow Feature Comparison
+
+| Feature | Claude Code<br>w/ Planning | OpenSpec | OpenSpec +<br> OpenLore drift | Allium<br>(unexamined) |
 | --- | --- | --- | --- | --- |
 | Creates specs | no | YES | YES | YES |
-| Maintains specs | n/a | no | no | ? |
+| Maintains specs | n/a | YES | YES | YES |
 | Detects spec drift | n/a | no | YES | YES |
 | Specs only describe behavior | n/a | YES | YES | YES |
 | Planning phase | YES | YES | YES | ? |
-
-TBD: Describe OpenSpec
-TBD: Describe how OpenSpec works
-TBD: Describe OpenSpec artifacts
+| Conversational planning | no | YES | YES | ? |
 
 ## The Target Project
 
