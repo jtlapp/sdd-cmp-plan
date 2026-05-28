@@ -4,13 +4,13 @@
 
 | | CC-Only<br>Compute Time | OpenSpec<br>Compute Time* | CC-Only<br>API Cost | OpenSpec<br>API Cost* |
 | --- | --- | --- | --- | --- |
-| Phase 1 | 0.08 hrs |  hrs | $ 2.11 | $  |
-| Phase 2 |  hrs |  hrs | $  | $  |
-| Phase 3 |  hrs |  hrs | $  | $  |
-| Phase 4 |  hrs |  hrs | $  | $  |
-| Phase 5 |  hrs |  hrs | $  | $  |
-| Phase 6 |  hrs |  hrs | $  | $  |
-| Phase 7 |  hrs |  hrs | $  | $  |
+| Phase 1 | 5 min | 36 min | $ 2.11 | $ 11.78 |
+| Phase 2 | 14 min | 33 min | $ 5.36 | $ 14.08 |
+| Phase 3 | 15 min | 35 min | $ 5.19 | $ 14.66 |
+| Phase 4 | 26 min | 45 min | $ 12.47 | $ 27.21 |
+| Phase 5 | 22 min | 57 min | $ 8.98 | $ 28.91 |
+| Phase 6 | 25 min | 60 min | $ 9.74 | $ 40.29 |
+| Phase 7 | 34 min | 76 min | $ 16.79 | $ 61.34 |
 | TOTAL |  hrs |  hrs | $  | $  |
 
 \* I reduced the actual OpenSpec values by 4% to remove cost of running OpenLore drift.
