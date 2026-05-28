@@ -203,6 +203,11 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
 
 ## Conclusions
 
+### LLM Usage
+
+- OpenSpec required **2x compute time** of Native CC.
+- OpenSpec required **3x the API cost** that Native CC required.
+
 ### Developer Experience
 
 - OpenSpec `explore` is **much friendlier** and more enjoyable than CC's `plan`.
@@ -212,9 +217,31 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
 - OpenSpec takes **much longer to compute** and is much more costly.
 - Native CC is **better for vibe coding** a quick solution by minimizing user's input.
 
-### Design Visibility
+### Implementation Visibility
 
 - OpenSpec **invites more participation** in the design and implementation process.
 - OpenSpec is a **great workflow for understanding** what the AI is doing.
   - Offers "threads" for the user to "pull on" to investigate implementation decisions.
   - OpenSpec is a better workflow for helping junior devs learn from AI.
+
+### Implementation Correctness
+
+- On the **three unambiguous critical gaps** where the PRD picks a winner, OpenSpec aligned **3/3** and Native CC aligned **0/3** (G1 reads-auth gate, G2 failed-accept disposition, G3 owner casing).
+- On the remaining three critical gaps the PRD itself doesn't resolve, both implementations are defensible.
+
+
+### Test Plan Stability
+
+- OpenSpec's initial test plans needed **~3× less revision** during implementation (3.6% vs 11.4% of planned cases changed, added, or removed).
+- OpenSpec was more accurate **in every one of the 7 phases** — never tied, never behind.
+- The two projects churned in opposite directions: Native CC was dominated by **Added** entries (under-predicted scope), OpenSpec by **Removed** entries (over-predicted, then culled during re-derivation).
+
+### Defect Detection (Shared Limitation)
+
+- Spec-driven framing did **not** improve planted-defect surfacing: Native CC surfaced **1/4** in conversation, OpenSpec **0/4** — despite OpenSpec asking 2.5× more questions (40 vs 16 prompts) and raising 18% more spec problems (32 vs 27).
+- Question volume and defect-detection accuracy appear **orthogonal**; neither workflow includes an adversarial gap-hunt as a deliberate step.
+
+### Testing Strategy Tradeoff
+
+- Native CC defaulted to **HTTP-boundary integration**; OpenSpec defaulted to **layered unit-then-integration** tests, producing roughly 2× the file count and ~1.9× the case count.
+- The two strategies left **mirror-image coverage gaps**: Native CC under-tested pure-domain algorithms (deletion region, lazy-eval read purity); OpenSpec under-tests HTTP-wired concurrency and full end-to-end lifecycle walks.
