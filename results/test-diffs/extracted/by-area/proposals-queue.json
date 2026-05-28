@@ -1,0 +1,463 @@
+{
+  "area": "proposals-queue",
+  "scope": "GET /proposals (list with proposer filter), GET /queue (reviewer's queue), GET /proposals/{id}, serialization of queue/status views.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/proposalsList.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "GET /proposals: empty server → empty list",
+            "line": 21
+          },
+          {
+            "kind": "test",
+            "name": "GET /proposals: one proposal → one summary",
+            "line": 28
+          },
+          {
+            "kind": "test",
+            "name": "GET /proposals: multiple proposals in submission order",
+            "line": 48
+          },
+          {
+            "kind": "test",
+            "name": "GET /proposals?proposer=alice → only Alice's proposals",
+            "line": 78
+          },
+          {
+            "kind": "test",
+            "name": "GET /proposals?proposer=ALICE → case-insensitive via registry canonical form",
+            "line": 99
+          },
+          {
+            "kind": "test",
+            "name": "GET /proposals?proposer=unregistered → empty list (decision #10)",
+            "line": 115
+          },
+          {
+            "kind": "test",
+            "name": "GET /proposals: null caller may read",
+            "line": 130
+          },
+          {
+            "kind": "test",
+            "name": "GET /proposals: malformed X-Username → 400",
+            "line": 136
+          }
+        ]
+      },
+      {
+        "path": "test/queueRead.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "GET /queue: null caller → 200, empty list",
+            "line": 28
+          },
+          {
+            "kind": "test",
+            "name": "GET /queue: unregistered → 403",
+            "line": 35
+          },
+          {
+            "kind": "test",
+            "name": "GET /queue: malformed X-Username → 400",
+            "line": 43
+          },
+          {
+            "kind": "test",
+            "name": "GET /queue: registered caller with no incoming changes → empty list",
+            "line": 49
+          },
+          {
+            "kind": "test",
+            "name": "GET /queue: queued rename entry shape",
+            "line": 59
+          },
+          {
+            "kind": "test",
+            "name": "GET /queue: queued add-create entry shape (no taxonId, has name + parent)",
+            "line": 90
+          },
+          {
+            "kind": "test",
+            "name": "GET /queue: queued add-graft entry shape (taxonId + parent, no name)",
+            "line": 115
+          },
+          {
+            "kind": "test",
+            "name": "GET /queue: queued detach entry shape (taxonId + parent, no name)",
+            "line": 141
+          },
+          {
+            "kind": "test",
+            "name": "GET /queue: routed changes appear only in their reviewer's queue",
+            "line": 168
+          },
+          {
+            "kind": "test",
+            "name": "GET /queue: latent changes are never in any queue",
+            "line": 205
+          },
+          {
+            "kind": "test",
+            "name": "GET /queue: entries ordered by change-id (submission order)",
+            "line": 262
+          }
+        ]
+      }
+    ],
+    "testCount": 19
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/proposals/get-proposal-by-id.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "GET /proposals/{id}",
+            "line": 50
+          },
+          {
+            "kind": "it",
+            "name": "unknown id → 404 proposal-not-found",
+            "line": 51
+          },
+          {
+            "kind": "it",
+            "name": "null caller may read",
+            "line": 62
+          },
+          {
+            "kind": "it",
+            "name": "response shape mirrors the 201 status tree",
+            "line": 75
+          },
+          {
+            "kind": "describe",
+            "name": "GET /proposals/{id} status tree per-node rules",
+            "line": 101
+          },
+          {
+            "kind": "it",
+            "name": "no-op nodes are structural with no changeId",
+            "line": 102
+          },
+          {
+            "kind": "it",
+            "name": "queued rename status node has reviewer username",
+            "line": 119
+          },
+          {
+            "kind": "it",
+            "name": "latent under create has reviewer null",
+            "line": 144
+          },
+          {
+            "kind": "it",
+            "name": "no status node has a reason field in Phase 5",
+            "line": 171
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/get-proposals-list.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "GET /proposals: list",
+            "line": 46
+          },
+          {
+            "kind": "it",
+            "name": "empty server returns empty list",
+            "line": 47
+          },
+          {
+            "kind": "it",
+            "name": "list entries omit status tree",
+            "line": 55
+          },
+          {
+            "kind": "it",
+            "name": "null caller may list",
+            "line": 73
+          },
+          {
+            "kind": "describe",
+            "name": "GET /proposals: filters",
+            "line": 86
+          },
+          {
+            "kind": "it",
+            "name": "filter by proposer narrows",
+            "line": 103
+          },
+          {
+            "kind": "it",
+            "name": "proposer filter is case-insensitive",
+            "line": 111
+          },
+          {
+            "kind": "it",
+            "name": "filter by targetRootId narrows",
+            "line": 118
+          },
+          {
+            "kind": "it",
+            "name": "targetRootId filter is exact-string",
+            "line": 125
+          },
+          {
+            "kind": "it",
+            "name": "both filters combine as intersection",
+            "line": 132
+          },
+          {
+            "kind": "it",
+            "name": "unmatched filter returns 200 with empty list",
+            "line": 141
+          },
+          {
+            "kind": "it",
+            "name": "unrecognized query params are ignored",
+            "line": 149
+          },
+          {
+            "kind": "it",
+            "name": "empty proposer= treated as no filter",
+            "line": 156
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/get-queue-listing.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "GET /queue listing",
+            "line": 61
+          },
+          {
+            "kind": "it",
+            "name": "registered caller sees their queued rename",
+            "line": 62
+          },
+          {
+            "kind": "it",
+            "name": "latent changes do not appear in any queue",
+            "line": 87
+          },
+          {
+            "kind": "it",
+            "name": "latent under graft (concrete reviewer) does NOT appear in queue",
+            "line": 110
+          },
+          {
+            "kind": "it",
+            "name": "add-create taxonRef is to-create with name",
+            "line": 143
+          },
+          {
+            "kind": "it",
+            "name": "add-graft taxonRef is existing with id",
+            "line": 158
+          },
+          {
+            "kind": "it",
+            "name": "queue is case-insensitive on the caller's username",
+            "line": 178
+          },
+          {
+            "kind": "it",
+            "name": "queue ordering is deterministic across two reads",
+            "line": 203
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/serialize-queue-entry.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "simplifyPayloadParent",
+            "line": 44
+          },
+          {
+            "kind": "it",
+            "name": "live → { taxonId }",
+            "line": 45
+          },
+          {
+            "kind": "it",
+            "name": "top → { top: true }",
+            "line": 56
+          },
+          {
+            "kind": "it",
+            "name": "to-create resolves via the injected resolver",
+            "line": 63
+          },
+          {
+            "kind": "it",
+            "name": "to-create with unresolvable parent throws",
+            "line": 72
+          },
+          {
+            "kind": "describe",
+            "name": "toQueueEntry",
+            "line": 85
+          },
+          {
+            "kind": "it",
+            "name": "rename → taxonRef { kind: existing, id }",
+            "line": 86
+          },
+          {
+            "kind": "it",
+            "name": "add-create → taxonRef { kind: to-create, name }",
+            "line": 97
+          },
+          {
+            "kind": "it",
+            "name": "add-graft → taxonRef { kind: existing, id }",
+            "line": 108
+          },
+          {
+            "kind": "it",
+            "name": "queue entry carries changeId, proposalId, op, targetRootId, payloadParent, disposition",
+            "line": 119
+          },
+          {
+            "kind": "it",
+            "name": "invalid entry carries disposition=invalid and reason",
+            "line": 139
+          },
+          {
+            "kind": "it",
+            "name": "invalid entry with no stored reason omits the field",
+            "line": 151
+          },
+          {
+            "kind": "it",
+            "name": "queued entry with stored reason (shouldn't happen, but defensive)",
+            "line": 165
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/serialize-status-tree.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "renderStatusTree: per-node rules",
+            "line": 36
+          },
+          {
+            "kind": "it",
+            "name": "no-op status node is structural with no changeId",
+            "line": 37
+          },
+          {
+            "kind": "it",
+            "name": "rename status node carries changeId and reviewer",
+            "line": 48
+          },
+          {
+            "kind": "it",
+            "name": "add-create status node has id:null and name",
+            "line": 72
+          },
+          {
+            "kind": "it",
+            "name": "add-graft status node has id and no name",
+            "line": 93
+          },
+          {
+            "kind": "it",
+            "name": "detach status node has no children",
+            "line": 113
+          },
+          {
+            "kind": "it",
+            "name": "latent deferred change has reviewer null",
+            "line": 131
+          },
+          {
+            "kind": "describe",
+            "name": "renderStatusTree: tree shape",
+            "line": 168
+          },
+          {
+            "kind": "it",
+            "name": "isomorphic to payload (same node count and nesting)",
+            "line": 169
+          },
+          {
+            "kind": "describe",
+            "name": "renderStatusTree: defensive mismatch detection",
+            "line": 206
+          },
+          {
+            "kind": "it",
+            "name": "throws if change count does not match operative payload count",
+            "line": 207
+          },
+          {
+            "kind": "describe",
+            "name": "renderStatusTree: Phase 6 dispositions",
+            "line": 222
+          },
+          {
+            "kind": "it",
+            "name": "accepted rename surfaces disposition with no reason",
+            "line": 223
+          },
+          {
+            "kind": "it",
+            "name": "accepted add-create surfaces mintedTaxonId as id",
+            "line": 241
+          },
+          {
+            "kind": "it",
+            "name": "non-accepted add-create keeps id null",
+            "line": 264
+          },
+          {
+            "kind": "it",
+            "name": "rejected rename surfaces reason",
+            "line": 280
+          },
+          {
+            "kind": "it",
+            "name": "rejected change with empty-string reason renders as empty string",
+            "line": 298
+          },
+          {
+            "kind": "it",
+            "name": "invalid from failed accept surfaces reason",
+            "line": 314
+          },
+          {
+            "kind": "it",
+            "name": "invalid from cascade surfaces reason referencing the rejected ancestor",
+            "line": 332
+          },
+          {
+            "kind": "it",
+            "name": "queued change has no reason field even if one is somehow stored (defensive)",
+            "line": 368
+          }
+        ]
+      }
+    ],
+    "testCount": 63
+  }
+}

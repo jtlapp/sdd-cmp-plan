@@ -1,0 +1,143 @@
+{
+  "area": "proposals-end-to-end",
+  "scope": "Full propose→review→accept/reject flows across the wire, multi-tree, appendix A scenarios, no-side-effects on failure.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/proposalsIntegration.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "Appendix A.1: routing across Alice/Bob; latent change not in any queue",
+            "line": 28
+          },
+          {
+            "kind": "test",
+            "name": "Appendix A.2: two independent proposals for a cross-tree move",
+            "line": 105
+          },
+          {
+            "kind": "test",
+            "name": "self-routed proposal: change appears in proposer's own queue",
+            "line": 192
+          },
+          {
+            "kind": "test",
+            "name": "reset across the lifecycle: ids restart, no pre-reset residue",
+            "line": 214
+          }
+        ]
+      },
+      {
+        "path": "test/reviewIntegration.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "Appendix A.1: full walkthrough using single accepts (no cascade)",
+            "line": 46
+          },
+          {
+            "kind": "test",
+            "name": "Appendix A.1: variant where Alice accepts c1 rename first",
+            "line": 130
+          },
+          {
+            "kind": "test",
+            "name": "Appendix A.2: graft accept + detach reject leaves taxon shared across trees",
+            "line": 187
+          },
+          {
+            "kind": "test",
+            "name": "failed accept does not mutate live state; change transitions to invalid (§11.4 case 2)",
+            "line": 265
+          },
+          {
+            "kind": "test",
+            "name": "rename of a shared taxon propagates to both trees on accept",
+            "line": 317
+          },
+          {
+            "kind": "test",
+            "name": "self-routed accept: proposer accepts her own change",
+            "line": 352
+          },
+          {
+            "kind": "test",
+            "name": "reset clears post-accept and post-reject state",
+            "line": 368
+          }
+        ]
+      }
+    ],
+    "testCount": 11
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/proposals/end-to-end-appendix-a1.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Appendix A.1 end-to-end",
+            "line": 48
+          },
+          {
+            "kind": "it",
+            "name": "reproduces the PRD's initial-state dispositions and queue contents",
+            "line": 49
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/end-to-end-appendix-a2.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Appendix A.2 end-to-end",
+            "line": 50
+          },
+          {
+            "kind": "it",
+            "name": "reproduces initial dispositions and queue contents for P1 and P2",
+            "line": 51
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/end-to-end-multiple-trees.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "multi-tree shared-taxon proposal",
+            "line": 48
+          },
+          {
+            "kind": "it",
+            "name": "rename of a shared taxon routes to its owner regardless of targeted tree",
+            "line": 49
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/end-to-end-no-side-effects.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "submission has no side-effects on the taxon graph or registry",
+            "line": 53
+          },
+          {
+            "kind": "it",
+            "name": "complex multi-owner submission leaves all live state unchanged",
+            "line": 54
+          }
+        ]
+      }
+    ],
+    "testCount": 8
+  }
+}

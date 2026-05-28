@@ -1,0 +1,473 @@
+{
+  "area": "users",
+  "scope": "POST /users (registration), GET /users (listing).",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/registry.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "POST /users: registers a well-formed name → 201 with canonical body",
+            "line": 31
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: internal whitespace is allowed",
+            "line": 39
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: single non-whitespace character",
+            "line": 46
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: multiple distinct registrations succeed in order",
+            "line": 52
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: missing username field → 400 validation_error",
+            "line": 64
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: non-string username (null, number, object, array) → 400",
+            "line": 73
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: empty-string username → 400",
+            "line": 84
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: leading-whitespace username → 400",
+            "line": 93
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: trailing-whitespace username → 400",
+            "line": 102
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: whitespace-only username (space/tab/newline) → 400",
+            "line": 111
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: malformed JSON body → 400",
+            "line": 119
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: bare JSON value (string, array) instead of object → 400",
+            "line": 128
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: exact-duplicate registration → 409 conflict",
+            "line": 138
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: case-variant duplicate → 409 (case-insensitive per §4)",
+            "line": 150
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: lower-then-upper duplicate also 409 (symmetric)",
+            "line": 160
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: caller with NO X-Username can register → 201 (bootstrap)",
+            "line": 169
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: caller with empty X-Username (null user) can register → 201",
+            "line": 176
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: unregistered well-formed X-Username can still register → 201",
+            "line": 182
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: registered caller can register a different name → 201",
+            "line": 193
+          },
+          {
+            "kind": "test",
+            "name": "POST /users: malformed X-Username → 400 even with otherwise-valid body (decision #2)",
+            "line": 200
+          },
+          {
+            "kind": "test",
+            "name": "GET /users: empty registry → 200 with users: []",
+            "line": 217
+          },
+          {
+            "kind": "test",
+            "name": "GET /users: returns canonical first-registered casing (decision #4)",
+            "line": 225
+          },
+          {
+            "kind": "test",
+            "name": "GET /users: available to the null user (no X-Username)",
+            "line": 233
+          },
+          {
+            "kind": "test",
+            "name": "GET /users: available to a registered caller",
+            "line": 240
+          },
+          {
+            "kind": "test",
+            "name": "GET /users: case-variant of a registered caller is accepted",
+            "line": 247
+          },
+          {
+            "kind": "test",
+            "name": "GET /users: unregistered non-null X-Username → 403 forbidden",
+            "line": 254
+          },
+          {
+            "kind": "test",
+            "name": "GET /users: malformed X-Username → 400 validation_error",
+            "line": 265
+          },
+          {
+            "kind": "test",
+            "name": "POST /reset: clears the registry — list goes back to empty",
+            "line": 276
+          },
+          {
+            "kind": "test",
+            "name": "POST /reset: post-reset, the previously-registered name is unregistered",
+            "line": 291
+          },
+          {
+            "kind": "test",
+            "name": "POST /reset: post-reset, prior X-Username is treated as unregistered → 403 on GET /users",
+            "line": 300
+          }
+        ]
+      },
+      {
+        "path": "test/usersIntegration.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "integration: register Alice and Bob, list, then 403/400 paths through createApp",
+            "line": 31
+          },
+          {
+            "kind": "test",
+            "name": "integration: POST /reset clears registry; previously-valid X-Username now 403s",
+            "line": 61
+          },
+          {
+            "kind": "test",
+            "name": "integration: POST /users error envelope codes round-trip through §15.6 helpers",
+            "line": 82
+          },
+          {
+            "kind": "test",
+            "name": "integration: /reset remains §4-exempt for malformed AND unregistered callers",
+            "line": 112
+          }
+        ]
+      }
+    ],
+    "testCount": 34
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/users/http.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /users: openness",
+            "line": 27
+          },
+          {
+            "kind": "it",
+            "name": "null user (no X-Username) can register",
+            "line": 28
+          },
+          {
+            "kind": "describe",
+            "name": "POST /users: success shape",
+            "line": 42
+          },
+          {
+            "kind": "it",
+            "name": "echoes original casing on 201",
+            "line": 43
+          },
+          {
+            "kind": "it",
+            "name": "accepts internal whitespace",
+            "line": 49
+          },
+          {
+            "kind": "describe",
+            "name": "POST /users: body-shape failures (malformed-body)",
+            "line": 56
+          },
+          {
+            "kind": "it",
+            "name": "non-JSON body → 400 malformed-body",
+            "line": 57
+          },
+          {
+            "kind": "it",
+            "name": "JSON string (not an object) → 400 malformed-body",
+            "line": 65
+          },
+          {
+            "kind": "it",
+            "name": "JSON array → 400 malformed-body",
+            "line": 72
+          },
+          {
+            "kind": "it",
+            "name": "missing body → 400 malformed-body",
+            "line": 79
+          },
+          {
+            "kind": "describe",
+            "name": "POST /users: field-presence failures (missing-username)",
+            "line": 88
+          },
+          {
+            "kind": "it",
+            "name": "empty object → 400 missing-username",
+            "line": 89
+          },
+          {
+            "kind": "it",
+            "name": "non-string username (number) → 400 missing-username",
+            "line": 97
+          },
+          {
+            "kind": "it",
+            "name": "null username → 400 missing-username",
+            "line": 104
+          },
+          {
+            "kind": "describe",
+            "name": "POST /users: format failures (validator's tag surfaces)",
+            "line": 112
+          },
+          {
+            "kind": "it",
+            "name": "empty string → 400 empty",
+            "line": 113
+          },
+          {
+            "kind": "it",
+            "name": "leading whitespace → 400 leading-whitespace",
+            "line": 120
+          },
+          {
+            "kind": "it",
+            "name": "trailing whitespace → 400 trailing-whitespace",
+            "line": 127
+          },
+          {
+            "kind": "describe",
+            "name": "POST /users: duplicate (case-insensitive conflict)",
+            "line": 135
+          },
+          {
+            "kind": "it",
+            "name": "identical-case duplicate → 409 duplicate-username",
+            "line": 136
+          },
+          {
+            "kind": "it",
+            "name": "different-case duplicate → 409 duplicate-username; original casing wins",
+            "line": 156
+          },
+          {
+            "kind": "describe",
+            "name": "POST /users: validation precedes duplicate check",
+            "line": 176
+          },
+          {
+            "kind": "it",
+            "name": "malformed username → 400 (not 409) even when collision exists",
+            "line": 177
+          },
+          {
+            "kind": "it",
+            "name": "body-shape failure → 400 (not 409)",
+            "line": 194
+          },
+          {
+            "kind": "describe",
+            "name": "POST /users: failed registration leaves registry unchanged",
+            "line": 212
+          },
+          {
+            "kind": "it",
+            "name": "empty username does not get listed",
+            "line": 213
+          },
+          {
+            "kind": "describe",
+            "name": "GET /users: openness and shape",
+            "line": 226
+          },
+          {
+            "kind": "it",
+            "name": "empty registry returns {users: []}",
+            "line": 227
+          },
+          {
+            "kind": "it",
+            "name": "null user can list",
+            "line": 235
+          },
+          {
+            "kind": "it",
+            "name": "registration order is preserved",
+            "line": 252
+          },
+          {
+            "kind": "it",
+            "name": "original casing is preserved",
+            "line": 265
+          },
+          {
+            "kind": "it",
+            "name": "response top-level is an object with a 'users' key (not a bare array)",
+            "line": 278
+          }
+        ]
+      },
+      {
+        "path": "test/users/store.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "user registry store: empty at boot",
+            "line": 15
+          },
+          {
+            "kind": "it",
+            "name": "list is empty",
+            "line": 16
+          },
+          {
+            "kind": "it",
+            "name": "isRegistered returns false",
+            "line": 20
+          },
+          {
+            "kind": "it",
+            "name": "originalCasing returns undefined",
+            "line": 24
+          },
+          {
+            "kind": "describe",
+            "name": "user registry store: register a fresh name",
+            "line": 29
+          },
+          {
+            "kind": "it",
+            "name": "returns ok and adds the name",
+            "line": 30
+          },
+          {
+            "kind": "describe",
+            "name": "user registry store: case-insensitive membership",
+            "line": 37
+          },
+          {
+            "kind": "it",
+            "name": "isRegistered matches different case (lower lookup of upper)",
+            "line": 38
+          },
+          {
+            "kind": "it",
+            "name": "originalCasing returns the stored form regardless of lookup case",
+            "line": 45
+          },
+          {
+            "kind": "it",
+            "name": "originalCasing returns undefined for unknown name",
+            "line": 52
+          },
+          {
+            "kind": "describe",
+            "name": "user registry store: duplicate detection",
+            "line": 59
+          },
+          {
+            "kind": "it",
+            "name": "identical-case re-register returns duplicate",
+            "line": 60
+          },
+          {
+            "kind": "it",
+            "name": "different-case re-register returns duplicate; original casing wins",
+            "line": 66
+          },
+          {
+            "kind": "describe",
+            "name": "user registry store: list preserves registration order",
+            "line": 74
+          },
+          {
+            "kind": "it",
+            "name": "registration order survives multiple inserts",
+            "line": 75
+          },
+          {
+            "kind": "it",
+            "name": "list preserves original casing",
+            "line": 82
+          },
+          {
+            "kind": "describe",
+            "name": "user registry store: reset clears membership",
+            "line": 89
+          },
+          {
+            "kind": "it",
+            "name": "after reset, list is empty and isRegistered is false",
+            "line": 90
+          },
+          {
+            "kind": "it",
+            "name": "after reset, the case-key map is cleared (no lingering duplicate)",
+            "line": 99
+          },
+          {
+            "kind": "describe",
+            "name": "user registry store: register does not mutate input",
+            "line": 107
+          },
+          {
+            "kind": "it",
+            "name": "input string is returned by originalCasing exactly",
+            "line": 108
+          }
+        ]
+      }
+    ],
+    "testCount": 53
+  }
+}

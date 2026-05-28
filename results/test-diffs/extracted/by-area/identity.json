@@ -1,0 +1,298 @@
+{
+  "area": "identity",
+  "scope": "Identity middleware, divergence detection, identity exposure on responses.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/identityMiddleware.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "identityWithRegistry: absent header → handler sees null identity",
+            "line": 40
+          },
+          {
+            "kind": "test",
+            "name": "identityWithRegistry: empty X-Username → handler sees null identity",
+            "line": 49
+          },
+          {
+            "kind": "test",
+            "name": "identityWithRegistry: malformed X-Username → 400 validation_error, handler never runs",
+            "line": 59
+          },
+          {
+            "kind": "test",
+            "name": "identityWithRegistry: well-formed but unregistered → 403 forbidden, handler never runs",
+            "line": 76
+          },
+          {
+            "kind": "test",
+            "name": "identityWithRegistry: registered exact-case → handler sees canonical identity",
+            "line": 87
+          },
+          {
+            "kind": "test",
+            "name": "identityWithRegistry: case-variant header maps to canonical form (decision #4)",
+            "line": 98
+          },
+          {
+            "kind": "test",
+            "name": "identityWithRegistry: malformed and unregistered both conform to §15.6 envelope",
+            "line": 112
+          },
+          {
+            "kind": "test",
+            "name": "identityFormatOnly: absent header → null identity, handler runs",
+            "line": 130
+          },
+          {
+            "kind": "test",
+            "name": "identityFormatOnly: malformed X-Username STILL 400s (format check applies)",
+            "line": 140
+          },
+          {
+            "kind": "test",
+            "name": "identityFormatOnly: unregistered well-formed header → handler runs (decision #1)",
+            "line": 150
+          },
+          {
+            "kind": "test",
+            "name": "identityFormatOnly: registered header still resolves to canonical identity",
+            "line": 161
+          }
+        ]
+      }
+    ],
+    "testCount": 11
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/identity/divergence.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "identity middleware: malformed-vs-null divergence (unit level)",
+            "line": 50
+          },
+          {
+            "kind": "it",
+            "name": "absent header → null caller; whitespace-only → ApiError; the two outcomes differ",
+            "line": 51
+          },
+          {
+            "kind": "it",
+            "name": "empty header → null caller; trailing-whitespace → ApiError; the two outcomes differ",
+            "line": 63
+          }
+        ]
+      },
+      {
+        "path": "test/identity/exposure.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "identity middleware: Caller shape on the request context",
+            "line": 21
+          },
+          {
+            "kind": "it",
+            "name": "absent header → { kind: 'null' } with no username field",
+            "line": 22
+          },
+          {
+            "kind": "it",
+            "name": "empty header → { kind: 'null' }",
+            "line": 31
+          },
+          {
+            "kind": "it",
+            "name": "registered → { kind: 'registered', username: <stored casing> }",
+            "line": 38
+          },
+          {
+            "kind": "it",
+            "name": "registered (different stored casing) reflects the registry's form",
+            "line": 49
+          },
+          {
+            "kind": "it",
+            "name": "unregistered → { kind: 'unregistered', username: <header value> }",
+            "line": 59
+          },
+          {
+            "kind": "it",
+            "name": "unregistered preserves header casing exactly",
+            "line": 68
+          },
+          {
+            "kind": "describe",
+            "name": "identity middleware: lookup freshness (per request)",
+            "line": 78
+          },
+          {
+            "kind": "it",
+            "name": "a previously-unregistered header becomes registered after POST /users",
+            "line": 79
+          },
+          {
+            "kind": "it",
+            "name": "a registered classification reverts to unregistered after POST /reset",
+            "line": 99
+          }
+        ]
+      },
+      {
+        "path": "test/identity/middleware-unit.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "identityMiddleware: null-caller classification",
+            "line": 72
+          },
+          {
+            "kind": "it",
+            "name": "absent header sets { kind: 'null' } and calls next",
+            "line": 73
+          },
+          {
+            "kind": "it",
+            "name": "empty header sets { kind: 'null' } and calls next",
+            "line": 81
+          },
+          {
+            "kind": "describe",
+            "name": "identityMiddleware: registered/unregistered classification",
+            "line": 89
+          },
+          {
+            "kind": "it",
+            "name": "well-formed unregistered → { kind: 'unregistered', username: <header> }",
+            "line": 90
+          },
+          {
+            "kind": "it",
+            "name": "well-formed registered → { kind: 'registered', username: <stored casing> }",
+            "line": 97
+          },
+          {
+            "kind": "describe",
+            "name": "identityMiddleware: malformed X-Username throws 400 validation_error",
+            "line": 106
+          },
+          {
+            "kind": "it",
+            "name": "${label} → ApiError(validation_error, tag=${tag})",
+            "line": 118
+          },
+          {
+            "kind": "describe",
+            "name": "identityMiddleware: POST /reset exemption",
+            "line": 131
+          },
+          {
+            "kind": "it",
+            "name": "does not read X-Username; does not set caller; calls next",
+            "line": 132
+          },
+          {
+            "kind": "it",
+            "name": "GET /reset (wrong method) is NOT exempt — middleware runs normally",
+            "line": 144
+          }
+        ]
+      },
+      {
+        "path": "test/identity/middleware.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "identity middleware: header absent or empty → null caller passes",
+            "line": 18
+          },
+          {
+            "kind": "it",
+            "name": "no header → 200 from GET /users",
+            "line": 19
+          },
+          {
+            "kind": "it",
+            "name": "empty header → 200 from GET /users",
+            "line": 25
+          },
+          {
+            "kind": "describe",
+            "name": "identity middleware: well-formed header passes (registered or not)",
+            "line": 32
+          },
+          {
+            "kind": "it",
+            "name": "registered → 200",
+            "line": 33
+          },
+          {
+            "kind": "it",
+            "name": "unregistered well-formed → 200 (middleware does NOT 403)",
+            "line": 40
+          },
+          {
+            "kind": "it",
+            "name": "internal whitespace in well-formed name is preserved",
+            "line": 47
+          },
+          {
+            "kind": "describe",
+            "name": "identity middleware: POST /reset is fully exempt",
+            "line": 57
+          },
+          {
+            "kind": "it",
+            "name": "absent X-Username on POST /reset → 204",
+            "line": 58
+          },
+          {
+            "kind": "it",
+            "name": "empty X-Username on POST /reset → 204",
+            "line": 64
+          },
+          {
+            "kind": "it",
+            "name": "unregistered X-Username on POST /reset → 204",
+            "line": 73
+          },
+          {
+            "kind": "it",
+            "name": "registered X-Username on POST /reset → 204",
+            "line": 82
+          },
+          {
+            "kind": "it",
+            "name": "X-Username `   ` (becomes empty after HTTP normalization) on /reset → 204",
+            "line": 96
+          },
+          {
+            "kind": "describe",
+            "name": "identity middleware: registry-lookup freshness (no caching)",
+            "line": 106
+          },
+          {
+            "kind": "it",
+            "name": "registering promotes a previously-unregistered header",
+            "line": 107
+          },
+          {
+            "kind": "it",
+            "name": "reset reverts a registered classification (no positive cache)",
+            "line": 126
+          }
+        ]
+      }
+    ],
+    "testCount": 40
+  }
+}

@@ -1,0 +1,428 @@
+{
+  "area": "format",
+  "scope": "Taxon-name and username format/normalization rules, comparison helpers.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/taxonName.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "validateTaxonName: accepts a single non-whitespace character",
+            "line": 9
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: accepts a multi-word name with internal whitespace",
+            "line": 15
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: accepts internal tabs and newlines",
+            "line": 20
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: accepts hyphenated names",
+            "line": 25
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: accepts single-character digits and punctuation",
+            "line": 29
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: rejects the empty string",
+            "line": 34
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: rejects whitespace-only strings",
+            "line": 40
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: rejects leading whitespace",
+            "line": 47
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: rejects trailing whitespace",
+            "line": 53
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: rejects leading/trailing tab and newline",
+            "line": 59
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: rejects both-side whitespace",
+            "line": 65
+          },
+          {
+            "kind": "test",
+            "name": "validateTaxonName: rejects non-string inputs",
+            "line": 69
+          },
+          {
+            "kind": "test",
+            "name": "taxonNamesEqual: case-insensitive equality (§3.4)",
+            "line": 76
+          },
+          {
+            "kind": "test",
+            "name": "taxonNamesEqual: distinct strings unequal",
+            "line": 81
+          },
+          {
+            "kind": "test",
+            "name": "taxonNamesEqual: whitespace is significant for equality",
+            "line": 85
+          }
+        ]
+      },
+      {
+        "path": "test/username.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "parseUsername: undefined → null user",
+            "line": 6
+          },
+          {
+            "kind": "test",
+            "name": "parseUsername: null → null user",
+            "line": 10
+          },
+          {
+            "kind": "test",
+            "name": "parseUsername: empty string → null user (not malformed)",
+            "line": 14
+          },
+          {
+            "kind": "test",
+            "name": "parseUsername: well-formed name → valid",
+            "line": 18
+          },
+          {
+            "kind": "test",
+            "name": "parseUsername: internal whitespace is allowed",
+            "line": 24
+          },
+          {
+            "kind": "test",
+            "name": "parseUsername: leading space → malformed (not null)",
+            "line": 29
+          },
+          {
+            "kind": "test",
+            "name": "parseUsername: trailing space → malformed",
+            "line": 35
+          },
+          {
+            "kind": "test",
+            "name": "parseUsername: both-side whitespace → malformed",
+            "line": 41
+          },
+          {
+            "kind": "test",
+            "name": "parseUsername: whitespace-only is malformed (not null)",
+            "line": 45
+          },
+          {
+            "kind": "test",
+            "name": "parseUsername: leading/trailing tab and newline → malformed",
+            "line": 53
+          },
+          {
+            "kind": "test",
+            "name": "usernamesEqual: case-insensitive equality (§4)",
+            "line": 59
+          },
+          {
+            "kind": "test",
+            "name": "usernamesEqual: distinct strings unequal",
+            "line": 64
+          }
+        ]
+      }
+    ],
+    "testCount": 27
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/format/compare.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "equalsCI",
+            "line": 5
+          },
+          {
+            "kind": "it",
+            "name": "identical strings are equal",
+            "line": 6
+          },
+          {
+            "kind": "it",
+            "name": "differ only in case (all lower) → equal",
+            "line": 10
+          },
+          {
+            "kind": "it",
+            "name": "differ only in case (all upper) → equal",
+            "line": 14
+          },
+          {
+            "kind": "it",
+            "name": "mixed-case substrings → equal",
+            "line": 18
+          },
+          {
+            "kind": "it",
+            "name": "different strings → not equal",
+            "line": 22
+          },
+          {
+            "kind": "it",
+            "name": "trailing whitespace difference → not equal (predicate does not trim)",
+            "line": 26
+          },
+          {
+            "kind": "it",
+            "name": "internal whitespace difference → not equal (predicate does not normalize)",
+            "line": 30
+          },
+          {
+            "kind": "it",
+            "name": "different lengths → not equal",
+            "line": 34
+          },
+          {
+            "kind": "it",
+            "name": "both empty → equal",
+            "line": 38
+          },
+          {
+            "kind": "it",
+            "name": "does not mutate inputs",
+            "line": 42
+          }
+        ]
+      },
+      {
+        "path": "test/format/taxon-name.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "validateTaxonName: accepted inputs",
+            "line": 17
+          },
+          {
+            "kind": "it",
+            "name": "two-word baseline",
+            "line": 18
+          },
+          {
+            "kind": "it",
+            "name": "single character",
+            "line": 19
+          },
+          {
+            "kind": "it",
+            "name": "internal single space",
+            "line": 20
+          },
+          {
+            "kind": "it",
+            "name": "internal tab",
+            "line": 21
+          },
+          {
+            "kind": "it",
+            "name": "multiple internal spaces",
+            "line": 22
+          },
+          {
+            "kind": "describe",
+            "name": "validateTaxonName: rejected inputs (with tag)",
+            "line": 25
+          },
+          {
+            "kind": "it",
+            "name": "empty → empty",
+            "line": 26
+          },
+          {
+            "kind": "it",
+            "name": "leading space → leading-whitespace",
+            "line": 27
+          },
+          {
+            "kind": "it",
+            "name": "trailing space → trailing-whitespace",
+            "line": 29
+          },
+          {
+            "kind": "it",
+            "name": "leading tab → leading-whitespace",
+            "line": 31
+          },
+          {
+            "kind": "it",
+            "name": "trailing tab → trailing-whitespace",
+            "line": 33
+          },
+          {
+            "kind": "it",
+            "name": "leading newline → leading-whitespace",
+            "line": 35
+          },
+          {
+            "kind": "it",
+            "name": "trailing newline → trailing-whitespace",
+            "line": 37
+          },
+          {
+            "kind": "it",
+            "name": "leading non-breaking space → leading-whitespace",
+            "line": 39
+          },
+          {
+            "kind": "describe",
+            "name": "validateTaxonName: ambiguous boundary inputs",
+            "line": 43
+          },
+          {
+            "kind": "it",
+            "name": "whitespace-only → leading-whitespace OR trailing-whitespace",
+            "line": 44
+          },
+          {
+            "kind": "it",
+            "name": "both ends whitespace → leading-whitespace OR trailing-whitespace",
+            "line": 54
+          },
+          {
+            "kind": "describe",
+            "name": "validateTaxonName: result shape",
+            "line": 65
+          },
+          {
+            "kind": "it",
+            "name": "re-exports equalsCI from the same module",
+            "line": 66
+          }
+        ]
+      },
+      {
+        "path": "test/format/username.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "validateUsername: accepted inputs",
+            "line": 17
+          },
+          {
+            "kind": "it",
+            "name": "simple username",
+            "line": 18
+          },
+          {
+            "kind": "it",
+            "name": "single character",
+            "line": 19
+          },
+          {
+            "kind": "it",
+            "name": "internal space",
+            "line": 20
+          },
+          {
+            "kind": "describe",
+            "name": "validateUsername: rejected inputs (with tag)",
+            "line": 23
+          },
+          {
+            "kind": "it",
+            "name": "empty → empty",
+            "line": 24
+          },
+          {
+            "kind": "it",
+            "name": "leading space → leading-whitespace",
+            "line": 25
+          },
+          {
+            "kind": "it",
+            "name": "trailing space → trailing-whitespace",
+            "line": 27
+          },
+          {
+            "kind": "it",
+            "name": "leading tab → leading-whitespace",
+            "line": 29
+          },
+          {
+            "kind": "it",
+            "name": "trailing newline → trailing-whitespace",
+            "line": 31
+          },
+          {
+            "kind": "describe",
+            "name": "validateUsername: ambiguous boundary inputs",
+            "line": 35
+          },
+          {
+            "kind": "it",
+            "name": "whitespace-only → some boundary tag, NOT silently null-user",
+            "line": 36
+          },
+          {
+            "kind": "it",
+            "name": "both ends whitespace → some boundary tag",
+            "line": 45
+          },
+          {
+            "kind": "describe",
+            "name": "validateUsername: return shape is closed",
+            "line": 55
+          },
+          {
+            "kind": "it",
+            "name": "every failure has { ok: false, reason: { tag, message } } only",
+            "line": 60
+          },
+          {
+            "kind": "it",
+            "name": "success has { ok: true } only",
+            "line": 72
+          },
+          {
+            "kind": "describe",
+            "name": "validateUsername: equalsCI wiring",
+            "line": 78
+          },
+          {
+            "kind": "it",
+            "name": "same username different case → equal",
+            "line": 79
+          },
+          {
+            "kind": "it",
+            "name": "different usernames → not equal",
+            "line": 83
+          }
+        ]
+      }
+    ],
+    "testCount": 50
+  }
+}

@@ -1,0 +1,548 @@
+{
+  "area": "proposals-derive",
+  "scope": "Deriving per-change disposition, dependencies, reviewer routing, and status tree from the submitted payload (pure logic).",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/proposalsDependencies.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "nested add under add-create → latent (decision dep)",
+            "line": 24
+          },
+          {
+            "kind": "test",
+            "name": "nested add under add-graft → latent",
+            "line": 56
+          },
+          {
+            "kind": "test",
+            "name": "nested rename under add-create → latent (path-based, not target-based)",
+            "line": 85
+          },
+          {
+            "kind": "test",
+            "name": "nested detach under add-graft → latent",
+            "line": 116
+          },
+          {
+            "kind": "test",
+            "name": "nested add under top rename → queued (rename is existence dep only)",
+            "line": 147
+          },
+          {
+            "kind": "test",
+            "name": "stacked renames → all queued (no add ancestors anywhere)",
+            "line": 172
+          },
+          {
+            "kind": "test",
+            "name": "nested detach under no-op anchor → queued",
+            "line": 206
+          },
+          {
+            "kind": "test",
+            "name": "Appendix A.1 dispositions match the worked example",
+            "line": 229
+          },
+          {
+            "kind": "test",
+            "name": "top no-op is structural; every operative path includes it (observable via tree shape)",
+            "line": 303
+          }
+        ]
+      },
+      {
+        "path": "test/proposalsDisposition.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "exactly one decision-dep ancestor → latent",
+            "line": 30
+          },
+          {
+            "kind": "test",
+            "name": "two decision-dep ancestors → still latent (any add ancestor suffices)",
+            "line": 55
+          },
+          {
+            "kind": "test",
+            "name": "deep no-op/rename chain (no add anywhere) → terminal change queued",
+            "line": 92
+          },
+          {
+            "kind": "test",
+            "name": "sibling ops don't gate each other (an add sibling doesn't make a rename sibling latent)",
+            "line": 133
+          },
+          {
+            "kind": "test",
+            "name": "no-op payload node is structural, carries no changeId",
+            "line": 161
+          },
+          {
+            "kind": "test",
+            "name": "every queued change has exactly one entry; every latent change has zero",
+            "line": 187
+          }
+        ]
+      },
+      {
+        "path": "test/proposalsRouting.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "rename routes to the renamed taxon's owner, not the parent's",
+            "line": 34
+          },
+          {
+            "kind": "test",
+            "name": "detach routes to the payload-parent's owner, not the child's",
+            "line": 68
+          },
+          {
+            "kind": "test",
+            "name": "add-create routes to the payload-parent's owner",
+            "line": 98
+          },
+          {
+            "kind": "test",
+            "name": "add-graft routes to the payload-parent's owner (not the grafted taxon's)",
+            "line": 123
+          },
+          {
+            "kind": "test",
+            "name": "no-op produces no change in any queue",
+            "line": 151
+          },
+          {
+            "kind": "test",
+            "name": "rename + nested add under same taxon route to different/same reviewers per §10.1",
+            "line": 168
+          },
+          {
+            "kind": "test",
+            "name": "rename targeting C + nested add → both route to C's owner",
+            "line": 209
+          },
+          {
+            "kind": "test",
+            "name": "graft preserves ownership: nested ops under graft route to grafted taxon's owner",
+            "line": 246
+          },
+          {
+            "kind": "test",
+            "name": "proposer is not auto-reviewer of her own proposal",
+            "line": 300
+          }
+        ]
+      },
+      {
+        "path": "test/proposalsStatusView.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "status view shape matches submitted payload (A.1)",
+            "line": 35
+          },
+          {
+            "kind": "test",
+            "name": "every operative node carries a changeId; every no-op has none",
+            "line": 97
+          },
+          {
+            "kind": "test",
+            "name": "status nodes echo op/id/name fields submitted (unknown keys dropped)",
+            "line": 128
+          },
+          {
+            "kind": "test",
+            "name": "disposition is one of the five real states, or 'structural' for no-op",
+            "line": 154
+          },
+          {
+            "kind": "test",
+            "name": "reason field is absent in Phase 5 (no rejection/invalidation paths exercised)",
+            "line": 183
+          },
+          {
+            "kind": "test",
+            "name": "GET /proposals/{id} is readable by anyone (including null user)",
+            "line": 207
+          },
+          {
+            "kind": "test",
+            "name": "GET /proposals/{id} unknown id → 404",
+            "line": 225
+          },
+          {
+            "kind": "test",
+            "name": "GET /proposals/{id} malformed X-Username → 400",
+            "line": 233
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals body's payload equals subsequent GET's payload",
+            "line": 252
+          }
+        ]
+      }
+    ],
+    "testCount": 33
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/proposals/derive-appendix-a.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Appendix A.1 — multi-owner routing and a create cascade",
+            "line": 39
+          },
+          {
+            "kind": "it",
+            "name": "derives four changes with the spec's initial dispositions",
+            "line": 40
+          },
+          {
+            "kind": "describe",
+            "name": "Appendix A.2 — cross-tree move, graft, and nested create",
+            "line": 129
+          },
+          {
+            "kind": "it",
+            "name": "P1 detach is queued to Dana (owner of a2)",
+            "line": 130
+          },
+          {
+            "kind": "it",
+            "name": "P2 graft is queued to Frank; nested create is latent and CONCRETE to Erin",
+            "line": 164
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/derive-deps.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "decisionDeps",
+            "line": 32
+          },
+          {
+            "kind": "it",
+            "name": "no add ancestors → empty decisionDeps",
+            "line": 33
+          },
+          {
+            "kind": "it",
+            "name": "one add-create ancestor → that ancestor in decisionDeps",
+            "line": 52
+          },
+          {
+            "kind": "it",
+            "name": "add-graft ancestor is also a decision dep",
+            "line": 74
+          },
+          {
+            "kind": "it",
+            "name": "multiple add ancestors → top-down order",
+            "line": 101
+          },
+          {
+            "kind": "it",
+            "name": "mixed ancestors: no-op + add → only add appears in decisionDeps",
+            "line": 128
+          },
+          {
+            "kind": "describe",
+            "name": "existenceDeps",
+            "line": 163
+          },
+          {
+            "kind": "it",
+            "name": "rename includes ancestor existence deps + own implicit edge",
+            "line": 164
+          },
+          {
+            "kind": "it",
+            "name": "detach includes own implicit edge",
+            "line": 209
+          },
+          {
+            "kind": "it",
+            "name": "add-create has no own existence dep",
+            "line": 242
+          },
+          {
+            "kind": "it",
+            "name": "add-graft has global-existence dep (parent: null)",
+            "line": 272
+          },
+          {
+            "kind": "it",
+            "name": "ancestor existence deps record the live parent variant correctly",
+            "line": 293
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/derive-disposition.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "initial disposition",
+            "line": 31
+          },
+          {
+            "kind": "it",
+            "name": "no add ancestors → queued",
+            "line": 32
+          },
+          {
+            "kind": "it",
+            "name": "one add-create ancestor → latent",
+            "line": 51
+          },
+          {
+            "kind": "it",
+            "name": "multiple add ancestors → still latent",
+            "line": 72
+          },
+          {
+            "kind": "describe",
+            "name": "deferred ⇒ latent invariant",
+            "line": 102
+          },
+          {
+            "kind": "it",
+            "name": "every change with deferred reviewer has disposition latent",
+            "line": 103
+          },
+          {
+            "kind": "describe",
+            "name": "disposition does NOT consider existence deps",
+            "line": 140
+          },
+          {
+            "kind": "it",
+            "name": "a change with non-trivial existence deps but no decision deps is queued",
+            "line": 141
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/derive-routing.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "derive routing: concrete",
+            "line": 31
+          },
+          {
+            "kind": "it",
+            "name": "rename routes to renamed taxon's owner",
+            "line": 32
+          },
+          {
+            "kind": "it",
+            "name": "add-create routes to payload-parent's owner",
+            "line": 54
+          },
+          {
+            "kind": "it",
+            "name": "add-graft routes to payload-parent's owner",
+            "line": 82
+          },
+          {
+            "kind": "it",
+            "name": "detach routes to payload-parent's owner",
+            "line": 111
+          },
+          {
+            "kind": "it",
+            "name": "concrete reviewer preserves registry casing",
+            "line": 143
+          },
+          {
+            "kind": "describe",
+            "name": "derive routing: deferred under add-create",
+            "line": 167
+          },
+          {
+            "kind": "it",
+            "name": "add nested under add-create gets deferred reviewer",
+            "line": 168
+          },
+          {
+            "kind": "it",
+            "name": "nested deferred refs point to IMMEDIATE create parent, not transitive",
+            "line": 195
+          },
+          {
+            "kind": "it",
+            "name": "graft nested under add-create gets deferred reviewer",
+            "line": 231
+          },
+          {
+            "kind": "describe",
+            "name": "derive routing: nested under add-graft is concrete (not deferred)",
+            "line": 260
+          },
+          {
+            "kind": "it",
+            "name": "add nested under add-graft routes concretely to graft target's owner",
+            "line": 261
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/derive-sequencer.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "sequencer injection",
+            "line": 14
+          },
+          {
+            "kind": "it",
+            "name": "derivation uses the injected mintChangeId verbatim",
+            "line": 15
+          },
+          {
+            "kind": "describe",
+            "name": "derivation purity",
+            "line": 53
+          },
+          {
+            "kind": "it",
+            "name": "derive.ts does not import from store, handlers, or HTTP",
+            "line": 54
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/derive-single-change.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "derive: single-change emission",
+            "line": 37
+          },
+          {
+            "kind": "it",
+            "name": "payload with only a single rename emits one change",
+            "line": 38
+          },
+          {
+            "kind": "it",
+            "name": "only a no-op emits zero changes",
+            "line": 48
+          },
+          {
+            "kind": "it",
+            "name": "no-op ancestor of an operative node emits zero changes for the no-op",
+            "line": 56
+          },
+          {
+            "kind": "it",
+            "name": "add-create vs add-graft emit changes with distinct ops",
+            "line": 87
+          },
+          {
+            "kind": "it",
+            "name": "single detach emits one change with op detach",
+            "line": 118
+          },
+          {
+            "kind": "it",
+            "name": "each change carries proposalId and targetRootId",
+            "line": 148
+          },
+          {
+            "kind": "it",
+            "name": "changeIds assigned in DFS pre-order",
+            "line": 158
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/derive-status-tree.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "status tree per-node rules",
+            "line": 36
+          },
+          {
+            "kind": "it",
+            "name": "no-op status node is structural with no changeId",
+            "line": 37
+          },
+          {
+            "kind": "it",
+            "name": "queued rename status node has reviewer username",
+            "line": 47
+          },
+          {
+            "kind": "it",
+            "name": "latent change under create has reviewer null",
+            "line": 70
+          },
+          {
+            "kind": "it",
+            "name": "add-create status node has id:null and name set",
+            "line": 94
+          },
+          {
+            "kind": "it",
+            "name": "add-graft status node has id and no name",
+            "line": 111
+          },
+          {
+            "kind": "it",
+            "name": "detach status node has no children property",
+            "line": 133
+          },
+          {
+            "kind": "describe",
+            "name": "status tree shape mirrors payload",
+            "line": 165
+          },
+          {
+            "kind": "it",
+            "name": "tree node count and nesting matches payload",
+            "line": 166
+          },
+          {
+            "kind": "describe",
+            "name": "status tree reason field",
+            "line": 205
+          },
+          {
+            "kind": "it",
+            "name": "no status node has a reason field in Phase 5",
+            "line": 206
+          },
+          {
+            "kind": "describe",
+            "name": "no concrete-latent in current rules",
+            "line": 236
+          },
+          {
+            "kind": "it",
+            "name": "no derived change is concrete-latent (deferred ⇒ latent, but latent ⇒ ? requires add ancestor)",
+            "line": 237
+          }
+        ]
+      }
+    ],
+    "testCount": 62
+  }
+}

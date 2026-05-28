@@ -1,0 +1,233 @@
+{
+  "area": "reset",
+  "scope": "POST /reset restoring fresh-boot state across all domains.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/proposalsReset.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "POST /reset clears the proposals registry",
+            "line": 19
+          },
+          {
+            "kind": "test",
+            "name": "POST /reset clears every reviewer's queue",
+            "line": 35
+          },
+          {
+            "kind": "test",
+            "name": "POST /reset restarts the change-id counter at c1 (and the proposal-id counter at p1)",
+            "line": 65
+          },
+          {
+            "kind": "test",
+            "name": "POST /reset is still §4-exempt (null caller may invoke it)",
+            "line": 101
+          },
+          {
+            "kind": "test",
+            "name": "POST /reset is §4-exempt for malformed-header callers too",
+            "line": 119
+          },
+          {
+            "kind": "test",
+            "name": "post-reset the new proposal subsystem is fully usable",
+            "line": 130
+          }
+        ]
+      }
+    ],
+    "testCount": 6
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/proposals/reset-integration.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /reset clears proposal-store state",
+            "line": 43
+          },
+          {
+            "kind": "it",
+            "name": "after a complex multi-proposal session, reset returns 204 and every endpoint is empty",
+            "line": 44
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/store-reset.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "reset: collection clearing",
+            "line": 52
+          },
+          {
+            "kind": "it",
+            "name": "reset clears proposals collection",
+            "line": 53
+          },
+          {
+            "kind": "it",
+            "name": "reset clears changes collection",
+            "line": 61
+          },
+          {
+            "kind": "it",
+            "name": "reset clears changesByProposal",
+            "line": 68
+          },
+          {
+            "kind": "it",
+            "name": "reset clears queueByUser",
+            "line": 75
+          },
+          {
+            "kind": "it",
+            "name": "reset resets both ID counters to 1-base",
+            "line": 83
+          },
+          {
+            "kind": "it",
+            "name": "reset is idempotent",
+            "line": 94
+          }
+        ]
+      },
+      {
+        "path": "test/reset/reset.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /reset: empty server",
+            "line": 5
+          },
+          {
+            "kind": "it",
+            "name": "returns 204 with empty body",
+            "line": 6
+          },
+          {
+            "kind": "describe",
+            "name": "POST /reset: exempt from §4 authorization gate",
+            "line": 15
+          },
+          {
+            "kind": "it",
+            "name": "no X-Username header → 204",
+            "line": 16
+          },
+          {
+            "kind": "it",
+            "name": "empty X-Username → 204",
+            "line": 22
+          },
+          {
+            "kind": "it",
+            "name": "unregistered well-formed username → 204 (NOT 403)",
+            "line": 31
+          },
+          {
+            "kind": "it",
+            "name": "another well-formed unknown user → 204",
+            "line": 41
+          },
+          {
+            "kind": "it",
+            "name": "whitespace-only X-Username → 204 (NOT 400)",
+            "line": 50
+          },
+          {
+            "kind": "it",
+            "name": "trailing-whitespace X-Username → 204",
+            "line": 60
+          },
+          {
+            "kind": "describe",
+            "name": "POST /reset: idempotence",
+            "line": 70
+          },
+          {
+            "kind": "it",
+            "name": "two consecutive resets both return 204",
+            "line": 71
+          },
+          {
+            "kind": "describe",
+            "name": "POST /reset: wrong method",
+            "line": 80
+          },
+          {
+            "kind": "it",
+            "name": "GET /reset returns 404 or 405 with the standard envelope",
+            "line": 81
+          }
+        ]
+      },
+      {
+        "path": "test/reset/taxa-reset.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /reset clears taxa state",
+            "line": 20
+          },
+          {
+            "kind": "it",
+            "name": "after seeding taxa and edges, reset empties /taxa and /trees",
+            "line": 21
+          },
+          {
+            "kind": "it",
+            "name": "reset zeroes the ID counter (next seed starts at t1)",
+            "line": 58
+          },
+          {
+            "kind": "it",
+            "name": "reset also clears the registry (cross-subsystem composition still works)",
+            "line": 71
+          },
+          {
+            "kind": "it",
+            "name": "reset accepts null, unregistered, and malformed-X-Username callers",
+            "line": 90
+          }
+        ]
+      },
+      {
+        "path": "test/reset/users-reset.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /reset clears the user registry (Phase 2 forward obligation)",
+            "line": 15
+          },
+          {
+            "kind": "it",
+            "name": "registered users are gone after reset",
+            "line": 16
+          },
+          {
+            "kind": "it",
+            "name": "the case-key map is cleared too (no lingering duplicate)",
+            "line": 39
+          },
+          {
+            "kind": "it",
+            "name": "re-register identical-case after reset succeeds",
+            "line": 57
+          }
+        ]
+      }
+    ],
+    "testCount": 31
+  }
+}

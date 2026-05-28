@@ -1,0 +1,163 @@
+{
+  "area": "concurrency",
+  "scope": "Write lock, serialization of concurrent mutations.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/writeLock.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "withWriteLock: two writes started in the same tick run sequentially",
+            "line": 11
+          },
+          {
+            "kind": "test",
+            "name": "withWriteLock: a write that throws does NOT stall subsequent writes",
+            "line": 26
+          },
+          {
+            "kind": "test",
+            "name": "withWriteLock: an async write holds the lock until it resolves",
+            "line": 37
+          },
+          {
+            "kind": "test",
+            "name": "withWriteLock: many writes complete in submission order",
+            "line": 62
+          },
+          {
+            "kind": "test",
+            "name": "withWriteLock: rejection is surfaced to the caller, not swallowed",
+            "line": 78
+          }
+        ]
+      },
+      {
+        "path": "test/writeSerialization.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "write serialization: two POST /taxa fired in the same tick produce distinct ids in submission order",
+            "line": 42
+          },
+          {
+            "kind": "test",
+            "name": "write serialization: a PATCH issued same-tick after a POST sees the POSTed taxon",
+            "line": 62
+          },
+          {
+            "kind": "test",
+            "name": "write serialization: POST /reset runs under the lock (§15) — writes before observe pre-reset, after observe empty state",
+            "line": 84
+          },
+          {
+            "kind": "test",
+            "name": "write serialization: two POST /proposals fired in the same tick produce ordered proposal+change ids",
+            "line": 111
+          },
+          {
+            "kind": "test",
+            "name": "write serialization: two POST /changes/.../accept fired in the same tick are serialized, both reflected in live state",
+            "line": 159
+          },
+          {
+            "kind": "test",
+            "name": "write serialization: two POST /changes/.../accept-cascade fired in the same tick serialize cleanly",
+            "line": 221
+          },
+          {
+            "kind": "test",
+            "name": "write serialization: a parent-add and a follow-up read see the consistent post-write state",
+            "line": 290
+          }
+        ]
+      }
+    ],
+    "testCount": 12
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/concurrency/write-lock.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "withWriteLock: FIFO serialization",
+            "line": 9
+          },
+          {
+            "kind": "it",
+            "name": "two concurrent calls serialize in invocation order",
+            "line": 10
+          },
+          {
+            "kind": "it",
+            "name": "ten concurrent calls preserve FIFO across the chain",
+            "line": 28
+          },
+          {
+            "kind": "describe",
+            "name": "withWriteLock: throw/reject recovery",
+            "line": 50
+          },
+          {
+            "kind": "it",
+            "name": "a throwing fn propagates the rejection and releases the slot",
+            "line": 51
+          },
+          {
+            "kind": "it",
+            "name": "an async rejection propagates and releases the slot",
+            "line": 67
+          },
+          {
+            "kind": "describe",
+            "name": "withWriteLock: synchronous fn is still serialized",
+            "line": 84
+          },
+          {
+            "kind": "it",
+            "name": "ten concurrent increments produce a final value of exactly 10",
+            "line": 85
+          },
+          {
+            "kind": "it",
+            "name": "a synchronous fn returning a value resolves to that value",
+            "line": 104
+          },
+          {
+            "kind": "it",
+            "name": "an async fn returning a value resolves to that value",
+            "line": 109
+          },
+          {
+            "kind": "describe",
+            "name": "withWriteLock: slot held until returned promise settles",
+            "line": 115
+          },
+          {
+            "kind": "it",
+            "name": "does not release on first await — releases when fn's promise settles",
+            "line": 116
+          },
+          {
+            "kind": "describe",
+            "name": "withWriteLock: independent async code is not blocked",
+            "line": 137
+          },
+          {
+            "kind": "it",
+            "name": "a no-lock promise resolves while a lock-fn is in flight",
+            "line": 138
+          }
+        ]
+      }
+    ],
+    "testCount": 14
+  }
+}

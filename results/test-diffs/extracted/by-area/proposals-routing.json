@@ -1,0 +1,107 @@
+{
+  "area": "proposals-routing",
+  "scope": "POST /proposals success path, target tree resolution, no-mutation guarantees on rejection.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [],
+    "testCount": 0
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/proposals/post-proposals-no-mutation.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /proposals: no mutation of taxon graph or registry",
+            "line": 24
+          },
+          {
+            "kind": "it",
+            "name": "successful submission leaves taxa, trees, and users unchanged",
+            "line": 25
+          },
+          {
+            "kind": "it",
+            "name": "failed submission leaves proposal store unchanged",
+            "line": 58
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/post-proposals-success.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /proposals success path",
+            "line": 32
+          },
+          {
+            "kind": "it",
+            "name": "registered proposer + valid payload → 201 with proposalId and status tree",
+            "line": 33
+          },
+          {
+            "kind": "it",
+            "name": "proposer field carries registry's original casing",
+            "line": 62
+          },
+          {
+            "kind": "it",
+            "name": "two submissions produce distinct proposalIds in order p1, p2",
+            "line": 84
+          },
+          {
+            "kind": "it",
+            "name": "rename submission installs queued change to taxon owner",
+            "line": 107
+          },
+          {
+            "kind": "it",
+            "name": "latent change is installed but not queued",
+            "line": 147
+          },
+          {
+            "kind": "describe",
+            "name": "POST /proposals: lock discipline",
+            "line": 189
+          },
+          {
+            "kind": "it",
+            "name": "submit-handler.ts calls withWriteLock exactly once",
+            "line": 190
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/post-proposals-target-tree.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /proposals target tree",
+            "line": 23
+          },
+          {
+            "kind": "it",
+            "name": "unknown targetRootId → 404 unknown-target-tree",
+            "line": 24
+          },
+          {
+            "kind": "it",
+            "name": "targetRootId exists but is not a root → 404 unknown-target-tree",
+            "line": 46
+          },
+          {
+            "kind": "it",
+            "name": "no proposal installed on 404",
+            "line": 73
+          }
+        ]
+      }
+    ],
+    "testCount": 15
+  }
+}

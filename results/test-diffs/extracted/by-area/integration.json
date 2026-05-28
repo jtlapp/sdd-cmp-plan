@@ -1,0 +1,468 @@
+{
+  "area": "integration",
+  "scope": "Phase-specific cross-cutting integration scenarios: multi-owner trees, failed accepts, reset behavior, status views, lazy evaluation properties.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/phase4Integration.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "integration: multi-owner story — create, transfer ownership, recipient acts, original blocked",
+            "line": 63
+          },
+          {
+            "kind": "test",
+            "name": "integration: §14 bullet 4 stranded U-owned demonstration end-to-end",
+            "line": 103
+          },
+          {
+            "kind": "test",
+            "name": "integration: cross-tree rename — succeeds when no clash, 409s when target name conflicts in another tree",
+            "line": 134
+          },
+          {
+            "kind": "test",
+            "name": "integration: reset between flows wipes everything, ID counter restarts",
+            "line": 168
+          },
+          {
+            "kind": "test",
+            "name": "integration: a delete blocked by precondition fails 409, then Alice fixes the shape and the retry succeeds",
+            "line": 188
+          }
+        ]
+      },
+      {
+        "path": "test/phase7Integration.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "Appendix A.1 end-to-end via accept-cascade",
+            "line": 84
+          },
+          {
+            "kind": "test",
+            "name": "Appendix A.2 end-to-end with case-3 invalidation and dismiss",
+            "line": 148
+          },
+          {
+            "kind": "test",
+            "name": "§14 collaborative deletion: U-owned shared taxon blocks delete until detached via proposals",
+            "line": 228
+          },
+          {
+            "kind": "test",
+            "name": "§14 ownership reassignment reroutes promotion-time reviewer",
+            "line": 281
+          },
+          {
+            "kind": "test",
+            "name": "§14 cascade-delete halts at other-owned; queued change under detached taxon becomes case-3 invalid",
+            "line": 336
+          },
+          {
+            "kind": "test",
+            "name": "reset across Phase-7 lifecycle: clears cascade, case-3 invalid, and case-2 auto-dismissed state",
+            "line": 404
+          }
+        ]
+      },
+      {
+        "path": "test/phase7StatusView.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "proposer view shows `invalid` for all three §11.4 cases, identically",
+            "line": 54
+          },
+          {
+            "kind": "test",
+            "name": "/queue includes case-3 invalid entries but NOT case-1 / case-2",
+            "line": 144
+          },
+          {
+            "kind": "test",
+            "name": "successful cascade leaves queue clean of the cascade's accepted set",
+            "line": 211
+          }
+        ]
+      }
+    ],
+    "testCount": 14
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/app.integration.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 2 integration: bootstrap flow",
+            "line": 23
+          },
+          {
+            "kind": "it",
+            "name": "fresh server → reset → register → list → identity classifies caller",
+            "line": 24
+          },
+          {
+            "kind": "describe",
+            "name": "Phase 2 integration: register-then-reset reclassifies identity",
+            "line": 54
+          },
+          {
+            "kind": "it",
+            "name": "registered caller becomes unregistered after POST /reset",
+            "line": 55
+          },
+          {
+            "kind": "describe",
+            "name": "Phase 2 integration: cross-casing round trip",
+            "line": 78
+          },
+          {
+            "kind": "it",
+            "name": "Caller.username is the registry's stored casing on read",
+            "line": 79
+          },
+          {
+            "kind": "describe",
+            "name": "Phase 2 integration: Phase 1 regressions still hold",
+            "line": 94
+          },
+          {
+            "kind": "it",
+            "name": "GET /health is unaffected by the identity middleware",
+            "line": 95
+          },
+          {
+            "kind": "it",
+            "name": "unknown route still 404s with the standard envelope",
+            "line": 104
+          }
+        ]
+      },
+      {
+        "path": "test/app.phase3.integration.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 3 integration: full lifecycle",
+            "line": 35
+          },
+          {
+            "kind": "it",
+            "name": "register → seed → read each endpoint → reset → reads empty",
+            "line": 36
+          },
+          {
+            "kind": "describe",
+            "name": "Phase 3 integration: shared:true surfaces end-to-end",
+            "line": 78
+          },
+          {
+            "kind": "it",
+            "name": "a shared taxon shows shared:true via both /taxa and the containing /trees responses",
+            "line": 79
+          }
+        ]
+      },
+      {
+        "path": "test/app.phase4.integration.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 4 integration: two-user lifecycle",
+            "line": 32
+          },
+          {
+            "kind": "it",
+            "name": "register → create → add edge → PATCH owner → DELETE",
+            "line": 33
+          },
+          {
+            "kind": "describe",
+            "name": "Phase 4 integration: multi-step collaborative delete (§14)",
+            "line": 135
+          },
+          {
+            "kind": "it",
+            "name": "blocked shared delete becomes unblocked after detaching the share",
+            "line": 136
+          },
+          {
+            "kind": "describe",
+            "name": "Phase 4 integration: §11.1 concurrent serialization",
+            "line": 209
+          },
+          {
+            "kind": "it",
+            "name": "ten concurrent POST /taxa requests produce ten distinct taxa with sequential IDs",
+            "line": 210
+          },
+          {
+            "kind": "it",
+            "name": "concurrent PATCHes on the same taxon serialize: final name is one of the two",
+            "line": 238
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-6-cross-tree.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 6 cross-tree validation end-to-end",
+            "line": 23
+          },
+          {
+            "kind": "it",
+            "name": "rename of a shared taxon clashing in the OTHER tree → 409 with that tree's rootId",
+            "line": 24
+          },
+          {
+            "kind": "it",
+            "name": "add-graft of a taxon causing a clash in the grafted-into tree → 409",
+            "line": 84
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-6-failed-accept.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 6 failed-accept persistence end-to-end",
+            "line": 18
+          },
+          {
+            "kind": "it",
+            "name": "intervening direct action makes the proposal invalid; accept fails; change is invalid in queue",
+            "line": 19
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-6-multi-owner.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 6 multi-owner integration",
+            "line": 21
+          },
+          {
+            "kind": "it",
+            "name": "a proposal that touches taxa owned by two users routes each change to its respective owner",
+            "line": 22
+          },
+          {
+            "kind": "it",
+            "name": "Bob accepts and Carol rejects independent changes in the same proposal",
+            "line": 99
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-6-reject-cascade.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 6 reject cascade end-to-end",
+            "line": 17
+          },
+          {
+            "kind": "it",
+            "name": "rejecting an outer add-create cascades to its nested rename via decisionDeps",
+            "line": 18
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-6-reset.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 6 reset composition",
+            "line": 18
+          },
+          {
+            "kind": "it",
+            "name": "after accept/reject/failed-accept, POST /reset returns proposal-store and taxa-store to fresh-boot",
+            "line": 19
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-6-review-loop.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 6 review loop end-to-end",
+            "line": 29
+          },
+          {
+            "kind": "it",
+            "name": "Alice proposes, Bob accepts each change in dependency order",
+            "line": 30
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-7-case-classification.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 7 — case 2: same-reviewer accept auto-dismisses other queued",
+            "line": 48
+          },
+          {
+            "kind": "it",
+            "name": "Bob's accept of X invalidates and auto-dismisses Bob's other queued Y",
+            "line": 49
+          },
+          {
+            "kind": "it",
+            "name": "Bob's accept-cascade auto-dismisses Bob's other queued change",
+            "line": 100
+          },
+          {
+            "kind": "describe",
+            "name": "Phase 7 — case 3: cross-reviewer accept marks but keeps queued",
+            "line": 144
+          },
+          {
+            "kind": "it",
+            "name": "Bob's accept invalidates Carol's queued change as case 3",
+            "line": 145
+          },
+          {
+            "kind": "describe",
+            "name": "Phase 7 — case 3: direct actions trigger case 3",
+            "line": 220
+          },
+          {
+            "kind": "it",
+            "name": "direct rename by Alice invalidates Bob's queued change as case 3",
+            "line": 221
+          },
+          {
+            "kind": "it",
+            "name": "direct delete by Bob (the reviewer) is case 3, not case 2",
+            "line": 268
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-7-case1-extended.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 7 — case-1 cascade from non-reject invalidation",
+            "line": 47
+          },
+          {
+            "kind": "it",
+            "name": "direct action that invalidates an add-create cascades case-1 to its latent descendants",
+            "line": 48
+          },
+          {
+            "kind": "it",
+            "name": "case-2 invalidation of add-create cascades to its descendants",
+            "line": 109
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-7-lazy-evaluation.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 7 — lazy evaluation: reads do not auto-mutate",
+            "line": 53
+          },
+          {
+            "kind": "it",
+            "name": "GET /proposals/{id} does not transition a queued change to invalid",
+            "line": 54
+          },
+          {
+            "kind": "it",
+            "name": "GET /queue does not auto-dismiss invalid-in-queue changes",
+            "line": 74
+          },
+          {
+            "kind": "it",
+            "name": "Proposer's view shows the persisted disposition",
+            "line": 97
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-7-properties.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 7 — §14 properties",
+            "line": 51
+          },
+          {
+            "kind": "it",
+            "name": "moves are non-atomic (detach + add as separate proposals)",
+            "line": 52
+          },
+          {
+            "kind": "it",
+            "name": "ownership reassignment is unilateral and does not invalidate queued changes (sticky routing)",
+            "line": 132
+          },
+          {
+            "kind": "it",
+            "name": "cascade deletion halts at others' taxa (Phase 4 property reaffirmed under Phase 7)",
+            "line": 188
+          }
+        ]
+      },
+      {
+        "path": "test/integration/phase-7-reset.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Phase 7 — reset after each new state path",
+            "line": 56
+          },
+          {
+            "kind": "it",
+            "name": "reset after successful cascade",
+            "line": 57
+          },
+          {
+            "kind": "it",
+            "name": "reset after rolled-back cascade",
+            "line": 87
+          },
+          {
+            "kind": "it",
+            "name": "reset after case-1 cascade (reject of nested add-create)",
+            "line": 125
+          },
+          {
+            "kind": "it",
+            "name": "reset after explicit dismiss",
+            "line": 155
+          },
+          {
+            "kind": "it",
+            "name": "omnibus: reset after a sequence of operations",
+            "line": 205
+          }
+        ]
+      }
+    ],
+    "testCount": 59
+  }
+}

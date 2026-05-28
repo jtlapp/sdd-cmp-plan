@@ -1,0 +1,733 @@
+{
+  "area": "proposals-payload",
+  "scope": "Payload-level validation of POST /proposals body: shape, op recognition, top-taxon constraints, first-failure semantics.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/proposalsParse.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "POST /proposals: minimal valid no-op top → 201",
+            "line": 38
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: invalid JSON body → 400",
+            "line": 53
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: non-object body (${JSON.stringify(v)}) → 400",
+            "line": 69
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: missing ${omit} → 400",
+            "line": 79
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: targetRootId not a string → 400",
+            "line": 94
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: topTaxonId not a string → 400",
+            "line": 104
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: payload not a JSON object → 400",
+            "line": 114
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: unknown top-level keys ignored (decision #14)",
+            "line": 126
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: each op accepted in a valid position",
+            "line": 139
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: invalid op ${JSON.stringify(badOp)} → 400",
+            "line": 182
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: no-op without id → 400",
+            "line": 195
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: no-op with non-string id → 400",
+            "line": 205
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: rename without id → 400",
+            "line": 215
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: rename without name → 400",
+            "line": 230
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: rename with bad name ${JSON.stringify(bad)} → 400",
+            "line": 245
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: add without id key → 400 (missing key is not null)",
+            "line": 260
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: add (create) requires name → 400 without it",
+            "line": 274
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: add (create) with bad-format name → 400",
+            "line": 288
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: add with non-null non-string id → 400",
+            "line": 302
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: detach with children → 400 (leaf rule)",
+            "line": 316
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: detach without id → 400",
+            "line": 336
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: children not an array → 400",
+            "line": 346
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: child entry not an object → 400",
+            "line": 356
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: unknown extra keys on a payload node are ignored",
+            "line": 366
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: top op = add → 400",
+            "line": 383
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: top op = detach → 400",
+            "line": 393
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: payload.id mismatches topTaxonId → 400 (decision #2)",
+            "line": 403
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: topTaxonId names unknown taxon → 404",
+            "line": 413
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: top taxon exists but not in target tree → 409",
+            "line": 423
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: targetRootId unknown → 404",
+            "line": 439
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: targetRootId is not a root (has parents) → 409",
+            "line": 449
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: nested rename with unknown id → 404",
+            "line": 464
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: nested detach with unknown id → 404",
+            "line": 478
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: nested graft with unknown id → 404",
+            "line": 492
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: nested no-op with unknown id → 404",
+            "line": 506
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: null user → 403",
+            "line": 522
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: unregistered well-formed caller → 403",
+            "line": 532
+          },
+          {
+            "kind": "test",
+            "name": "POST /proposals: malformed X-Username (NBSP) → 400",
+            "line": 542
+          }
+        ]
+      },
+      {
+        "path": "test/proposalsPartialPayload.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "listing only one of three children leaves the others unmentioned",
+            "line": 19
+          },
+          {
+            "kind": "test",
+            "name": "partial payload + nested detach leaves siblings of the detach untouched in the change set",
+            "line": 50
+          },
+          {
+            "kind": "test",
+            "name": "listing a non-existent child is a 404, not 'partial' lenience",
+            "line": 89
+          }
+        ]
+      }
+    ],
+    "testCount": 41
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/proposals/payload-existence.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "payload existence: missing edges",
+            "line": 12
+          },
+          {
+            "kind": "it",
+            "name": "rename whose payload-parent does not contain it → payload-edge-missing",
+            "line": 13
+          },
+          {
+            "kind": "it",
+            "name": "detach of non-existent edge → payload-edge-missing",
+            "line": 36
+          },
+          {
+            "kind": "it",
+            "name": "nested no-op whose parent edge does not hold → payload-edge-missing",
+            "line": 65
+          },
+          {
+            "kind": "describe",
+            "name": "payload existence: graft",
+            "line": 101
+          },
+          {
+            "kind": "it",
+            "name": "add-graft of non-existent taxon → graft-target-missing",
+            "line": 102
+          },
+          {
+            "kind": "it",
+            "name": "add-graft of taxon in a different tree → accepted",
+            "line": 117
+          },
+          {
+            "kind": "it",
+            "name": "add-graft of taxon already in same target tree → accepted (§3.3 acceptance-time)",
+            "line": 138
+          },
+          {
+            "kind": "describe",
+            "name": "payload existence: add-create has no live-state requirement",
+            "line": 171
+          },
+          {
+            "kind": "it",
+            "name": "add-create accepted regardless of any live state",
+            "line": 172
+          },
+          {
+            "kind": "describe",
+            "name": "payload existence: top taxon",
+            "line": 186
+          },
+          {
+            "kind": "it",
+            "name": "rename of top taxon (no payload-parent) has only top-taxon existence",
+            "line": 187
+          },
+          {
+            "kind": "describe",
+            "name": "payload existence: DFS pre-order failure surfacing",
+            "line": 197
+          },
+          {
+            "kind": "it",
+            "name": "ancestor existence fails before deeper-node existence",
+            "line": 198
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/payload-first-failure.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "DFS pre-order failure surfacing",
+            "line": 12
+          },
+          {
+            "kind": "it",
+            "name": "shape error in earlier-visited node surfaces before existence error in later sibling",
+            "line": 13
+          },
+          {
+            "kind": "it",
+            "name": "top-taxon failure beats deep existence failure",
+            "line": 39
+          },
+          {
+            "kind": "it",
+            "name": "under-create check fires before name-format on the offending node",
+            "line": 56
+          },
+          {
+            "kind": "describe",
+            "name": "position field",
+            "line": 83
+          },
+          {
+            "kind": "it",
+            "name": "position is non-empty on every failure",
+            "line": 84
+          },
+          {
+            "kind": "describe",
+            "name": "purity: validator does not invoke the invariant engine",
+            "line": 108
+          },
+          {
+            "kind": "it",
+            "name": "validator file imports nothing from src/domain/invariants",
+            "line": 109
+          },
+          {
+            "kind": "it",
+            "name": "validator file does not import HTTP or app",
+            "line": 130
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/payload-name-format.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "payload name format: rename",
+            "line": 33
+          },
+          {
+            "kind": "it",
+            "name": "rename to empty string yields tag 'empty'",
+            "line": 34
+          },
+          {
+            "kind": "it",
+            "name": "rename with leading whitespace yields tag 'leading-whitespace'",
+            "line": 45
+          },
+          {
+            "kind": "it",
+            "name": "rename with trailing whitespace yields tag 'trailing-whitespace'",
+            "line": 56
+          },
+          {
+            "kind": "describe",
+            "name": "payload name format: add-create",
+            "line": 68
+          },
+          {
+            "kind": "it",
+            "name": "add-create with empty name yields 'empty'",
+            "line": 69
+          },
+          {
+            "kind": "it",
+            "name": "add-create with leading whitespace yields 'leading-whitespace'",
+            "line": 84
+          },
+          {
+            "kind": "describe",
+            "name": "payload name format: happy path",
+            "line": 100
+          },
+          {
+            "kind": "it",
+            "name": "rename to valid name passes name-format and proceeds",
+            "line": 101
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/payload-shape.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "payload shape: op recognition",
+            "line": 38
+          },
+          {
+            "kind": "it",
+            "name": "unrecognized op fails with payload-shape",
+            "line": 39
+          },
+          {
+            "kind": "it",
+            "name": "missing op field fails with payload-shape",
+            "line": 51
+          },
+          {
+            "kind": "it",
+            "name": "non-object payload root (${JSON.stringify(value)}) fails with payload-shape",
+            "line": 60
+          },
+          {
+            "kind": "it",
+            "name": "children not an array fails with payload-shape",
+            "line": 69
+          },
+          {
+            "kind": "it",
+            "name": "children contains non-object fails when child is visited",
+            "line": 80
+          },
+          {
+            "kind": "describe",
+            "name": "payload shape: per-op field rules",
+            "line": 92
+          },
+          {
+            "kind": "it",
+            "name": "no-op missing id fails with payload-op-fields",
+            "line": 93
+          },
+          {
+            "kind": "it",
+            "name": "rename missing id fails with payload-op-fields",
+            "line": 101
+          },
+          {
+            "kind": "it",
+            "name": "rename missing name fails with payload-op-fields",
+            "line": 109
+          },
+          {
+            "kind": "it",
+            "name": "add-create (id null) missing name fails with payload-op-fields",
+            "line": 117
+          },
+          {
+            "kind": "it",
+            "name": "detach missing id fails with payload-op-fields",
+            "line": 132
+          },
+          {
+            "kind": "it",
+            "name": "detach with children fails with payload-op-fields",
+            "line": 147
+          },
+          {
+            "kind": "it",
+            "name": "add-graft with name field accepted (name ignored)",
+            "line": 172
+          },
+          {
+            "kind": "it",
+            "name": "rename id non-string fails with payload-op-fields",
+            "line": 194
+          },
+          {
+            "kind": "it",
+            "name": "rename name non-string fails with payload-op-fields",
+            "line": 205
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/payload-top-taxon.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "top-taxon: op kind",
+            "line": 12
+          },
+          {
+            "kind": "it",
+            "name": "top op 'add' yields top-taxon-op",
+            "line": 13
+          },
+          {
+            "kind": "it",
+            "name": "top op 'detach' yields top-taxon-op",
+            "line": 24
+          },
+          {
+            "kind": "describe",
+            "name": "top-taxon: id alignment",
+            "line": 36
+          },
+          {
+            "kind": "it",
+            "name": "payload top id mismatches topTaxonId yields top-taxon-mismatch",
+            "line": 37
+          },
+          {
+            "kind": "describe",
+            "name": "top-taxon: reachability",
+            "line": 54
+          },
+          {
+            "kind": "it",
+            "name": "topTaxonId not reachable from targetRootId yields top-taxon-not-in-tree",
+            "line": 55
+          },
+          {
+            "kind": "it",
+            "name": "top is rename and id not in target tree yields top-taxon-not-in-tree",
+            "line": 73
+          },
+          {
+            "kind": "describe",
+            "name": "top-taxon: happy paths",
+            "line": 90
+          },
+          {
+            "kind": "it",
+            "name": "top is no-op, id matches, in target tree → proceeds",
+            "line": 91
+          },
+          {
+            "kind": "it",
+            "name": "top is rename, id matches, in target tree → proceeds",
+            "line": 100
+          },
+          {
+            "kind": "it",
+            "name": "top can be a non-root in-tree taxon (subtree anchor)",
+            "line": 109
+          },
+          {
+            "kind": "describe",
+            "name": "top-taxon: failure ordering",
+            "line": 125
+          },
+          {
+            "kind": "it",
+            "name": "top-taxon-op fires before top-taxon-not-in-tree",
+            "line": 126
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/payload-under-create.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "non-add ops nested under add-create are rejected",
+            "line": 20
+          },
+          {
+            "kind": "it",
+            "name": "rename nested under add-create → payload-op-under-create",
+            "line": 21
+          },
+          {
+            "kind": "it",
+            "name": "detach nested under add-create → payload-op-under-create",
+            "line": 43
+          },
+          {
+            "kind": "it",
+            "name": "no-op nested under add-create → payload-op-under-create",
+            "line": 65
+          },
+          {
+            "kind": "describe",
+            "name": "nested add ops under add-create are permitted",
+            "line": 88
+          },
+          {
+            "kind": "it",
+            "name": "add-create nested under add-create is accepted",
+            "line": 89
+          },
+          {
+            "kind": "it",
+            "name": "add-graft nested under add-create where graft target exists → accepted",
+            "line": 109
+          },
+          {
+            "kind": "it",
+            "name": "add-graft nested under add-create where target missing → graft-target-missing",
+            "line": 134
+          },
+          {
+            "kind": "describe",
+            "name": "nested ops under add-graft (not under create)",
+            "line": 157
+          },
+          {
+            "kind": "it",
+            "name": "no-op nested under add-graft is OK when the live edge holds",
+            "line": 158
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/post-proposals-body.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /proposals body schema",
+            "line": 42
+          },
+          {
+            "kind": "it",
+            "name": "non-JSON body → 400 malformed-body",
+            "line": 43
+          },
+          {
+            "kind": "it",
+            "name": "missing targetRootId → 400 malformed-body",
+            "line": 51
+          },
+          {
+            "kind": "it",
+            "name": "missing topTaxonId → 400 malformed-body",
+            "line": 61
+          },
+          {
+            "kind": "it",
+            "name": "missing payload → 400 malformed-body",
+            "line": 71
+          },
+          {
+            "kind": "it",
+            "name": "non-string targetRootId → 400 malformed-body",
+            "line": 81
+          },
+          {
+            "kind": "it",
+            "name": "non-string topTaxonId → 400 malformed-body",
+            "line": 92
+          },
+          {
+            "kind": "it",
+            "name": "empty-string targetRootId → 400 malformed-body",
+            "line": 103
+          },
+          {
+            "kind": "it",
+            "name": "non-object payload → 400 malformed-body",
+            "line": 114
+          },
+          {
+            "kind": "it",
+            "name": "extra unrecognized top-level fields are ignored",
+            "line": 125
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/post-proposals-payload-errors.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /proposals payload validation via HTTP",
+            "line": 51
+          },
+          {
+            "kind": "it",
+            "name": "payload-shape",
+            "line": 52
+          },
+          {
+            "kind": "it",
+            "name": "payload-op-fields",
+            "line": 65
+          },
+          {
+            "kind": "it",
+            "name": "name-format (empty)",
+            "line": 78
+          },
+          {
+            "kind": "it",
+            "name": "top-taxon-op",
+            "line": 91
+          },
+          {
+            "kind": "it",
+            "name": "top-taxon-mismatch",
+            "line": 104
+          },
+          {
+            "kind": "it",
+            "name": "top-taxon-not-in-tree",
+            "line": 122
+          },
+          {
+            "kind": "it",
+            "name": "payload-edge-missing",
+            "line": 140
+          },
+          {
+            "kind": "it",
+            "name": "graft-target-missing",
+            "line": 163
+          },
+          {
+            "kind": "it",
+            "name": "payload-op-under-create",
+            "line": 180
+          }
+        ]
+      }
+    ],
+    "testCount": 92
+  }
+}

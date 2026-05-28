@@ -1,0 +1,783 @@
+{
+  "area": "domain",
+  "scope": "Pure domain invariants: reachability, owner-scoped regions, check-add-create, wrappers, multi-tree consistency.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/domainIntegration.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "integration: register two users, build a multi-tree graph, exercise all four reads",
+            "line": 38
+          },
+          {
+            "kind": "test",
+            "name": "integration: §15.6 envelope codes (400, 403, 404) round-trip through the new routes",
+            "line": 94
+          },
+          {
+            "kind": "test",
+            "name": "integration: Phase-1 notFound fallback still applies to unknown route paths",
+            "line": 111
+          },
+          {
+            "kind": "test",
+            "name": "integration: POST /reset wipes BOTH the registry and the taxon store in one call",
+            "line": 120
+          }
+        ]
+      },
+      {
+        "path": "test/invariants.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "invariant 1: a linear chain has no cycles",
+            "line": 31
+          },
+          {
+            "kind": "test",
+            "name": "invariant 1: a cross-tree diamond has no cycle",
+            "line": 41
+          },
+          {
+            "kind": "test",
+            "name": "invariant 1: a self-edge A→A is a cycle that names A",
+            "line": 51
+          },
+          {
+            "kind": "test",
+            "name": "invariant 1: a two-cycle A→B→A reports both taxa",
+            "line": 63
+          },
+          {
+            "kind": "test",
+            "name": "invariant 1: a three-cycle reachable from a root chain is reported as a cycle",
+            "line": 77
+          },
+          {
+            "kind": "test",
+            "name": "invariant 1: a cyclic graph does NOT cause invariant 2 or 3 to also fire spuriously",
+            "line": 95
+          },
+          {
+            "kind": "test",
+            "name": "invariant 2: a linear chain passes",
+            "line": 110
+          },
+          {
+            "kind": "test",
+            "name": "invariant 2: a cross-tree diamond passes (diamonds across trees are permitted)",
+            "line": 118
+          },
+          {
+            "kind": "test",
+            "name": "invariant 2: an in-tree diamond reports the duplicated taxon with its root",
+            "line": 128
+          },
+          {
+            "kind": "test",
+            "name": "invariant 2: a deeper in-tree diamond is still caught",
+            "line": 146
+          },
+          {
+            "kind": "test",
+            "name": "invariant 2: shared-across-trees AND duplicated-within-one fires only for the in-tree case",
+            "line": 165
+          },
+          {
+            "kind": "test",
+            "name": "invariant 2: two independent in-tree diamonds in different trees both fire",
+            "line": 190
+          },
+          {
+            "kind": "test",
+            "name": "invariant 3: a tree with distinct names passes",
+            "line": 223
+          },
+          {
+            "kind": "test",
+            "name": "invariant 3: two taxa with the same exact name in the same tree clash",
+            "line": 233
+          },
+          {
+            "kind": "test",
+            "name": "invariant 3: case-variant names collide (§3.4 case-insensitive)",
+            "line": 249
+          },
+          {
+            "kind": "test",
+            "name": "invariant 3: same name across different trees is fine (per-tree only)",
+            "line": 263
+          },
+          {
+            "kind": "test",
+            "name": "invariant 3: a shared taxon clashing in one of its containing trees fires for that tree",
+            "line": 275
+          },
+          {
+            "kind": "test",
+            "name": "invariant 3: rename simulation — a name that clashes in another containing tree is caught",
+            "line": 296
+          },
+          {
+            "kind": "test",
+            "name": "evaluateAll: a graph violating only invariant 1 reports cycle, not 2 or 3",
+            "line": 328
+          },
+          {
+            "kind": "test",
+            "name": "evaluateAll: a graph violating only invariant 2 reports duplicate, not 1 or 3",
+            "line": 339
+          },
+          {
+            "kind": "test",
+            "name": "evaluateAll: a graph violating only invariant 3 reports name_clash, not 1 or 2",
+            "line": 356
+          },
+          {
+            "kind": "test",
+            "name": "evaluateAll: a graph violating BOTH 2 and 3 reports both, attributed correctly",
+            "line": 370
+          },
+          {
+            "kind": "test",
+            "name": "evaluateAll: an empty graph is ok:true",
+            "line": 402
+          },
+          {
+            "kind": "test",
+            "name": "evaluateAll: a non-trivial clean multi-tree graph is ok:true",
+            "line": 408
+          }
+        ]
+      },
+      {
+        "path": "test/reachability.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "reachability: empty graph has no roots",
+            "line": 28
+          },
+          {
+            "kind": "test",
+            "name": "reachability: a single isolated taxon is its own root",
+            "line": 33
+          },
+          {
+            "kind": "test",
+            "name": "reachability: in a chain A→B→C, only A is a root",
+            "line": 39
+          },
+          {
+            "kind": "test",
+            "name": "reachability: cross-tree diamond (A→C, B→C) has roots [A, B]",
+            "line": 49
+          },
+          {
+            "kind": "test",
+            "name": "reachability: detach makes a previously-child taxon a root again",
+            "line": 59
+          },
+          {
+            "kind": "test",
+            "name": "reachability: in chain A→B→C, every taxon's containing tree is {A}",
+            "line": 72
+          },
+          {
+            "kind": "test",
+            "name": "reachability: cross-tree diamond — C's containing trees are {A, B}",
+            "line": 85
+          },
+          {
+            "kind": "test",
+            "name": "reachability: deeper multi-root graph — D in two trees, B in one",
+            "line": 95
+          },
+          {
+            "kind": "test",
+            "name": "reachability: a taxon with no parents is its own containing tree",
+            "line": 110
+          },
+          {
+            "kind": "test",
+            "name": "reachability: treesContaining on an unknown id returns []",
+            "line": 116
+          },
+          {
+            "kind": "test",
+            "name": "reachability: an isolated root is not shared",
+            "line": 123
+          },
+          {
+            "kind": "test",
+            "name": "reachability: a linear-chain taxon is not shared",
+            "line": 129
+          },
+          {
+            "kind": "test",
+            "name": "reachability: a taxon reachable from two distinct roots is shared",
+            "line": 137
+          },
+          {
+            "kind": "test",
+            "name": "reachability: in-tree diamond does NOT make a taxon shared (single root)",
+            "line": 147
+          },
+          {
+            "kind": "test",
+            "name": "reachability: a clean tree reports no in-tree duplicates",
+            "line": 164
+          },
+          {
+            "kind": "test",
+            "name": "reachability: in-tree diamond reports the duplicated taxon",
+            "line": 174
+          },
+          {
+            "kind": "test",
+            "name": "reachability: cross-tree diamond is NOT an in-tree duplicate in either tree",
+            "line": 187
+          },
+          {
+            "kind": "test",
+            "name": "reachability: visit counts pin path-count semantics on a diamond",
+            "line": 198
+          },
+          {
+            "kind": "test",
+            "name": "reachability: descendants of a leaf is empty",
+            "line": 217
+          },
+          {
+            "kind": "test",
+            "name": "reachability: descendants from the root covers the whole tree",
+            "line": 223
+          },
+          {
+            "kind": "test",
+            "name": "reachability: descendants from mid-tree is the strict downward closure",
+            "line": 236
+          },
+          {
+            "kind": "test",
+            "name": "reachability: descendants is cycle-safe",
+            "line": 248
+          }
+        ]
+      }
+    ],
+    "testCount": 50
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/domain/check-add-create.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "checkAddCreate",
+            "line": 46
+          },
+          {
+            "kind": "it",
+            "name": "safe create passes",
+            "line": 47
+          },
+          {
+            "kind": "it",
+            "name": "sibling name clash in target tree is detected",
+            "line": 57
+          },
+          {
+            "kind": "it",
+            "name": "case-variant sibling name clash is detected",
+            "line": 75
+          },
+          {
+            "kind": "it",
+            "name": "create whose payload-parent is shared clashes in OTHER tree",
+            "line": 85
+          },
+          {
+            "kind": "it",
+            "name": "create under nonexistent parent is structurally fine (no §3.3 violation)",
+            "line": 107
+          },
+          {
+            "kind": "it",
+            "name": "create alone cannot introduce a cycle",
+            "line": 115
+          },
+          {
+            "kind": "it",
+            "name": "wrapper does not mutate g.taxa",
+            "line": 126
+          },
+          {
+            "kind": "it",
+            "name": "wrapper does not mutate g.childrenOf",
+            "line": 133
+          },
+          {
+            "kind": "it",
+            "name": "wrapper does not mutate g.parentsOf",
+            "line": 143
+          },
+          {
+            "kind": "it",
+            "name": "violations on clash carry the minted id",
+            "line": 150
+          },
+          {
+            "kind": "it",
+            "name": "repeat calls with same input return deterministic order",
+            "line": 170
+          },
+          {
+            "kind": "it",
+            "name": "delegates to checkInvariants in source",
+            "line": 187
+          }
+        ]
+      },
+      {
+        "path": "test/domain/invariants.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "Invariant 1 — no cycles",
+            "line": 51
+          },
+          {
+            "kind": "it",
+            "name": "empty graph passes",
+            "line": 52
+          },
+          {
+            "kind": "it",
+            "name": "a tree passes",
+            "line": 56
+          },
+          {
+            "kind": "it",
+            "name": "across-tree diamond passes (not a cycle)",
+            "line": 67
+          },
+          {
+            "kind": "it",
+            "name": "self-loop is detected",
+            "line": 80
+          },
+          {
+            "kind": "it",
+            "name": "two-taxon cycle is detected",
+            "line": 92
+          },
+          {
+            "kind": "it",
+            "name": "three-taxon cycle is detected",
+            "line": 109
+          },
+          {
+            "kind": "it",
+            "name": "disjoint cycles emit at least two violations",
+            "line": 128
+          },
+          {
+            "kind": "describe",
+            "name": "Invariant 2 — per-tree uniqueness of occurrence",
+            "line": 145
+          },
+          {
+            "kind": "it",
+            "name": "across-tree sharing is legal",
+            "line": 146
+          },
+          {
+            "kind": "it",
+            "name": "in-tree diamond is detected",
+            "line": 157
+          },
+          {
+            "kind": "it",
+            "name": "deeper in-tree diamond is detected",
+            "line": 173
+          },
+          {
+            "kind": "it",
+            "name": "duplication in two separate trees emits two violations",
+            "line": 190
+          },
+          {
+            "kind": "it",
+            "name": "across-tree share with in-tree diamond in only one tree is reported once",
+            "line": 221
+          },
+          {
+            "kind": "describe",
+            "name": "Invariant 3 — per-tree name uniqueness (case-insensitive)",
+            "line": 243
+          },
+          {
+            "kind": "it",
+            "name": "different names pass",
+            "line": 244
+          },
+          {
+            "kind": "it",
+            "name": "same name in different trees passes",
+            "line": 255
+          },
+          {
+            "kind": "it",
+            "name": "exact-case duplicate in one tree is detected",
+            "line": 266
+          },
+          {
+            "kind": "it",
+            "name": "case-variant duplicate in one tree is detected",
+            "line": 287
+          },
+          {
+            "kind": "it",
+            "name": "cross-tree same-name with in-tree clash in one tree only flags that tree",
+            "line": 307
+          },
+          {
+            "kind": "describe",
+            "name": "checkInvariants composite",
+            "line": 330
+          },
+          {
+            "kind": "it",
+            "name": "returns ok on a valid graph",
+            "line": 331
+          },
+          {
+            "kind": "it",
+            "name": "aggregates cycles before name clashes (documented order)",
+            "line": 342
+          },
+          {
+            "kind": "it",
+            "name": "includes all three violation kinds when each is violated",
+            "line": 378
+          },
+          {
+            "kind": "describe",
+            "name": "purity",
+            "line": 426
+          },
+          {
+            "kind": "it",
+            "name": "checkers do not mutate input",
+            "line": 427
+          },
+          {
+            "kind": "it",
+            "name": "checkers do not throw on pathological graphs",
+            "line": 452
+          }
+        ]
+      },
+      {
+        "path": "test/domain/owner-scoped-region.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "ownerScopedRegion: basic cases",
+            "line": 36
+          },
+          {
+            "kind": "it",
+            "name": "leaf-only region (n is a leaf owned by U)",
+            "line": 37
+          },
+          {
+            "kind": "it",
+            "name": "single-child wholly-owned region",
+            "line": 47
+          },
+          {
+            "kind": "it",
+            "name": "wholly-owned subtree (textbook case)",
+            "line": 60
+          },
+          {
+            "kind": "describe",
+            "name": "ownerScopedRegion: halt-frontier behavior",
+            "line": 80
+          },
+          {
+            "kind": "it",
+            "name": "halts at other-owned child and records the edge",
+            "line": 81
+          },
+          {
+            "kind": "it",
+            "name": "cascade does NOT continue past halt frontier even into owner-owned descendants",
+            "line": 98
+          },
+          {
+            "kind": "it",
+            "name": "multiple halt-frontier children produce multiple frontier entries",
+            "line": 118
+          },
+          {
+            "kind": "it",
+            "name": "halt-frontier child reachable via a separate wholly-owned path stays out of region; other route still flagged",
+            "line": 142
+          },
+          {
+            "kind": "describe",
+            "name": "ownerScopedRegion: case-insensitivity and edge cases",
+            "line": 168
+          },
+          {
+            "kind": "it",
+            "name": "case-insensitive owner matching",
+            "line": 169
+          },
+          {
+            "kind": "it",
+            "name": "unknown n yields empty region",
+            "line": 178
+          },
+          {
+            "kind": "it",
+            "name": "other-owned n yields empty region",
+            "line": 188
+          },
+          {
+            "kind": "it",
+            "name": "cyclic graph terminates and includes nodes once",
+            "line": 198
+          },
+          {
+            "kind": "describe",
+            "name": "ownerScopedRegion: purity",
+            "line": 218
+          },
+          {
+            "kind": "it",
+            "name": "does not mutate the input Graph",
+            "line": 219
+          }
+        ]
+      },
+      {
+        "path": "test/domain/reachability.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "roots(g)",
+            "line": 44
+          },
+          {
+            "kind": "it",
+            "name": "empty graph has no roots",
+            "line": 45
+          },
+          {
+            "kind": "it",
+            "name": "a parentless taxon is a root",
+            "line": 50
+          },
+          {
+            "kind": "it",
+            "name": "multiple parentless taxa are all roots",
+            "line": 55
+          },
+          {
+            "kind": "it",
+            "name": "a child taxon is not a root",
+            "line": 60
+          },
+          {
+            "kind": "describe",
+            "name": "containingRoots(g, t)",
+            "line": 69
+          },
+          {
+            "kind": "it",
+            "name": "a root returns itself",
+            "line": 70
+          },
+          {
+            "kind": "it",
+            "name": "a leaf traces up to its single root",
+            "line": 78
+          },
+          {
+            "kind": "it",
+            "name": "a shared taxon returns multiple roots",
+            "line": 90
+          },
+          {
+            "kind": "it",
+            "name": "sharing via different ancestor chains returns all containing roots",
+            "line": 101
+          },
+          {
+            "kind": "describe",
+            "name": "isShared(g, t)",
+            "line": 115
+          },
+          {
+            "kind": "it",
+            "name": "is true iff containingRoots size > 1",
+            "line": 116
+          },
+          {
+            "kind": "it",
+            "name": "roots are never shared",
+            "line": 131
+          },
+          {
+            "kind": "describe",
+            "name": "reachableSubtree(g, top)",
+            "line": 140
+          },
+          {
+            "kind": "it",
+            "name": "includes only top for a leaf",
+            "line": 141
+          },
+          {
+            "kind": "it",
+            "name": "includes top and all descendants",
+            "line": 146
+          },
+          {
+            "kind": "it",
+            "name": "descends only from the requested top",
+            "line": 158
+          },
+          {
+            "kind": "it",
+            "name": "terminates on a cyclic graph",
+            "line": 171
+          },
+          {
+            "kind": "it",
+            "name": "terminates on a self-loop",
+            "line": 183
+          },
+          {
+            "kind": "describe",
+            "name": "purity",
+            "line": 192
+          },
+          {
+            "kind": "it",
+            "name": "reachability functions do not mutate the input graph",
+            "line": 193
+          },
+          {
+            "kind": "it",
+            "name": "reachability functions do not throw on cyclic graphs",
+            "line": 222
+          }
+        ]
+      },
+      {
+        "path": "test/domain/wrappers.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "checkAddEdge",
+            "line": 46
+          },
+          {
+            "kind": "it",
+            "name": "safe add passes",
+            "line": 47
+          },
+          {
+            "kind": "it",
+            "name": "cycle-creating add is rejected",
+            "line": 52
+          },
+          {
+            "kind": "it",
+            "name": "self-loop add is rejected",
+            "line": 62
+          },
+          {
+            "kind": "it",
+            "name": "in-tree diamond add is rejected",
+            "line": 69
+          },
+          {
+            "kind": "it",
+            "name": "in-tree name-clash add is rejected (case-variant)",
+            "line": 96
+          },
+          {
+            "kind": "it",
+            "name": "idempotent add (already-existing edge) passes",
+            "line": 106
+          },
+          {
+            "kind": "it",
+            "name": "does NOT mutate input graph",
+            "line": 114
+          },
+          {
+            "kind": "describe",
+            "name": "checkRename",
+            "line": 136
+          },
+          {
+            "kind": "it",
+            "name": "rename to same name is ok (no self-clash)",
+            "line": 137
+          },
+          {
+            "kind": "it",
+            "name": "rename to an unused name passes",
+            "line": 145
+          },
+          {
+            "kind": "it",
+            "name": "rename causing same-tree clash is rejected",
+            "line": 153
+          },
+          {
+            "kind": "it",
+            "name": "rename causing case-variant clash is rejected",
+            "line": 166
+          },
+          {
+            "kind": "it",
+            "name": "rename causing clash in a DIFFERENT containing tree is rejected",
+            "line": 179
+          },
+          {
+            "kind": "it",
+            "name": "cross-tree rename with no clash anywhere passes",
+            "line": 204
+          },
+          {
+            "kind": "it",
+            "name": "does NOT mutate input graph",
+            "line": 216
+          },
+          {
+            "kind": "it",
+            "name": "ignores taxon-name-format validation (the wrapper's concern is §3.3 only)",
+            "line": 224
+          }
+        ]
+      }
+    ],
+    "testCount": 95
+  }
+}

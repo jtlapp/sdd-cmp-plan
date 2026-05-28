@@ -1,0 +1,1743 @@
+{
+  "area": "taxa",
+  "scope": "POST/PATCH/DELETE /taxa, edge endpoints, GET /taxa, GET /trees, taxon store mechanics.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/reads.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "GET /taxa: empty store → 200 with empty list",
+            "line": 42
+          },
+          {
+            "kind": "test",
+            "name": "GET /taxa: returns taxa in creation order with the full record shape",
+            "line": 49
+          },
+          {
+            "kind": "test",
+            "name": "GET /taxa/{id}: existing taxon → 200 with full record",
+            "line": 70
+          },
+          {
+            "kind": "test",
+            "name": "GET /taxa/{id}: missing id → 404 with not_found envelope",
+            "line": 81
+          },
+          {
+            "kind": "test",
+            "name": "GET /taxa/{id}: a shared taxon lists both parents in attachment order",
+            "line": 90
+          },
+          {
+            "kind": "test",
+            "name": "GET /trees: empty store → 200 with empty list",
+            "line": 104
+          },
+          {
+            "kind": "test",
+            "name": "GET /trees: two roots with chains under each — both appear with parentIds: []",
+            "line": 111
+          },
+          {
+            "kind": "test",
+            "name": "GET /trees: a previously-root taxon attached under another parent no longer appears",
+            "line": 129
+          },
+          {
+            "kind": "test",
+            "name": "GET /trees/{rootId}: a leaf root → { id, name, owner, children: [] }",
+            "line": 142
+          },
+          {
+            "kind": "test",
+            "name": "GET /trees/{rootId}: two-children root expands them in insertion order",
+            "line": 153
+          },
+          {
+            "kind": "test",
+            "name": "GET /trees/{rootId}: deeper subtree expanded fully",
+            "line": 168
+          },
+          {
+            "kind": "test",
+            "name": "GET /trees/{rootId}: a shared child appears under both roots when each tree is fetched",
+            "line": 182
+          },
+          {
+            "kind": "test",
+            "name": "GET /trees/{id}: non-root existing id → 404 with 'not a root' message",
+            "line": 195
+          },
+          {
+            "kind": "test",
+            "name": "GET /trees/{id}: missing id → 404 not_found",
+            "line": 207
+          },
+          {
+            "kind": "test",
+            "name": "GET /trees/{rootId}: fixture-induced in-tree diamond finitizes (decision #1)",
+            "line": 215
+          },
+          {
+            "kind": "test",
+            "name": "reads: all four endpoints accept the null user (no X-Username)",
+            "line": 249
+          },
+          {
+            "kind": "test",
+            "name": "reads: all four endpoints accept a registered caller",
+            "line": 258
+          },
+          {
+            "kind": "test",
+            "name": "reads: all four endpoints 403 on an unregistered non-null caller",
+            "line": 268
+          },
+          {
+            "kind": "test",
+            "name": "reads: all four endpoints 400 on malformed X-Username (NBSP-prefixed)",
+            "line": 279
+          },
+          {
+            "kind": "test",
+            "name": "reset: clearing wipes taxa AND resets the ID counter to t1",
+            "line": 294
+          },
+          {
+            "kind": "test",
+            "name": "reset: previously-issued taxon ids 404 on /taxa/{id} and /trees/{id}",
+            "line": 314
+          },
+          {
+            "kind": "test",
+            "name": "reset: trees endpoint after reset returns empty",
+            "line": 325
+          }
+        ]
+      },
+      {
+        "path": "test/taxa.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "taxa: a freshly-reset store has zero taxa",
+            "line": 30
+          },
+          {
+            "kind": "test",
+            "name": "taxa: getState exposes empty taxa and parentsOf maps after reset",
+            "line": 36
+          },
+          {
+            "kind": "test",
+            "name": "taxa: createTaxonFixture assigns t1, t2, t3 in monotonic order",
+            "line": 45
+          },
+          {
+            "kind": "test",
+            "name": "taxa: each new taxon starts with empty childIds and no parents",
+            "line": 55
+          },
+          {
+            "kind": "test",
+            "name": "taxa: name and owner are stored verbatim (no format enforcement in the store)",
+            "line": 62
+          },
+          {
+            "kind": "test",
+            "name": "taxa: attaching a child puts it on the parent's childIds in attachment order",
+            "line": 73
+          },
+          {
+            "kind": "test",
+            "name": "taxa: the derived parent set lists parents in attachment order",
+            "line": 83
+          },
+          {
+            "kind": "test",
+            "name": "taxa: re-attaching the same edge is idempotent",
+            "line": 93
+          },
+          {
+            "kind": "test",
+            "name": "taxa: detachChildFixture removes the edge from both endpoints",
+            "line": 103
+          },
+          {
+            "kind": "test",
+            "name": "taxa: detachChildFixture on a non-existent edge is a no-op",
+            "line": 113
+          },
+          {
+            "kind": "test",
+            "name": "taxa: attachChildFixture throws on unknown parent or child (fixture-author bug)",
+            "line": 123
+          },
+          {
+            "kind": "test",
+            "name": "taxa: deeply-nested attachments preserve insertion order and per-id distinctness",
+            "line": 130
+          },
+          {
+            "kind": "test",
+            "name": "taxa: clear() empties the store AND resets the ID counter",
+            "line": 145
+          },
+          {
+            "kind": "test",
+            "name": "taxa: clear() removes edges from the parents-of index too",
+            "line": 156
+          },
+          {
+            "kind": "test",
+            "name": "taxa: allTaxa returns taxa in creation order (insertion-ordered Map)",
+            "line": 166
+          }
+        ]
+      },
+      {
+        "path": "test/taxaCreate.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "POST /taxa: registered caller creates a root taxon owned by themselves",
+            "line": 51
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: consecutive creates issue distinct monotonic IDs",
+            "line": 65
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: freshly created taxon appears in reads as a root",
+            "line": 83
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: two registered users each create their own taxa, owners distinct",
+            "line": 112
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: null user (no X-Username) → 403 forbidden",
+            "line": 128
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: unregistered well-formed caller → 403 forbidden",
+            "line": 136
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: malformed X-Username (NBSP-prefixed) → 400 validation_error",
+            "line": 143
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: invalid JSON → 400",
+            "line": 153
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: non-object body → 400",
+            "line": 161
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: missing 'name' field → 400",
+            "line": 170
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: 'name' not a string → 400",
+            "line": 178
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: name format violations → 400 (empty, leading/trailing whitespace)",
+            "line": 187
+          },
+          {
+            "kind": "test",
+            "name": "POST /taxa: unknown body keys (including 'owner') are ignored — caller is owner per §6.1",
+            "line": 200
+          }
+        ]
+      },
+      {
+        "path": "test/taxaDelete.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "DELETE taxon: lone root with no children → region {N}, 204",
+            "line": 95
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: root with U-owned children only → cascade deletes everything",
+            "line": 106
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: deep U-owned chain (4+ levels) → all deleted",
+            "line": 127
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: non-root N with one U-owned parent → N's region deleted; parent survives, edge gone",
+            "line": 144
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: single other-owned child at halt point — child not deleted, edge removed, child becomes root",
+            "line": 165
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: halt-frontier child with another parent — survives, retains other parent",
+            "line": 183
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: stranded U-owned descendant below an other-owned halt point — survives (§14 bullet 4)",
+            "line": 204
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: multiple other-owned children at the halt frontier — each detached, edges removed",
+            "line": 227
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: halt-and-detach applies at every level, not just N's children",
+            "line": 253
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: N itself is shared (has two parents) → 409 shared_in_region",
+            "line": 279
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: a U-owned descendant in the region is shared into another tree → 409 shared_in_region",
+            "line": 301
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: a stranded U-owned descendant beneath an other-owned halt point is shared — does NOT trip precondition 1 (it's not in the region)",
+            "line": 323
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: an other-owned halt-frontier taxon is itself shared → 204 (§6.3 parenthetical)",
+            "line": 347
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: N has one parent owned by someone else → 409 parent_not_owned",
+            "line": 370
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: N has multiple parents — at least one precondition fires; tests accept either",
+            "line": 390
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: non-owner caller → 403; no state changes",
+            "line": 418
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: null user → 403",
+            "line": 429
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: unregistered caller → 403",
+            "line": 438
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: malformed X-Username → 400",
+            "line": 447
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: unknown id → 404",
+            "line": 456
+          },
+          {
+            "kind": "test",
+            "name": "DELETE taxon: a precondition-failed delete leaves state byte-identical (no partial cascade)",
+            "line": 466
+          }
+        ]
+      },
+      {
+        "path": "test/taxaEdgeAdd.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "PUT edge: parent owner adds a previously-disconnected child → 204; edge present on both ends",
+            "line": 69
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: re-adding an existing edge → 204 idempotent, no duplicate entries",
+            "line": 84
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: child attached under two different trees → both trees show it; child is shared",
+            "line": 99
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: unknown parent → 404",
+            "line": 118
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: unknown child → 404",
+            "line": 126
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: non-parent-owner caller (even child-owner) → 403",
+            "line": 134
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: null user → 403",
+            "line": 146
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: malformed X-Username → 400",
+            "line": 155
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: self-loop X→X → 409 cycle",
+            "line": 166
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: deeper cycle (attach ancestor under descendant) → 409 cycle",
+            "line": 178
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: in-tree diamond (child reachable from same root twice) → 409 in_tree_duplicate",
+            "line": 197
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: in-tree name clash → 409 name_clash",
+            "line": 217
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: grafting a subtree whose internal name clashes with the receiving tree → 409",
+            "line": 235
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: same name allowed under two different trees",
+            "line": 253
+          },
+          {
+            "kind": "test",
+            "name": "PUT edge: invariant rejection leaves state byte-identical (no partial edge)",
+            "line": 269
+          }
+        ]
+      },
+      {
+        "path": "test/taxaEdgeRemove.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "DELETE edge: parent owner detaches a single-parent child → 204; child becomes a root",
+            "line": 83
+          },
+          {
+            "kind": "test",
+            "name": "DELETE edge: detaching a shared child → 204; child retains other parents",
+            "line": 102
+          },
+          {
+            "kind": "test",
+            "name": "DELETE edge: detach preserves the child's subtree (§7 detach ≠ delete)",
+            "line": 120
+          },
+          {
+            "kind": "test",
+            "name": "DELETE edge: unknown parent → 404",
+            "line": 144
+          },
+          {
+            "kind": "test",
+            "name": "DELETE edge: unknown child → 404",
+            "line": 152
+          },
+          {
+            "kind": "test",
+            "name": "DELETE edge: both exist but no edge between them → 404 (decision #3)",
+            "line": 160
+          },
+          {
+            "kind": "test",
+            "name": "DELETE edge: non-parent-owner → 403",
+            "line": 171
+          },
+          {
+            "kind": "test",
+            "name": "DELETE edge: null user → 403",
+            "line": 184
+          },
+          {
+            "kind": "test",
+            "name": "DELETE edge: unregistered caller → 403",
+            "line": 195
+          },
+          {
+            "kind": "test",
+            "name": "DELETE edge: malformed X-Username → 400",
+            "line": 206
+          },
+          {
+            "kind": "test",
+            "name": "DELETE edge: post-detach the child is still in /taxa (detach is not delete)",
+            "line": 217
+          }
+        ]
+      },
+      {
+        "path": "test/taxaEdit.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: owner renames → 200 with updated record",
+            "line": 80
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: owner reassigns to another registered user — recipient may then act, original cannot",
+            "line": 95
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: both name AND owner in one call → both applied atomically",
+            "line": 114
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: reassigning owner to self → 200 no-op",
+            "line": 127
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: setting name to the current value → 200 no-op (validates trivially)",
+            "line": 138
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: case-only name change (Fantasy → FANTASY) → 200, casing updates",
+            "line": 149
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: unknown id → 404",
+            "line": 161
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: non-owner caller → 403",
+            "line": 169
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: null user → 403",
+            "line": 180
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: unregistered caller → 403",
+            "line": 189
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: malformed X-Username (NBSP) → 400",
+            "line": 198
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: empty body → 400 (decision #1)",
+            "line": 209
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: body without name/owner (only unknown keys) → 400",
+            "line": 219
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: name not a string → 400",
+            "line": 228
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: malformed name (empty, leading/trailing whitespace) → 400",
+            "line": 239
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: owner not a string / null / empty / malformed → 400",
+            "line": 250
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: owner well-formed but unregistered → 400 (decision #9)",
+            "line": 262
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: unknown keys alongside a valid change are ignored (decision #6)",
+            "line": 272
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: rename to a sibling's name in same tree → 409 conflict (name_clash)",
+            "line": 284
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: rename to case-variant of sibling → 409 (case-insensitive per §3.4)",
+            "line": 300
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: cross-tree rename — valid in 'own' tree, invalid in another containing tree → 409 (the §3.3 / §14 bullet-5 keystone)",
+            "line": 313
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: rename that doesn't clash anywhere → 200, visible in every containing tree",
+            "line": 341
+          },
+          {
+            "kind": "test",
+            "name": "PATCH /taxa/{id}: 409 envelope carries kind + offending root/taxa in details",
+            "line": 364
+          }
+        ]
+      }
+    ],
+    "testCount": 120
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/taxa/delete-edge.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "DELETE edge: detach success",
+            "line": 29
+          },
+          {
+            "kind": "it",
+            "name": "parent-owner detaches an existing edge",
+            "line": 30
+          },
+          {
+            "kind": "it",
+            "name": "detached child with no other parents becomes a root",
+            "line": 51
+          },
+          {
+            "kind": "it",
+            "name": "detach preserves the child's subtree",
+            "line": 71
+          },
+          {
+            "kind": "describe",
+            "name": "DELETE edge: 404 edge-not-found",
+            "line": 102
+          },
+          {
+            "kind": "it",
+            "name": "detach of non-existent edge → 404 edge-not-found",
+            "line": 103
+          },
+          {
+            "kind": "it",
+            "name": "repeated DELETE: first 204, second 404",
+            "line": 121
+          },
+          {
+            "kind": "describe",
+            "name": "DELETE edge: authorization and existence ordering",
+            "line": 146
+          },
+          {
+            "kind": "it",
+            "name": "non-parent-owner → 403 not-parent-owner",
+            "line": 147
+          },
+          {
+            "kind": "it",
+            "name": "null caller → 403",
+            "line": 169
+          },
+          {
+            "kind": "it",
+            "name": "unknown parent → 404 taxon-not-found",
+            "line": 183
+          },
+          {
+            "kind": "it",
+            "name": "unknown child by parent-owner → 404 taxon-not-found",
+            "line": 195
+          },
+          {
+            "kind": "it",
+            "name": "unknown child by non-owner → 403 not-parent-owner (NOT 404)",
+            "line": 208
+          }
+        ]
+      },
+      {
+        "path": "test/taxa/delete-taxon.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "DELETE taxon: success cases",
+            "line": 25
+          },
+          {
+            "kind": "it",
+            "name": "owner deletes a leaf root",
+            "line": 26
+          },
+          {
+            "kind": "it",
+            "name": "owner deletes a wholly-owned subtree",
+            "line": 41
+          },
+          {
+            "kind": "it",
+            "name": "cascade halts at other-owned child (detached, not deleted)",
+            "line": 67
+          },
+          {
+            "kind": "it",
+            "name": "cascade does NOT continue past halt frontier even into owner-owned descendants",
+            "line": 96
+          },
+          {
+            "kind": "it",
+            "name": "delete of a non-root taxon with a single owner-owned parent succeeds",
+            "line": 128
+          },
+          {
+            "kind": "it",
+            "name": "halt-frontier other-owned taxon that is itself shared elsewhere does NOT trip precondition 1",
+            "line": 149
+          },
+          {
+            "kind": "describe",
+            "name": "DELETE taxon: precondition 1 (region contains shared taxon)",
+            "line": 180
+          },
+          {
+            "kind": "it",
+            "name": "region taxon in multiple trees (sibling roots) → 409 delete-region-shared",
+            "line": 181
+          },
+          {
+            "kind": "it",
+            "name": "region taxon shared via ancestor's fan-out → 409 delete-region-shared (disproves parent-count shortcut)",
+            "line": 210
+          },
+          {
+            "kind": "describe",
+            "name": "DELETE taxon: precondition 2 (parent not owned)",
+            "line": 253
+          },
+          {
+            "kind": "it",
+            "name": "N has a parent owned by another user → 409 delete-parent-not-owned",
+            "line": 254
+          },
+          {
+            "kind": "it",
+            "name": "precondition 1 fires before precondition 2 when both would fail",
+            "line": 276
+          },
+          {
+            "kind": "describe",
+            "name": "DELETE taxon: errors",
+            "line": 304
+          },
+          {
+            "kind": "it",
+            "name": "non-owner → 403 not-owner",
+            "line": 305
+          },
+          {
+            "kind": "it",
+            "name": "unknown id → 404 taxon-not-found",
+            "line": 319
+          },
+          {
+            "kind": "it",
+            "name": "null caller → 403 forbidden",
+            "line": 331
+          },
+          {
+            "kind": "it",
+            "name": "unregistered caller → 403 forbidden",
+            "line": 339
+          },
+          {
+            "kind": "describe",
+            "name": "DELETE taxon: post-state consistency",
+            "line": 350
+          },
+          {
+            "kind": "it",
+            "name": "after a successful delete, no dangling references remain",
+            "line": 351
+          }
+        ]
+      },
+      {
+        "path": "test/taxa/http.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "GET /taxa: openness",
+            "line": 55
+          },
+          {
+            "kind": "it",
+            "name": "null user can read",
+            "line": 56
+          },
+          {
+            "kind": "it",
+            "name": "unregistered caller can read",
+            "line": 62
+          },
+          {
+            "kind": "it",
+            "name": "registered caller can read",
+            "line": 68
+          },
+          {
+            "kind": "describe",
+            "name": "GET /taxa: response shape",
+            "line": 76
+          },
+          {
+            "kind": "it",
+            "name": "empty store returns {taxa: []}",
+            "line": 77
+          },
+          {
+            "kind": "it",
+            "name": "wraps in object, not bare array",
+            "line": 84
+          },
+          {
+            "kind": "it",
+            "name": "single taxon entry has all six fields",
+            "line": 92
+          },
+          {
+            "kind": "it",
+            "name": "populates children and parents",
+            "line": 108
+          },
+          {
+            "kind": "it",
+            "name": "shared:true for taxa in multiple trees; shared:false for roots and unshared",
+            "line": 134
+          },
+          {
+            "kind": "it",
+            "name": "preserves owner casing",
+            "line": 154
+          },
+          {
+            "kind": "it",
+            "name": "reads do not gatekeep on invariant violations",
+            "line": 163
+          },
+          {
+            "kind": "describe",
+            "name": "GET /taxa/{id}",
+            "line": 186
+          },
+          {
+            "kind": "it",
+            "name": "returns 200 with {taxon: ...} for existing id",
+            "line": 187
+          },
+          {
+            "kind": "it",
+            "name": "returns 404 taxon-not-found for unknown id",
+            "line": 201
+          },
+          {
+            "kind": "it",
+            "name": "syntactically odd id returns 404 not 400",
+            "line": 210
+          },
+          {
+            "kind": "it",
+            "name": "null user can fetch by id",
+            "line": 218
+          },
+          {
+            "kind": "describe",
+            "name": "GET /trees",
+            "line": 226
+          },
+          {
+            "kind": "it",
+            "name": "empty store returns {roots: []}",
+            "line": 227
+          },
+          {
+            "kind": "it",
+            "name": "lists roots with id and name; excludes non-roots",
+            "line": 234
+          },
+          {
+            "kind": "it",
+            "name": "null user can read",
+            "line": 252
+          },
+          {
+            "kind": "describe",
+            "name": "GET /trees/{rootId}",
+            "line": 259
+          },
+          {
+            "kind": "it",
+            "name": "returns single-root tree with empty children",
+            "line": 260
+          },
+          {
+            "kind": "it",
+            "name": "recursively expands children",
+            "line": 278
+          },
+          {
+            "kind": "it",
+            "name": "shared taxon appears once per tree with shared:true",
+            "line": 299
+          },
+          {
+            "kind": "it",
+            "name": "Node shape omits parents",
+            "line": 325
+          },
+          {
+            "kind": "it",
+            "name": "unknown rootId returns 404 root-not-found",
+            "line": 340
+          },
+          {
+            "kind": "it",
+            "name": "non-root taxon id returns 404 root-not-found",
+            "line": 349
+          },
+          {
+            "kind": "it",
+            "name": "null user can read",
+            "line": 364
+          },
+          {
+            "kind": "describe",
+            "name": "Structural — no handler invokes the gate or the invariant engine",
+            "line": 372
+          },
+          {
+            "kind": "it",
+            "name": "unregistered caller can read all four endpoints (sanity for openness)",
+            "line": 376
+          }
+        ]
+      },
+      {
+        "path": "test/taxa/patch-taxon.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "PATCH /taxa/{id}: rename success",
+            "line": 37
+          },
+          {
+            "kind": "it",
+            "name": "owner renames their own taxon",
+            "line": 38
+          },
+          {
+            "kind": "it",
+            "name": "rename to current name is a no-op success",
+            "line": 53
+          },
+          {
+            "kind": "it",
+            "name": "ownership check is case-insensitive",
+            "line": 66
+          },
+          {
+            "kind": "describe",
+            "name": "PATCH /taxa/{id}: rename conflicts",
+            "line": 79
+          },
+          {
+            "kind": "it",
+            "name": "in-tree clash → 409 in-tree-name-clash",
+            "line": 80
+          },
+          {
+            "kind": "it",
+            "name": "cross-tree clash surfaces the other root",
+            "line": 107
+          },
+          {
+            "kind": "describe",
+            "name": "PATCH /taxa/{id}: owner reassignment",
+            "line": 135
+          },
+          {
+            "kind": "it",
+            "name": "owner reassignment to a registered user succeeds",
+            "line": 136
+          },
+          {
+            "kind": "it",
+            "name": "after reassignment the prior owner gets 403 on subsequent PATCH",
+            "line": 150
+          },
+          {
+            "kind": "it",
+            "name": "owner reassignment canonicalizes casing to the registry's stored form",
+            "line": 170
+          },
+          {
+            "kind": "it",
+            "name": "self-reassignment is a no-op success",
+            "line": 184
+          },
+          {
+            "kind": "it",
+            "name": "unregistered new owner → 400 unregistered-owner",
+            "line": 197
+          },
+          {
+            "kind": "it",
+            "name": "null owner → 400 (username-format violation, value not a string)",
+            "line": 213
+          },
+          {
+            "kind": "it",
+            "name": "empty-string owner → 400 (empty)",
+            "line": 227
+          },
+          {
+            "kind": "describe",
+            "name": "PATCH /taxa/{id}: combined rename + reassign",
+            "line": 242
+          },
+          {
+            "kind": "it",
+            "name": "both apply atomically on success",
+            "line": 243
+          },
+          {
+            "kind": "it",
+            "name": "rename failure rolls back the owner change too",
+            "line": 261
+          },
+          {
+            "kind": "describe",
+            "name": "PATCH /taxa/{id}: errors and validation order",
+            "line": 291
+          },
+          {
+            "kind": "it",
+            "name": "unknown taxon → 404",
+            "line": 292
+          },
+          {
+            "kind": "it",
+            "name": "non-owner → 403 not-owner",
+            "line": 305
+          },
+          {
+            "kind": "it",
+            "name": "null caller → 403 (no details.tag from this layer)",
+            "line": 320
+          },
+          {
+            "kind": "it",
+            "name": "empty body → 400 empty-patch",
+            "line": 332
+          },
+          {
+            "kind": "it",
+            "name": "non-JSON body → 400 malformed-body",
+            "line": 346
+          },
+          {
+            "kind": "it",
+            "name": "malformed name → 400 with format tag",
+            "line": 360
+          },
+          {
+            "kind": "it",
+            "name": "validation order: unregistered-owner fires before checkRename",
+            "line": 374
+          },
+          {
+            "kind": "it",
+            "name": "validation order: malformed-body fires before owner-registry lookup",
+            "line": 399
+          }
+        ]
+      },
+      {
+        "path": "test/taxa/post-taxa.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /taxa: happy path",
+            "line": 27
+          },
+          {
+            "kind": "it",
+            "name": "registered creator gets 201 with the full serialized taxon",
+            "line": 28
+          },
+          {
+            "kind": "it",
+            "name": "created taxon is visible in GET /taxa, /taxa/{id}, /trees",
+            "line": 50
+          },
+          {
+            "kind": "it",
+            "name": "IDs increment monotonically across creates",
+            "line": 75
+          },
+          {
+            "kind": "it",
+            "name": "owner is stored in registered casing regardless of X-Username casing",
+            "line": 89
+          },
+          {
+            "kind": "describe",
+            "name": "POST /taxa: auth gate",
+            "line": 102
+          },
+          {
+            "kind": "it",
+            "name": "null caller is forbidden",
+            "line": 103
+          },
+          {
+            "kind": "it",
+            "name": "unregistered caller is forbidden",
+            "line": 115
+          },
+          {
+            "kind": "describe",
+            "name": "POST /taxa: body validation",
+            "line": 128
+          },
+          {
+            "kind": "it",
+            "name": "non-JSON body is malformed-body 400",
+            "line": 129
+          },
+          {
+            "kind": "it",
+            "name": "missing name is missing-name 400",
+            "line": 143
+          },
+          {
+            "kind": "it",
+            "name": "non-string name is missing-name 400",
+            "line": 156
+          },
+          {
+            "kind": "it",
+            "name": "empty name is the format validator's tag 400",
+            "line": 169
+          },
+          {
+            "kind": "it",
+            "name": "leading-whitespace name is leading-whitespace 400",
+            "line": 182
+          },
+          {
+            "kind": "it",
+            "name": "validation order: malformed-body before missing-name",
+            "line": 195
+          },
+          {
+            "kind": "it",
+            "name": "validation order: missing-name before format check",
+            "line": 207
+          },
+          {
+            "kind": "describe",
+            "name": "POST /taxa: reset and concurrency",
+            "line": 220
+          },
+          {
+            "kind": "it",
+            "name": "POST /reset clears created taxa and zeros the counter",
+            "line": 221
+          },
+          {
+            "kind": "it",
+            "name": "ten concurrent POSTs yield exactly ten distinct IDs t1..t10",
+            "line": 247
+          }
+        ]
+      },
+      {
+        "path": "test/taxa/put-edge-subtree.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "PUT edge: subtree-merging",
+            "line": 23
+          },
+          {
+            "kind": "it",
+            "name": "child's subtree contains the parent → 409 cycle",
+            "line": 24
+          },
+          {
+            "kind": "it",
+            "name": "child's subtree contains a taxon already reachable from parent's root → 409 in-tree-duplicate",
+            "line": 49
+          },
+          {
+            "kind": "it",
+            "name": "child's deep descendant has a name clashing with parent's tree (case variant) → 409 in-tree-name-clash",
+            "line": 79
+          },
+          {
+            "kind": "it",
+            "name": "child's subtree shares with another tree (no violation) → 204",
+            "line": 108
+          }
+        ]
+      },
+      {
+        "path": "test/taxa/put-edge.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "PUT edge: happy path",
+            "line": 20
+          },
+          {
+            "kind": "it",
+            "name": "parent-owner adds a safe edge",
+            "line": 21
+          },
+          {
+            "kind": "it",
+            "name": "existing edge is idempotent (204)",
+            "line": 42
+          },
+          {
+            "kind": "describe",
+            "name": "PUT edge: authorization and existence ordering",
+            "line": 63
+          },
+          {
+            "kind": "it",
+            "name": "non-parent-owner → 403 not-parent-owner",
+            "line": 64
+          },
+          {
+            "kind": "it",
+            "name": "null caller → 403 forbidden",
+            "line": 83
+          },
+          {
+            "kind": "it",
+            "name": "unknown parent → 404 taxon-not-found",
+            "line": 96
+          },
+          {
+            "kind": "it",
+            "name": "unknown child by parent-owner → 404 taxon-not-found",
+            "line": 108
+          },
+          {
+            "kind": "it",
+            "name": "unknown child by non-owner → 403 not-parent-owner (NOT 404)",
+            "line": 121
+          },
+          {
+            "kind": "describe",
+            "name": "PUT edge: self-loop short-circuit",
+            "line": 136
+          },
+          {
+            "kind": "it",
+            "name": "parentId === childId → 400 same-parent-and-child",
+            "line": 137
+          },
+          {
+            "kind": "describe",
+            "name": "PUT edge: invariant conflicts",
+            "line": 151
+          },
+          {
+            "kind": "it",
+            "name": "creating a cycle → 409 cycle",
+            "line": 152
+          },
+          {
+            "kind": "it",
+            "name": "creating an in-tree diamond → 409 in-tree-duplicate",
+            "line": 171
+          },
+          {
+            "kind": "it",
+            "name": "creating an in-tree name clash → 409 in-tree-name-clash (case variant)",
+            "line": 197
+          }
+        ]
+      },
+      {
+        "path": "test/taxa/serialize.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "serializeTaxon",
+            "line": 40
+          },
+          {
+            "kind": "it",
+            "name": "returns undefined for unknown id",
+            "line": 41
+          },
+          {
+            "kind": "it",
+            "name": "exposes all six fields including shared:false for a root",
+            "line": 46
+          },
+          {
+            "kind": "it",
+            "name": "populates children and parents",
+            "line": 58
+          },
+          {
+            "kind": "it",
+            "name": "marks shared:true for taxa in multiple trees",
+            "line": 71
+          },
+          {
+            "kind": "describe",
+            "name": "serializeAllTaxa",
+            "line": 85
+          },
+          {
+            "kind": "it",
+            "name": "empty graph yields empty array",
+            "line": 86
+          },
+          {
+            "kind": "it",
+            "name": "returns one entry per taxon with full shape",
+            "line": 90
+          },
+          {
+            "kind": "it",
+            "name": "response is internally consistent (every parent/child pair is symmetric)",
+            "line": 106
+          },
+          {
+            "kind": "describe",
+            "name": "serializeRootsList",
+            "line": 134
+          },
+          {
+            "kind": "it",
+            "name": "empty graph yields empty array",
+            "line": 135
+          },
+          {
+            "kind": "it",
+            "name": "lists only roots with id and name",
+            "line": 141
+          },
+          {
+            "kind": "describe",
+            "name": "serializeTreeFrom",
+            "line": 154
+          },
+          {
+            "kind": "it",
+            "name": "returns undefined for unknown rootId",
+            "line": 155
+          },
+          {
+            "kind": "it",
+            "name": "returns undefined when the id exists but is not a root",
+            "line": 160
+          },
+          {
+            "kind": "it",
+            "name": "single root with no children",
+            "line": 168
+          },
+          {
+            "kind": "it",
+            "name": "recursively expands children",
+            "line": 183
+          },
+          {
+            "kind": "it",
+            "name": "shared taxon appears once per tree with shared:true",
+            "line": 199
+          },
+          {
+            "kind": "it",
+            "name": "Node shape omits parents",
+            "line": 218
+          }
+        ]
+      },
+      {
+        "path": "test/taxa/store-writes.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "createTaxon",
+            "line": 20
+          },
+          {
+            "kind": "it",
+            "name": "mints t1 first on a fresh store and inserts as a root",
+            "line": 21
+          },
+          {
+            "kind": "it",
+            "name": "continues the counter across creates",
+            "line": 31
+          },
+          {
+            "kind": "it",
+            "name": "stores owner verbatim — no normalization",
+            "line": 37
+          },
+          {
+            "kind": "it",
+            "name": "interoperates with seed (same counter)",
+            "line": 42
+          },
+          {
+            "kind": "describe",
+            "name": "setTaxonFields",
+            "line": 49
+          },
+          {
+            "kind": "it",
+            "name": "updates name only",
+            "line": 50
+          },
+          {
+            "kind": "it",
+            "name": "updates owner only",
+            "line": 57
+          },
+          {
+            "kind": "it",
+            "name": "updates both fields",
+            "line": 63
+          },
+          {
+            "kind": "it",
+            "name": "no-op patch (empty object) returns the current taxon unchanged",
+            "line": 69
+          },
+          {
+            "kind": "it",
+            "name": "throws plain Error on unknown id",
+            "line": 75
+          },
+          {
+            "kind": "it",
+            "name": "stores owner verbatim (no normalization at the store seam)",
+            "line": 79
+          },
+          {
+            "kind": "describe",
+            "name": "addEdge",
+            "line": 86
+          },
+          {
+            "kind": "it",
+            "name": "updates both indices atomically",
+            "line": 87
+          },
+          {
+            "kind": "it",
+            "name": "is idempotent on re-entry (Set semantics)",
+            "line": 97
+          },
+          {
+            "kind": "it",
+            "name": "throws on unknown parent",
+            "line": 107
+          },
+          {
+            "kind": "it",
+            "name": "throws on unknown child",
+            "line": 112
+          },
+          {
+            "kind": "describe",
+            "name": "removeEdge",
+            "line": 118
+          },
+          {
+            "kind": "it",
+            "name": "returns true when an edge existed and was removed",
+            "line": 119
+          },
+          {
+            "kind": "it",
+            "name": "returns false when the edge did not exist",
+            "line": 129
+          },
+          {
+            "kind": "it",
+            "name": "does not throw on unknown parent",
+            "line": 135
+          },
+          {
+            "kind": "it",
+            "name": "does not throw on unknown child",
+            "line": 140
+          },
+          {
+            "kind": "describe",
+            "name": "deleteRegion",
+            "line": 146
+          },
+          {
+            "kind": "it",
+            "name": "removes region taxa and detaches halt-frontier edges in one call",
+            "line": 147
+          },
+          {
+            "kind": "it",
+            "name": "preserves dual-index consistency afterwards",
+            "line": 171
+          },
+          {
+            "kind": "it",
+            "name": "empty region with empty frontier is a no-op",
+            "line": 204
+          },
+          {
+            "kind": "it",
+            "name": "frontier-only call removes the edges without removing taxa",
+            "line": 213
+          },
+          {
+            "kind": "it",
+            "name": "removes outgoing-only edges of region taxa when frontier not enumerated",
+            "line": 229
+          },
+          {
+            "kind": "describe",
+            "name": "seed helper continues to work after Phase 4 additions",
+            "line": 254
+          },
+          {
+            "kind": "it",
+            "name": "seed and createTaxon share the same counter",
+            "line": 255
+          },
+          {
+            "kind": "it",
+            "name": "seed still mints t1 after reset",
+            "line": 263
+          }
+        ]
+      },
+      {
+        "path": "test/taxa/store.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "empty store baseline",
+            "line": 15
+          },
+          {
+            "kind": "it",
+            "name": "snapshot is empty at boot",
+            "line": 16
+          },
+          {
+            "kind": "it",
+            "name": "listRoots is empty",
+            "line": 23
+          },
+          {
+            "kind": "it",
+            "name": "getById returns undefined on empty store",
+            "line": 27
+          },
+          {
+            "kind": "describe",
+            "name": "seed: ID minting",
+            "line": 32
+          },
+          {
+            "kind": "it",
+            "name": "first minted ID is t1",
+            "line": 33
+          },
+          {
+            "kind": "it",
+            "name": "mints monotonically across taxa in one call",
+            "line": 40
+          },
+          {
+            "kind": "it",
+            "name": "mints monotonically across calls",
+            "line": 51
+          },
+          {
+            "kind": "describe",
+            "name": "seed: edge installation",
+            "line": 64
+          },
+          {
+            "kind": "it",
+            "name": "installs edges in both indices",
+            "line": 65
+          },
+          {
+            "kind": "it",
+            "name": "multi-edge consistency: textbook DAG",
+            "line": 81
+          },
+          {
+            "kind": "it",
+            "name": "permits cycles",
+            "line": 106
+          },
+          {
+            "kind": "it",
+            "name": "permits self-loop",
+            "line": 127
+          },
+          {
+            "kind": "it",
+            "name": "permits in-tree diamond (invariant 2 violation)",
+            "line": 137
+          },
+          {
+            "kind": "it",
+            "name": "rejects an edge referencing an unknown ID with a plain Error",
+            "line": 156
+          },
+          {
+            "kind": "it",
+            "name": "rejects an edge referencing an unknown parent",
+            "line": 173
+          },
+          {
+            "kind": "it",
+            "name": "accepts pre-existing IDs in subsequent edges",
+            "line": 184
+          },
+          {
+            "kind": "describe",
+            "name": "getById and listRoots",
+            "line": 200
+          },
+          {
+            "kind": "it",
+            "name": "getById returns the stored entity",
+            "line": 201
+          },
+          {
+            "kind": "it",
+            "name": "getById returns undefined for an unknown ID",
+            "line": 210
+          },
+          {
+            "kind": "it",
+            "name": "listRoots lists parentless taxa",
+            "line": 215
+          },
+          {
+            "kind": "it",
+            "name": "listRoots excludes non-root taxa",
+            "line": 232
+          },
+          {
+            "kind": "describe",
+            "name": "reset",
+            "line": 245
+          },
+          {
+            "kind": "it",
+            "name": "clears all three indices",
+            "line": 246
+          },
+          {
+            "kind": "it",
+            "name": "zeroes the ID counter so the next mint is t1",
+            "line": 262
+          },
+          {
+            "kind": "describe",
+            "name": "snapshot: live view per Decision 6",
+            "line": 275
+          },
+          {
+            "kind": "it",
+            "name": "reflects current store state",
+            "line": 276
+          },
+          {
+            "kind": "it",
+            "name": "is a live view: post-snapshot mutations are visible through it",
+            "line": 282
+          }
+        ]
+      }
+    ],
+    "testCount": 208
+  }
+}

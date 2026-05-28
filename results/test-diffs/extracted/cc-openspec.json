@@ -1,0 +1,6041 @@
+{
+  "project": "sdd-cmp-cc-openspec",
+  "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+  "files": [
+    {
+      "path": "test/app.integration.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 2 integration: bootstrap flow",
+          "line": 23
+        },
+        {
+          "kind": "it",
+          "name": "fresh server → reset → register → list → identity classifies caller",
+          "line": 24
+        },
+        {
+          "kind": "describe",
+          "name": "Phase 2 integration: register-then-reset reclassifies identity",
+          "line": 54
+        },
+        {
+          "kind": "it",
+          "name": "registered caller becomes unregistered after POST /reset",
+          "line": 55
+        },
+        {
+          "kind": "describe",
+          "name": "Phase 2 integration: cross-casing round trip",
+          "line": 78
+        },
+        {
+          "kind": "it",
+          "name": "Caller.username is the registry's stored casing on read",
+          "line": 79
+        },
+        {
+          "kind": "describe",
+          "name": "Phase 2 integration: Phase 1 regressions still hold",
+          "line": 94
+        },
+        {
+          "kind": "it",
+          "name": "GET /health is unaffected by the identity middleware",
+          "line": 95
+        },
+        {
+          "kind": "it",
+          "name": "unknown route still 404s with the standard envelope",
+          "line": 104
+        }
+      ]
+    },
+    {
+      "path": "test/app.phase3.integration.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 3 integration: full lifecycle",
+          "line": 35
+        },
+        {
+          "kind": "it",
+          "name": "register → seed → read each endpoint → reset → reads empty",
+          "line": 36
+        },
+        {
+          "kind": "describe",
+          "name": "Phase 3 integration: shared:true surfaces end-to-end",
+          "line": 78
+        },
+        {
+          "kind": "it",
+          "name": "a shared taxon shows shared:true via both /taxa and the containing /trees responses",
+          "line": 79
+        }
+      ]
+    },
+    {
+      "path": "test/app.phase4.integration.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 4 integration: two-user lifecycle",
+          "line": 32
+        },
+        {
+          "kind": "it",
+          "name": "register → create → add edge → PATCH owner → DELETE",
+          "line": 33
+        },
+        {
+          "kind": "describe",
+          "name": "Phase 4 integration: multi-step collaborative delete (§14)",
+          "line": 135
+        },
+        {
+          "kind": "it",
+          "name": "blocked shared delete becomes unblocked after detaching the share",
+          "line": 136
+        },
+        {
+          "kind": "describe",
+          "name": "Phase 4 integration: §11.1 concurrent serialization",
+          "line": 209
+        },
+        {
+          "kind": "it",
+          "name": "ten concurrent POST /taxa requests produce ten distinct taxa with sequential IDs",
+          "line": 210
+        },
+        {
+          "kind": "it",
+          "name": "concurrent PATCHes on the same taxon serialize: final name is one of the two",
+          "line": 238
+        }
+      ]
+    },
+    {
+      "path": "test/app.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Hono app: routes resolve",
+          "line": 5
+        },
+        {
+          "kind": "it",
+          "name": "/health resolves (not 404)",
+          "line": 6
+        },
+        {
+          "kind": "it",
+          "name": "/reset resolves on POST (not 404)",
+          "line": 13
+        },
+        {
+          "kind": "describe",
+          "name": "Hono app: unknown route",
+          "line": 21
+        },
+        {
+          "kind": "it",
+          "name": "returns 404 with the standard error envelope",
+          "line": 22
+        },
+        {
+          "kind": "it",
+          "name": "POST to /health returns the envelope (wrong method)",
+          "line": 33
+        }
+      ]
+    },
+    {
+      "path": "test/auth/envelope.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "authorization gate: registered caller passes",
+          "line": 30
+        },
+        {
+          "kind": "it",
+          "name": "returns 200 with the username",
+          "line": 31
+        },
+        {
+          "kind": "describe",
+          "name": "authorization gate: null caller is 403 forbidden",
+          "line": 42
+        },
+        {
+          "kind": "it",
+          "name": "emits the standard forbidden envelope",
+          "line": 43
+        },
+        {
+          "kind": "describe",
+          "name": "authorization gate: unregistered caller is 403 forbidden",
+          "line": 56
+        },
+        {
+          "kind": "it",
+          "name": "emits the standard forbidden envelope",
+          "line": 57
+        },
+        {
+          "kind": "it",
+          "name": "does not echo the rejected username",
+          "line": 67
+        },
+        {
+          "kind": "describe",
+          "name": "authorization gate: null and unregistered share error.code",
+          "line": 80
+        },
+        {
+          "kind": "it",
+          "name": "both responses have code = forbidden and status 403",
+          "line": 81
+        },
+        {
+          "kind": "describe",
+          "name": "authorization gate: registered caller via different-case header",
+          "line": 102
+        },
+        {
+          "kind": "it",
+          "name": "the gate sees the registry's stored casing, not the header's",
+          "line": 103
+        }
+      ]
+    },
+    {
+      "path": "test/auth/require-registered.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "requireRegistered: registered caller",
+          "line": 25
+        },
+        {
+          "kind": "it",
+          "name": "returns { username } with the stored casing",
+          "line": 26
+        },
+        {
+          "kind": "it",
+          "name": "returns an object, not a bare string",
+          "line": 32
+        },
+        {
+          "kind": "describe",
+          "name": "requireRegistered: null caller is forbidden",
+          "line": 40
+        },
+        {
+          "kind": "it",
+          "name": "throws ApiError with code = forbidden",
+          "line": 41
+        },
+        {
+          "kind": "it",
+          "name": "does not include details (no details.tag for gate failures)",
+          "line": 54
+        },
+        {
+          "kind": "describe",
+          "name": "requireRegistered: unregistered caller is forbidden",
+          "line": 66
+        },
+        {
+          "kind": "it",
+          "name": "throws ApiError with code = forbidden",
+          "line": 67
+        },
+        {
+          "kind": "it",
+          "name": "does not echo the rejected username back to the caller",
+          "line": 78
+        },
+        {
+          "kind": "describe",
+          "name": "requireRegistered: null and unregistered share error.code",
+          "line": 94
+        },
+        {
+          "kind": "it",
+          "name": "both produce code = forbidden (differentiable only via message, if at all)",
+          "line": 95
+        },
+        {
+          "kind": "describe",
+          "name": "requireRegistered: reads only c.get('caller')",
+          "line": 118
+        },
+        {
+          "kind": "it",
+          "name": "does NOT consult c.req at all (sanity-check via tripwire context)",
+          "line": 119
+        }
+      ]
+    },
+    {
+      "path": "test/changes/accept-handler.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept: auth + precondition triplet",
+          "line": 73
+        },
+        {
+          "kind": "it",
+          "name": "null caller → 403 forbidden",
+          "line": 74
+        },
+        {
+          "kind": "it",
+          "name": "unregistered caller → 403 forbidden",
+          "line": 82
+        },
+        {
+          "kind": "it",
+          "name": "unknown change id → 404 change-not-found",
+          "line": 91
+        },
+        {
+          "kind": "it",
+          "name": "non-reviewer caller → 403 not-reviewer",
+          "line": 103
+        },
+        {
+          "kind": "it",
+          "name": "case-different caller passes reviewer check",
+          "line": 129
+        },
+        {
+          "kind": "it",
+          "name": "non-queued (latent) → 409 change-not-queued",
+          "line": 152
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept: rename success",
+          "line": 190
+        },
+        {
+          "kind": "it",
+          "name": "rename applies to live graph and transitions to accepted",
+          "line": 191
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept: add-create success",
+          "line": 222
+        },
+        {
+          "kind": "it",
+          "name": "mints new taxon owned by caller and adds edge",
+          "line": 223
+        },
+        {
+          "kind": "it",
+          "name": "accepting reviewer becomes owner (not the proposer)",
+          "line": 256
+        },
+        {
+          "kind": "it",
+          "name": "acceptedBy preserves registry casing regardless of header casing",
+          "line": 279
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept: add-graft success",
+          "line": 301
+        },
+        {
+          "kind": "it",
+          "name": "adds edge to live graph",
+          "line": 302
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept: detach success",
+          "line": 340
+        },
+        {
+          "kind": "it",
+          "name": "removes edge from live graph (no invariant check)",
+          "line": 341
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept: failure → invalid + stays in queue",
+          "line": 377
+        },
+        {
+          "kind": "it",
+          "name": "invariant violation (name clash) → 409 accept-invariant-violation; change invalid in queue",
+          "line": 378
+        },
+        {
+          "kind": "it",
+          "name": "retry on invalid change still refuses with change-not-queued",
+          "line": 421
+        },
+        {
+          "kind": "it",
+          "name": "precondition failure (target deleted) → 409 accept-precondition-failed",
+          "line": 459
+        },
+        {
+          "kind": "it",
+          "name": "failed add-create does not insert a zombie taxon",
+          "line": 504
+        },
+        {
+          "kind": "it",
+          "name": "failed accept does not mutate live graph",
+          "line": 537
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept: response shape",
+          "line": 602
+        },
+        {
+          "kind": "it",
+          "name": "response status field matches GET /proposals/{id}",
+          "line": 603
+        }
+      ]
+    },
+    {
+      "path": "test/changes/apply.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "applyAcceptedChange — rename",
+          "line": 97
+        },
+        {
+          "kind": "it",
+          "name": "success: renames the live taxon",
+          "line": 98
+        },
+        {
+          "kind": "it",
+          "name": "failure on in-tree name clash: violation returned, no mutation",
+          "line": 106
+        },
+        {
+          "kind": "describe",
+          "name": "applyAcceptedChange — add-graft",
+          "line": 127
+        },
+        {
+          "kind": "it",
+          "name": "success: adds the edge",
+          "line": 128
+        },
+        {
+          "kind": "it",
+          "name": "failure on cycle: violation returned, edge not added",
+          "line": 141
+        },
+        {
+          "kind": "describe",
+          "name": "applyAcceptedChange — add-create",
+          "line": 163
+        },
+        {
+          "kind": "it",
+          "name": "success: inserts the new taxon with the accepting reviewer as owner and adds the edge",
+          "line": 164
+        },
+        {
+          "kind": "it",
+          "name": "failure on in-tree name clash: violation returned, no taxon inserted",
+          "line": 182
+        },
+        {
+          "kind": "describe",
+          "name": "applyAcceptedChange — detach",
+          "line": 206
+        },
+        {
+          "kind": "it",
+          "name": "success: removes the edge",
+          "line": 207
+        },
+        {
+          "kind": "it",
+          "name": "detach never returns a violation (subtractive on edges)",
+          "line": 221
+        }
+      ]
+    },
+    {
+      "path": "test/changes/cascade-handler.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept-cascade — auth and preconditions",
+          "line": 71
+        },
+        {
+          "kind": "it",
+          "name": "null caller → 403 forbidden",
+          "line": 72
+        },
+        {
+          "kind": "it",
+          "name": "unknown change id → 404 change-not-found",
+          "line": 80
+        },
+        {
+          "kind": "it",
+          "name": "non-reviewer → 403 not-reviewer",
+          "line": 92
+        },
+        {
+          "kind": "it",
+          "name": "non-queued (rejected) → 409 change-not-queued",
+          "line": 113
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept-cascade — single-change cascade",
+          "line": 139
+        },
+        {
+          "kind": "it",
+          "name": "queued rename with no dependents behaves like single-accept",
+          "line": 140
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept-cascade — multi-step frontier extension",
+          "line": 175
+        },
+        {
+          "kind": "it",
+          "name": "cascades through nested add-creates routed to same reviewer",
+          "line": 176
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept-cascade — rollback on failure",
+          "line": 221
+        },
+        {
+          "kind": "it",
+          "name": "mid-cascade in-tree-duplicate rollback restores pre-cascade state",
+          "line": 222
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept-cascade — halts at other-reviewer",
+          "line": 283
+        },
+        {
+          "kind": "it",
+          "name": "does not fold a dependent routed to a different reviewer",
+          "line": 284
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/accept-cascade — response shape",
+          "line": 358
+        },
+        {
+          "kind": "it",
+          "name": "returns the proposal status tree with cascade-applied dispositions",
+          "line": 359
+        }
+      ]
+    },
+    {
+      "path": "test/changes/cascade-journal.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "CascadeJournal — change record",
+          "line": 77
+        },
+        {
+          "kind": "it",
+          "name": "journals a change before transition; rollback restores",
+          "line": 78
+        },
+        {
+          "kind": "it",
+          "name": "rollback restores reason field",
+          "line": 93
+        },
+        {
+          "kind": "it",
+          "name": "first-touch only: second journal call is a no-op",
+          "line": 109
+        },
+        {
+          "kind": "describe",
+          "name": "CascadeJournal — queue membership",
+          "line": 122
+        },
+        {
+          "kind": "it",
+          "name": "rollback re-inserts a removed change",
+          "line": 123
+        },
+        {
+          "kind": "it",
+          "name": "rollback removes an inserted change",
+          "line": 134
+        },
+        {
+          "kind": "describe",
+          "name": "CascadeJournal — taxa store",
+          "line": 151
+        },
+        {
+          "kind": "it",
+          "name": "rollback restores an edge after addEdge",
+          "line": 152
+        },
+        {
+          "kind": "it",
+          "name": "rollback restores an edge after removeEdge",
+          "line": 168
+        },
+        {
+          "kind": "it",
+          "name": "rollback removes an inserted taxon",
+          "line": 185
+        },
+        {
+          "kind": "it",
+          "name": "rollback restores a renamed taxon",
+          "line": 195
+        },
+        {
+          "kind": "it",
+          "name": "empty journal rollback is a no-op",
+          "line": 207
+        },
+        {
+          "kind": "describe",
+          "name": "CascadeJournal — full sequence",
+          "line": 213
+        },
+        {
+          "kind": "it",
+          "name": "rollback restores byte-identical state across multiple mutations",
+          "line": 214
+        }
+      ]
+    },
+    {
+      "path": "test/changes/case1-cascade.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "runCase1Cascade",
+          "line": 66
+        },
+        {
+          "kind": "it",
+          "name": "cascades from a rejected add-create to direct latent descendants",
+          "line": 67
+        },
+        {
+          "kind": "it",
+          "name": "cascades from an invalid add-create with 'became invalid' verb",
+          "line": 87
+        },
+        {
+          "kind": "it",
+          "name": "chains transitively when descendants are themselves add-*",
+          "line": 106
+        },
+        {
+          "kind": "it",
+          "name": "op-restricted at top: rename M does not cascade",
+          "line": 131
+        },
+        {
+          "kind": "it",
+          "name": "op-restricted at top: detach M does not cascade",
+          "line": 147
+        },
+        {
+          "kind": "it",
+          "name": "short-circuits on already-terminal descendants",
+          "line": 164
+        },
+        {
+          "kind": "it",
+          "name": "does not transition M itself",
+          "line": 187
+        },
+        {
+          "kind": "it",
+          "name": "scoped to M's proposal only",
+          "line": 203
+        },
+        {
+          "kind": "it",
+          "name": "uses listChangesForProposal (does not consult live state)",
+          "line": 249
+        },
+        {
+          "kind": "it",
+          "name": "recursion does not re-mark already-cascaded descendants",
+          "line": 265
+        }
+      ]
+    },
+    {
+      "path": "test/changes/dismiss-handler.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/dismiss — auth",
+          "line": 63
+        },
+        {
+          "kind": "it",
+          "name": "null caller → 403 forbidden",
+          "line": 64
+        },
+        {
+          "kind": "it",
+          "name": "unknown change id → 404 change-not-found",
+          "line": 70
+        },
+        {
+          "kind": "it",
+          "name": "non-reviewer → 403 not-reviewer",
+          "line": 82
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/dismiss — disposition preconditions",
+          "line": 100
+        },
+        {
+          "kind": "it",
+          "name": "queued → 409 change-not-dismissible",
+          "line": 101
+        },
+        {
+          "kind": "it",
+          "name": "accepted → 409 change-not-dismissible",
+          "line": 116
+        },
+        {
+          "kind": "it",
+          "name": "rejected → 409 change-not-dismissible",
+          "line": 135
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/dismiss — success path",
+          "line": 155
+        },
+        {
+          "kind": "it",
+          "name": "invalid-in-queue change is removed from queue; disposition unchanged",
+          "line": 156
+        },
+        {
+          "kind": "it",
+          "name": "response status tree matches GET /proposals/{id}",
+          "line": 177
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/dismiss — lock discipline",
+          "line": 198
+        },
+        {
+          "kind": "it",
+          "name": "dismiss handler does not import invariant-engine, invalidation walk, or case1-cascade",
+          "line": 199
+        }
+      ]
+    },
+    {
+      "path": "test/changes/invalidation-walk.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "runSideEffectWalk",
+          "line": 99
+        },
+        {
+          "kind": "it",
+          "name": "invalidates a queued rename whose target no longer exists",
+          "line": 100
+        },
+        {
+          "kind": "it",
+          "name": "leaves still-valid queued changes alone",
+          "line": 125
+        },
+        {
+          "kind": "it",
+          "name": "case-2: review-accept by reviewer auto-dismisses their other queued change",
+          "line": 145
+        },
+        {
+          "kind": "it",
+          "name": "case-3: review-accept by non-reviewer leaves invalid change in queue",
+          "line": 166
+        },
+        {
+          "kind": "it",
+          "name": "direct action by reviewer of affected change is case 3, not case 2",
+          "line": 186
+        },
+        {
+          "kind": "it",
+          "name": "case-insensitive actor-reviewer match for case-2",
+          "line": 208
+        },
+        {
+          "kind": "it",
+          "name": "skips recentlyTransitioned changes",
+          "line": 227
+        },
+        {
+          "kind": "it",
+          "name": "walks across proposals (cross-proposal invalidation)",
+          "line": 247
+        },
+        {
+          "kind": "it",
+          "name": "invalidates add-create with sibling name clash and propagates case-1 to descendants",
+          "line": 277
+        },
+        {
+          "kind": "it",
+          "name": "skips changes whose disposition is not queued (e.g., already-invalid)",
+          "line": 326
+        },
+        {
+          "kind": "it",
+          "name": "does not enter withWriteLock",
+          "line": 350
+        }
+      ]
+    },
+    {
+      "path": "test/changes/preconditions.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "runAcceptPreconditions: rename",
+          "line": 56
+        },
+        {
+          "kind": "it",
+          "name": "passes when target taxon exists and name is well-formed",
+          "line": 57
+        },
+        {
+          "kind": "it",
+          "name": "fails with taxon-not-found when target missing",
+          "line": 69
+        },
+        {
+          "kind": "it",
+          "name": "fails defensively on bad name format",
+          "line": 90
+        },
+        {
+          "kind": "describe",
+          "name": "runAcceptPreconditions: add-graft",
+          "line": 112
+        },
+        {
+          "kind": "it",
+          "name": "passes when parent and child exist and edge absent",
+          "line": 113
+        },
+        {
+          "kind": "it",
+          "name": "fails with taxon-not-found when parent missing",
+          "line": 132
+        },
+        {
+          "kind": "it",
+          "name": "fails with taxon-not-found when grafted child missing",
+          "line": 150
+        },
+        {
+          "kind": "it",
+          "name": "fails with edge-already-present when graft edge exists",
+          "line": 169
+        },
+        {
+          "kind": "describe",
+          "name": "runAcceptPreconditions: add-create",
+          "line": 196
+        },
+        {
+          "kind": "it",
+          "name": "passes when parent exists and name is well-formed",
+          "line": 197
+        },
+        {
+          "kind": "it",
+          "name": "fails with taxon-not-found when parent missing",
+          "line": 210
+        },
+        {
+          "kind": "it",
+          "name": "fails defensively on bad name format",
+          "line": 229
+        },
+        {
+          "kind": "it",
+          "name": "resolves to-create payload-parent via store helper",
+          "line": 250
+        },
+        {
+          "kind": "describe",
+          "name": "runAcceptPreconditions: detach",
+          "line": 280
+        },
+        {
+          "kind": "it",
+          "name": "passes when edge exists",
+          "line": 281
+        },
+        {
+          "kind": "it",
+          "name": "fails with taxon-not-found when parent missing",
+          "line": 296
+        },
+        {
+          "kind": "it",
+          "name": "fails with taxon-not-found when target missing",
+          "line": 314
+        },
+        {
+          "kind": "it",
+          "name": "fails with edge-not-found when edge missing",
+          "line": 333
+        }
+      ]
+    },
+    {
+      "path": "test/changes/promotion.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "promotion on add-create accept",
+          "line": 58
+        },
+        {
+          "kind": "it",
+          "name": "rename direct dependent under add-create whose existence dep is the edge from the create",
+          "line": 64
+        },
+        {
+          "kind": "describe",
+          "name": "promotion is one level (grandchildren stay latent)",
+          "line": 122
+        },
+        {
+          "kind": "it",
+          "name": "grandchildren remain latent until parent accept",
+          "line": 123
+        },
+        {
+          "kind": "describe",
+          "name": "promotion: rename and detach accepts do not trigger promotion",
+          "line": 166
+        },
+        {
+          "kind": "it",
+          "name": "rename accept does not promote anything",
+          "line": 167
+        },
+        {
+          "kind": "describe",
+          "name": "promotion: existence-dep failure → invalid",
+          "line": 192
+        },
+        {
+          "kind": "it",
+          "name": "descendant whose existence dep fails goes invalid at promotion",
+          "line": 193
+        },
+        {
+          "kind": "describe",
+          "name": "promotion: deferred reviewer resolves to acceptedBy",
+          "line": 243
+        },
+        {
+          "kind": "it",
+          "name": "nested add-create's reviewer becomes the accepting reviewer",
+          "line": 244
+        }
+      ]
+    },
+    {
+      "path": "test/changes/reject-handler.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/reject: auth + precondition triplet",
+          "line": 63
+        },
+        {
+          "kind": "it",
+          "name": "null caller → 403",
+          "line": 64
+        },
+        {
+          "kind": "it",
+          "name": "unknown change id → 404 change-not-found",
+          "line": 70
+        },
+        {
+          "kind": "it",
+          "name": "non-reviewer → 403 not-reviewer",
+          "line": 82
+        },
+        {
+          "kind": "it",
+          "name": "latent change → 409 change-not-queued",
+          "line": 108
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/reject: body validation",
+          "line": 138
+        },
+        {
+          "kind": "it",
+          "name": "no body → 200, default reason",
+          "line": 156
+        },
+        {
+          "kind": "it",
+          "name": "empty JSON {} → 200, default reason",
+          "line": 168
+        },
+        {
+          "kind": "it",
+          "name": "reason string → 200, stored verbatim",
+          "line": 180
+        },
+        {
+          "kind": "it",
+          "name": "empty-string reason → 200, stored as empty string",
+          "line": 192
+        },
+        {
+          "kind": "it",
+          "name": "extra fields ignored",
+          "line": 204
+        },
+        {
+          "kind": "it",
+          "name": "non-string reason → 400 payload-shape",
+          "line": 216
+        },
+        {
+          "kind": "it",
+          "name": "body is array → 400 malformed-body",
+          "line": 229
+        },
+        {
+          "kind": "it",
+          "name": "body is non-JSON → 400 malformed-body",
+          "line": 242
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/reject: per-op cascade behavior",
+          "line": 256
+        },
+        {
+          "kind": "it",
+          "name": "reject rename → only the one change transitions; no cascade",
+          "line": 257
+        },
+        {
+          "kind": "it",
+          "name": "reject add-create cascades to direct dependents",
+          "line": 282
+        },
+        {
+          "kind": "it",
+          "name": "reject add-create cascades transitively (grandchildren invalid)",
+          "line": 316
+        },
+        {
+          "kind": "it",
+          "name": "reject add-graft cascades to descendants",
+          "line": 357
+        },
+        {
+          "kind": "it",
+          "name": "cascaded-invalid changes do NOT enter the queue",
+          "line": 403
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/reject: live graph untouched",
+          "line": 435
+        },
+        {
+          "kind": "it",
+          "name": "reject does not mutate live taxa or edges",
+          "line": 436
+        },
+        {
+          "kind": "it",
+          "name": "reject handler source does not call invariant-engine",
+          "line": 467
+        },
+        {
+          "kind": "describe",
+          "name": "POST /changes/:id/reject: response shape",
+          "line": 479
+        },
+        {
+          "kind": "it",
+          "name": "response status field matches GET /proposals/{id}",
+          "line": 480
+        }
+      ]
+    },
+    {
+      "path": "test/changes/reviewer-auth.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "assertCallerIsReviewer",
+          "line": 29
+        },
+        {
+          "kind": "it",
+          "name": "concrete reviewer matches caller exactly",
+          "line": 30
+        },
+        {
+          "kind": "it",
+          "name": "concrete reviewer matches caller case-insensitively",
+          "line": 34
+        },
+        {
+          "kind": "it",
+          "name": "different caller throws not-reviewer",
+          "line": 40
+        },
+        {
+          "kind": "it",
+          "name": "deferred reviewer always throws not-reviewer",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "deferred reviewer throws even with caller matching parent change id",
+          "line": 67
+        }
+      ]
+    },
+    {
+      "path": "test/changes/route-mount.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "route mount: POST /changes/:id/accept",
+          "line": 9
+        },
+        {
+          "kind": "it",
+          "name": "null caller receives 403",
+          "line": 10
+        },
+        {
+          "kind": "it",
+          "name": "unknown id with registered caller returns 404",
+          "line": 16
+        },
+        {
+          "kind": "describe",
+          "name": "route mount: POST /changes/:id/reject",
+          "line": 31
+        },
+        {
+          "kind": "it",
+          "name": "null caller receives 403",
+          "line": 32
+        },
+        {
+          "kind": "it",
+          "name": "unknown id with registered caller returns 404",
+          "line": 38
+        }
+      ]
+    },
+    {
+      "path": "test/concurrency/write-lock.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "withWriteLock: FIFO serialization",
+          "line": 9
+        },
+        {
+          "kind": "it",
+          "name": "two concurrent calls serialize in invocation order",
+          "line": 10
+        },
+        {
+          "kind": "it",
+          "name": "ten concurrent calls preserve FIFO across the chain",
+          "line": 28
+        },
+        {
+          "kind": "describe",
+          "name": "withWriteLock: throw/reject recovery",
+          "line": 50
+        },
+        {
+          "kind": "it",
+          "name": "a throwing fn propagates the rejection and releases the slot",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "an async rejection propagates and releases the slot",
+          "line": 67
+        },
+        {
+          "kind": "describe",
+          "name": "withWriteLock: synchronous fn is still serialized",
+          "line": 84
+        },
+        {
+          "kind": "it",
+          "name": "ten concurrent increments produce a final value of exactly 10",
+          "line": 85
+        },
+        {
+          "kind": "it",
+          "name": "a synchronous fn returning a value resolves to that value",
+          "line": 104
+        },
+        {
+          "kind": "it",
+          "name": "an async fn returning a value resolves to that value",
+          "line": 109
+        },
+        {
+          "kind": "describe",
+          "name": "withWriteLock: slot held until returned promise settles",
+          "line": 115
+        },
+        {
+          "kind": "it",
+          "name": "does not release on first await — releases when fn's promise settles",
+          "line": 116
+        },
+        {
+          "kind": "describe",
+          "name": "withWriteLock: independent async code is not blocked",
+          "line": 137
+        },
+        {
+          "kind": "it",
+          "name": "a no-lock promise resolves while a lock-fn is in flight",
+          "line": 138
+        }
+      ]
+    },
+    {
+      "path": "test/domain/check-add-create.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "checkAddCreate",
+          "line": 46
+        },
+        {
+          "kind": "it",
+          "name": "safe create passes",
+          "line": 47
+        },
+        {
+          "kind": "it",
+          "name": "sibling name clash in target tree is detected",
+          "line": 57
+        },
+        {
+          "kind": "it",
+          "name": "case-variant sibling name clash is detected",
+          "line": 75
+        },
+        {
+          "kind": "it",
+          "name": "create whose payload-parent is shared clashes in OTHER tree",
+          "line": 85
+        },
+        {
+          "kind": "it",
+          "name": "create under nonexistent parent is structurally fine (no §3.3 violation)",
+          "line": 107
+        },
+        {
+          "kind": "it",
+          "name": "create alone cannot introduce a cycle",
+          "line": 115
+        },
+        {
+          "kind": "it",
+          "name": "wrapper does not mutate g.taxa",
+          "line": 126
+        },
+        {
+          "kind": "it",
+          "name": "wrapper does not mutate g.childrenOf",
+          "line": 133
+        },
+        {
+          "kind": "it",
+          "name": "wrapper does not mutate g.parentsOf",
+          "line": 143
+        },
+        {
+          "kind": "it",
+          "name": "violations on clash carry the minted id",
+          "line": 150
+        },
+        {
+          "kind": "it",
+          "name": "repeat calls with same input return deterministic order",
+          "line": 170
+        },
+        {
+          "kind": "it",
+          "name": "delegates to checkInvariants in source",
+          "line": 187
+        }
+      ]
+    },
+    {
+      "path": "test/domain/invariants.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Invariant 1 — no cycles",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "empty graph passes",
+          "line": 52
+        },
+        {
+          "kind": "it",
+          "name": "a tree passes",
+          "line": 56
+        },
+        {
+          "kind": "it",
+          "name": "across-tree diamond passes (not a cycle)",
+          "line": 67
+        },
+        {
+          "kind": "it",
+          "name": "self-loop is detected",
+          "line": 80
+        },
+        {
+          "kind": "it",
+          "name": "two-taxon cycle is detected",
+          "line": 92
+        },
+        {
+          "kind": "it",
+          "name": "three-taxon cycle is detected",
+          "line": 109
+        },
+        {
+          "kind": "it",
+          "name": "disjoint cycles emit at least two violations",
+          "line": 128
+        },
+        {
+          "kind": "describe",
+          "name": "Invariant 2 — per-tree uniqueness of occurrence",
+          "line": 145
+        },
+        {
+          "kind": "it",
+          "name": "across-tree sharing is legal",
+          "line": 146
+        },
+        {
+          "kind": "it",
+          "name": "in-tree diamond is detected",
+          "line": 157
+        },
+        {
+          "kind": "it",
+          "name": "deeper in-tree diamond is detected",
+          "line": 173
+        },
+        {
+          "kind": "it",
+          "name": "duplication in two separate trees emits two violations",
+          "line": 190
+        },
+        {
+          "kind": "it",
+          "name": "across-tree share with in-tree diamond in only one tree is reported once",
+          "line": 221
+        },
+        {
+          "kind": "describe",
+          "name": "Invariant 3 — per-tree name uniqueness (case-insensitive)",
+          "line": 243
+        },
+        {
+          "kind": "it",
+          "name": "different names pass",
+          "line": 244
+        },
+        {
+          "kind": "it",
+          "name": "same name in different trees passes",
+          "line": 255
+        },
+        {
+          "kind": "it",
+          "name": "exact-case duplicate in one tree is detected",
+          "line": 266
+        },
+        {
+          "kind": "it",
+          "name": "case-variant duplicate in one tree is detected",
+          "line": 287
+        },
+        {
+          "kind": "it",
+          "name": "cross-tree same-name with in-tree clash in one tree only flags that tree",
+          "line": 307
+        },
+        {
+          "kind": "describe",
+          "name": "checkInvariants composite",
+          "line": 330
+        },
+        {
+          "kind": "it",
+          "name": "returns ok on a valid graph",
+          "line": 331
+        },
+        {
+          "kind": "it",
+          "name": "aggregates cycles before name clashes (documented order)",
+          "line": 342
+        },
+        {
+          "kind": "it",
+          "name": "includes all three violation kinds when each is violated",
+          "line": 378
+        },
+        {
+          "kind": "describe",
+          "name": "purity",
+          "line": 426
+        },
+        {
+          "kind": "it",
+          "name": "checkers do not mutate input",
+          "line": 427
+        },
+        {
+          "kind": "it",
+          "name": "checkers do not throw on pathological graphs",
+          "line": 452
+        }
+      ]
+    },
+    {
+      "path": "test/domain/owner-scoped-region.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "ownerScopedRegion: basic cases",
+          "line": 36
+        },
+        {
+          "kind": "it",
+          "name": "leaf-only region (n is a leaf owned by U)",
+          "line": 37
+        },
+        {
+          "kind": "it",
+          "name": "single-child wholly-owned region",
+          "line": 47
+        },
+        {
+          "kind": "it",
+          "name": "wholly-owned subtree (textbook case)",
+          "line": 60
+        },
+        {
+          "kind": "describe",
+          "name": "ownerScopedRegion: halt-frontier behavior",
+          "line": 80
+        },
+        {
+          "kind": "it",
+          "name": "halts at other-owned child and records the edge",
+          "line": 81
+        },
+        {
+          "kind": "it",
+          "name": "cascade does NOT continue past halt frontier even into owner-owned descendants",
+          "line": 98
+        },
+        {
+          "kind": "it",
+          "name": "multiple halt-frontier children produce multiple frontier entries",
+          "line": 118
+        },
+        {
+          "kind": "it",
+          "name": "halt-frontier child reachable via a separate wholly-owned path stays out of region; other route still flagged",
+          "line": 142
+        },
+        {
+          "kind": "describe",
+          "name": "ownerScopedRegion: case-insensitivity and edge cases",
+          "line": 168
+        },
+        {
+          "kind": "it",
+          "name": "case-insensitive owner matching",
+          "line": 169
+        },
+        {
+          "kind": "it",
+          "name": "unknown n yields empty region",
+          "line": 178
+        },
+        {
+          "kind": "it",
+          "name": "other-owned n yields empty region",
+          "line": 188
+        },
+        {
+          "kind": "it",
+          "name": "cyclic graph terminates and includes nodes once",
+          "line": 198
+        },
+        {
+          "kind": "describe",
+          "name": "ownerScopedRegion: purity",
+          "line": 218
+        },
+        {
+          "kind": "it",
+          "name": "does not mutate the input Graph",
+          "line": 219
+        }
+      ]
+    },
+    {
+      "path": "test/domain/reachability.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "roots(g)",
+          "line": 44
+        },
+        {
+          "kind": "it",
+          "name": "empty graph has no roots",
+          "line": 45
+        },
+        {
+          "kind": "it",
+          "name": "a parentless taxon is a root",
+          "line": 50
+        },
+        {
+          "kind": "it",
+          "name": "multiple parentless taxa are all roots",
+          "line": 55
+        },
+        {
+          "kind": "it",
+          "name": "a child taxon is not a root",
+          "line": 60
+        },
+        {
+          "kind": "describe",
+          "name": "containingRoots(g, t)",
+          "line": 69
+        },
+        {
+          "kind": "it",
+          "name": "a root returns itself",
+          "line": 70
+        },
+        {
+          "kind": "it",
+          "name": "a leaf traces up to its single root",
+          "line": 78
+        },
+        {
+          "kind": "it",
+          "name": "a shared taxon returns multiple roots",
+          "line": 90
+        },
+        {
+          "kind": "it",
+          "name": "sharing via different ancestor chains returns all containing roots",
+          "line": 101
+        },
+        {
+          "kind": "describe",
+          "name": "isShared(g, t)",
+          "line": 115
+        },
+        {
+          "kind": "it",
+          "name": "is true iff containingRoots size > 1",
+          "line": 116
+        },
+        {
+          "kind": "it",
+          "name": "roots are never shared",
+          "line": 131
+        },
+        {
+          "kind": "describe",
+          "name": "reachableSubtree(g, top)",
+          "line": 140
+        },
+        {
+          "kind": "it",
+          "name": "includes only top for a leaf",
+          "line": 141
+        },
+        {
+          "kind": "it",
+          "name": "includes top and all descendants",
+          "line": 146
+        },
+        {
+          "kind": "it",
+          "name": "descends only from the requested top",
+          "line": 158
+        },
+        {
+          "kind": "it",
+          "name": "terminates on a cyclic graph",
+          "line": 171
+        },
+        {
+          "kind": "it",
+          "name": "terminates on a self-loop",
+          "line": 183
+        },
+        {
+          "kind": "describe",
+          "name": "purity",
+          "line": 192
+        },
+        {
+          "kind": "it",
+          "name": "reachability functions do not mutate the input graph",
+          "line": 193
+        },
+        {
+          "kind": "it",
+          "name": "reachability functions do not throw on cyclic graphs",
+          "line": 222
+        }
+      ]
+    },
+    {
+      "path": "test/domain/wrappers.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "checkAddEdge",
+          "line": 46
+        },
+        {
+          "kind": "it",
+          "name": "safe add passes",
+          "line": 47
+        },
+        {
+          "kind": "it",
+          "name": "cycle-creating add is rejected",
+          "line": 52
+        },
+        {
+          "kind": "it",
+          "name": "self-loop add is rejected",
+          "line": 62
+        },
+        {
+          "kind": "it",
+          "name": "in-tree diamond add is rejected",
+          "line": 69
+        },
+        {
+          "kind": "it",
+          "name": "in-tree name-clash add is rejected (case-variant)",
+          "line": 96
+        },
+        {
+          "kind": "it",
+          "name": "idempotent add (already-existing edge) passes",
+          "line": 106
+        },
+        {
+          "kind": "it",
+          "name": "does NOT mutate input graph",
+          "line": 114
+        },
+        {
+          "kind": "describe",
+          "name": "checkRename",
+          "line": 136
+        },
+        {
+          "kind": "it",
+          "name": "rename to same name is ok (no self-clash)",
+          "line": 137
+        },
+        {
+          "kind": "it",
+          "name": "rename to an unused name passes",
+          "line": 145
+        },
+        {
+          "kind": "it",
+          "name": "rename causing same-tree clash is rejected",
+          "line": 153
+        },
+        {
+          "kind": "it",
+          "name": "rename causing case-variant clash is rejected",
+          "line": 166
+        },
+        {
+          "kind": "it",
+          "name": "rename causing clash in a DIFFERENT containing tree is rejected",
+          "line": 179
+        },
+        {
+          "kind": "it",
+          "name": "cross-tree rename with no clash anywhere passes",
+          "line": 204
+        },
+        {
+          "kind": "it",
+          "name": "does NOT mutate input graph",
+          "line": 216
+        },
+        {
+          "kind": "it",
+          "name": "ignores taxon-name-format validation (the wrapper's concern is §3.3 only)",
+          "line": 224
+        }
+      ]
+    },
+    {
+      "path": "test/errors/envelope.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "error envelope: ApiError → mapped status",
+          "line": 35
+        },
+        {
+          "kind": "it",
+          "name": "${code} maps to ${status}",
+          "line": 45
+        },
+        {
+          "kind": "describe",
+          "name": "error envelope: details handling",
+          "line": 58
+        },
+        {
+          "kind": "it",
+          "name": "includes details verbatim when supplied",
+          "line": 59
+        },
+        {
+          "kind": "it",
+          "name": "omits details key entirely when not supplied",
+          "line": 72
+        },
+        {
+          "kind": "describe",
+          "name": "error envelope: unexpected throws",
+          "line": 83
+        },
+        {
+          "kind": "it",
+          "name": "plain Error → internal_error / 500",
+          "line": 84
+        },
+        {
+          "kind": "it",
+          "name": "non-Error throw (string) → internal_error / 500",
+          "line": 95
+        },
+        {
+          "kind": "it",
+          "name": "original throw is logged server-side",
+          "line": 105
+        },
+        {
+          "kind": "describe",
+          "name": "error envelope: Content-Type",
+          "line": 119
+        },
+        {
+          "kind": "it",
+          "name": "is application/json for ApiError responses",
+          "line": 120
+        },
+        {
+          "kind": "it",
+          "name": "is application/json for unexpected-throw responses",
+          "line": 128
+        }
+      ]
+    },
+    {
+      "path": "test/format/compare.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "equalsCI",
+          "line": 5
+        },
+        {
+          "kind": "it",
+          "name": "identical strings are equal",
+          "line": 6
+        },
+        {
+          "kind": "it",
+          "name": "differ only in case (all lower) → equal",
+          "line": 10
+        },
+        {
+          "kind": "it",
+          "name": "differ only in case (all upper) → equal",
+          "line": 14
+        },
+        {
+          "kind": "it",
+          "name": "mixed-case substrings → equal",
+          "line": 18
+        },
+        {
+          "kind": "it",
+          "name": "different strings → not equal",
+          "line": 22
+        },
+        {
+          "kind": "it",
+          "name": "trailing whitespace difference → not equal (predicate does not trim)",
+          "line": 26
+        },
+        {
+          "kind": "it",
+          "name": "internal whitespace difference → not equal (predicate does not normalize)",
+          "line": 30
+        },
+        {
+          "kind": "it",
+          "name": "different lengths → not equal",
+          "line": 34
+        },
+        {
+          "kind": "it",
+          "name": "both empty → equal",
+          "line": 38
+        },
+        {
+          "kind": "it",
+          "name": "does not mutate inputs",
+          "line": 42
+        }
+      ]
+    },
+    {
+      "path": "test/format/taxon-name.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "validateTaxonName: accepted inputs",
+          "line": 17
+        },
+        {
+          "kind": "it",
+          "name": "two-word baseline",
+          "line": 18
+        },
+        {
+          "kind": "it",
+          "name": "single character",
+          "line": 19
+        },
+        {
+          "kind": "it",
+          "name": "internal single space",
+          "line": 20
+        },
+        {
+          "kind": "it",
+          "name": "internal tab",
+          "line": 21
+        },
+        {
+          "kind": "it",
+          "name": "multiple internal spaces",
+          "line": 22
+        },
+        {
+          "kind": "describe",
+          "name": "validateTaxonName: rejected inputs (with tag)",
+          "line": 25
+        },
+        {
+          "kind": "it",
+          "name": "empty → empty",
+          "line": 26
+        },
+        {
+          "kind": "it",
+          "name": "leading space → leading-whitespace",
+          "line": 27
+        },
+        {
+          "kind": "it",
+          "name": "trailing space → trailing-whitespace",
+          "line": 29
+        },
+        {
+          "kind": "it",
+          "name": "leading tab → leading-whitespace",
+          "line": 31
+        },
+        {
+          "kind": "it",
+          "name": "trailing tab → trailing-whitespace",
+          "line": 33
+        },
+        {
+          "kind": "it",
+          "name": "leading newline → leading-whitespace",
+          "line": 35
+        },
+        {
+          "kind": "it",
+          "name": "trailing newline → trailing-whitespace",
+          "line": 37
+        },
+        {
+          "kind": "it",
+          "name": "leading non-breaking space → leading-whitespace",
+          "line": 39
+        },
+        {
+          "kind": "describe",
+          "name": "validateTaxonName: ambiguous boundary inputs",
+          "line": 43
+        },
+        {
+          "kind": "it",
+          "name": "whitespace-only → leading-whitespace OR trailing-whitespace",
+          "line": 44
+        },
+        {
+          "kind": "it",
+          "name": "both ends whitespace → leading-whitespace OR trailing-whitespace",
+          "line": 54
+        },
+        {
+          "kind": "describe",
+          "name": "validateTaxonName: result shape",
+          "line": 65
+        },
+        {
+          "kind": "it",
+          "name": "re-exports equalsCI from the same module",
+          "line": 66
+        }
+      ]
+    },
+    {
+      "path": "test/format/username.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "validateUsername: accepted inputs",
+          "line": 17
+        },
+        {
+          "kind": "it",
+          "name": "simple username",
+          "line": 18
+        },
+        {
+          "kind": "it",
+          "name": "single character",
+          "line": 19
+        },
+        {
+          "kind": "it",
+          "name": "internal space",
+          "line": 20
+        },
+        {
+          "kind": "describe",
+          "name": "validateUsername: rejected inputs (with tag)",
+          "line": 23
+        },
+        {
+          "kind": "it",
+          "name": "empty → empty",
+          "line": 24
+        },
+        {
+          "kind": "it",
+          "name": "leading space → leading-whitespace",
+          "line": 25
+        },
+        {
+          "kind": "it",
+          "name": "trailing space → trailing-whitespace",
+          "line": 27
+        },
+        {
+          "kind": "it",
+          "name": "leading tab → leading-whitespace",
+          "line": 29
+        },
+        {
+          "kind": "it",
+          "name": "trailing newline → trailing-whitespace",
+          "line": 31
+        },
+        {
+          "kind": "describe",
+          "name": "validateUsername: ambiguous boundary inputs",
+          "line": 35
+        },
+        {
+          "kind": "it",
+          "name": "whitespace-only → some boundary tag, NOT silently null-user",
+          "line": 36
+        },
+        {
+          "kind": "it",
+          "name": "both ends whitespace → some boundary tag",
+          "line": 45
+        },
+        {
+          "kind": "describe",
+          "name": "validateUsername: return shape is closed",
+          "line": 55
+        },
+        {
+          "kind": "it",
+          "name": "every failure has { ok: false, reason: { tag, message } } only",
+          "line": 60
+        },
+        {
+          "kind": "it",
+          "name": "success has { ok: true } only",
+          "line": 72
+        },
+        {
+          "kind": "describe",
+          "name": "validateUsername: equalsCI wiring",
+          "line": 78
+        },
+        {
+          "kind": "it",
+          "name": "same username different case → equal",
+          "line": 79
+        },
+        {
+          "kind": "it",
+          "name": "different usernames → not equal",
+          "line": 83
+        }
+      ]
+    },
+    {
+      "path": "test/health.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "GET /health",
+          "line": 5
+        },
+        {
+          "kind": "it",
+          "name": "returns 200",
+          "line": 6
+        },
+        {
+          "kind": "it",
+          "name": "returns Content-Type: application/json",
+          "line": 12
+        },
+        {
+          "kind": "it",
+          "name": "returns { status: 'ok', version: <non-empty string> }",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "path": "test/identity/divergence.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "identity middleware: malformed-vs-null divergence (unit level)",
+          "line": 50
+        },
+        {
+          "kind": "it",
+          "name": "absent header → null caller; whitespace-only → ApiError; the two outcomes differ",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "empty header → null caller; trailing-whitespace → ApiError; the two outcomes differ",
+          "line": 63
+        }
+      ]
+    },
+    {
+      "path": "test/identity/exposure.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "identity middleware: Caller shape on the request context",
+          "line": 21
+        },
+        {
+          "kind": "it",
+          "name": "absent header → { kind: 'null' } with no username field",
+          "line": 22
+        },
+        {
+          "kind": "it",
+          "name": "empty header → { kind: 'null' }",
+          "line": 31
+        },
+        {
+          "kind": "it",
+          "name": "registered → { kind: 'registered', username: <stored casing> }",
+          "line": 38
+        },
+        {
+          "kind": "it",
+          "name": "registered (different stored casing) reflects the registry's form",
+          "line": 49
+        },
+        {
+          "kind": "it",
+          "name": "unregistered → { kind: 'unregistered', username: <header value> }",
+          "line": 59
+        },
+        {
+          "kind": "it",
+          "name": "unregistered preserves header casing exactly",
+          "line": 68
+        },
+        {
+          "kind": "describe",
+          "name": "identity middleware: lookup freshness (per request)",
+          "line": 78
+        },
+        {
+          "kind": "it",
+          "name": "a previously-unregistered header becomes registered after POST /users",
+          "line": 79
+        },
+        {
+          "kind": "it",
+          "name": "a registered classification reverts to unregistered after POST /reset",
+          "line": 99
+        }
+      ]
+    },
+    {
+      "path": "test/identity/middleware-unit.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "identityMiddleware: null-caller classification",
+          "line": 72
+        },
+        {
+          "kind": "it",
+          "name": "absent header sets { kind: 'null' } and calls next",
+          "line": 73
+        },
+        {
+          "kind": "it",
+          "name": "empty header sets { kind: 'null' } and calls next",
+          "line": 81
+        },
+        {
+          "kind": "describe",
+          "name": "identityMiddleware: registered/unregistered classification",
+          "line": 89
+        },
+        {
+          "kind": "it",
+          "name": "well-formed unregistered → { kind: 'unregistered', username: <header> }",
+          "line": 90
+        },
+        {
+          "kind": "it",
+          "name": "well-formed registered → { kind: 'registered', username: <stored casing> }",
+          "line": 97
+        },
+        {
+          "kind": "describe",
+          "name": "identityMiddleware: malformed X-Username throws 400 validation_error",
+          "line": 106
+        },
+        {
+          "kind": "it",
+          "name": "${label} → ApiError(validation_error, tag=${tag})",
+          "line": 118
+        },
+        {
+          "kind": "describe",
+          "name": "identityMiddleware: POST /reset exemption",
+          "line": 131
+        },
+        {
+          "kind": "it",
+          "name": "does not read X-Username; does not set caller; calls next",
+          "line": 132
+        },
+        {
+          "kind": "it",
+          "name": "GET /reset (wrong method) is NOT exempt — middleware runs normally",
+          "line": 144
+        }
+      ]
+    },
+    {
+      "path": "test/identity/middleware.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "identity middleware: header absent or empty → null caller passes",
+          "line": 18
+        },
+        {
+          "kind": "it",
+          "name": "no header → 200 from GET /users",
+          "line": 19
+        },
+        {
+          "kind": "it",
+          "name": "empty header → 200 from GET /users",
+          "line": 25
+        },
+        {
+          "kind": "describe",
+          "name": "identity middleware: well-formed header passes (registered or not)",
+          "line": 32
+        },
+        {
+          "kind": "it",
+          "name": "registered → 200",
+          "line": 33
+        },
+        {
+          "kind": "it",
+          "name": "unregistered well-formed → 200 (middleware does NOT 403)",
+          "line": 40
+        },
+        {
+          "kind": "it",
+          "name": "internal whitespace in well-formed name is preserved",
+          "line": 47
+        },
+        {
+          "kind": "describe",
+          "name": "identity middleware: POST /reset is fully exempt",
+          "line": 57
+        },
+        {
+          "kind": "it",
+          "name": "absent X-Username on POST /reset → 204",
+          "line": 58
+        },
+        {
+          "kind": "it",
+          "name": "empty X-Username on POST /reset → 204",
+          "line": 64
+        },
+        {
+          "kind": "it",
+          "name": "unregistered X-Username on POST /reset → 204",
+          "line": 73
+        },
+        {
+          "kind": "it",
+          "name": "registered X-Username on POST /reset → 204",
+          "line": 82
+        },
+        {
+          "kind": "it",
+          "name": "X-Username `   ` (becomes empty after HTTP normalization) on /reset → 204",
+          "line": 96
+        },
+        {
+          "kind": "describe",
+          "name": "identity middleware: registry-lookup freshness (no caching)",
+          "line": 106
+        },
+        {
+          "kind": "it",
+          "name": "registering promotes a previously-unregistered header",
+          "line": 107
+        },
+        {
+          "kind": "it",
+          "name": "reset reverts a registered classification (no positive cache)",
+          "line": 126
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-6-cross-tree.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 6 cross-tree validation end-to-end",
+          "line": 23
+        },
+        {
+          "kind": "it",
+          "name": "rename of a shared taxon clashing in the OTHER tree → 409 with that tree's rootId",
+          "line": 24
+        },
+        {
+          "kind": "it",
+          "name": "add-graft of a taxon causing a clash in the grafted-into tree → 409",
+          "line": 84
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-6-failed-accept.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 6 failed-accept persistence end-to-end",
+          "line": 18
+        },
+        {
+          "kind": "it",
+          "name": "intervening direct action makes the proposal invalid; accept fails; change is invalid in queue",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-6-multi-owner.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 6 multi-owner integration",
+          "line": 21
+        },
+        {
+          "kind": "it",
+          "name": "a proposal that touches taxa owned by two users routes each change to its respective owner",
+          "line": 22
+        },
+        {
+          "kind": "it",
+          "name": "Bob accepts and Carol rejects independent changes in the same proposal",
+          "line": 99
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-6-reject-cascade.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 6 reject cascade end-to-end",
+          "line": 17
+        },
+        {
+          "kind": "it",
+          "name": "rejecting an outer add-create cascades to its nested rename via decisionDeps",
+          "line": 18
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-6-reset.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 6 reset composition",
+          "line": 18
+        },
+        {
+          "kind": "it",
+          "name": "after accept/reject/failed-accept, POST /reset returns proposal-store and taxa-store to fresh-boot",
+          "line": 19
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-6-review-loop.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 6 review loop end-to-end",
+          "line": 29
+        },
+        {
+          "kind": "it",
+          "name": "Alice proposes, Bob accepts each change in dependency order",
+          "line": 30
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-7-case-classification.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 7 — case 2: same-reviewer accept auto-dismisses other queued",
+          "line": 48
+        },
+        {
+          "kind": "it",
+          "name": "Bob's accept of X invalidates and auto-dismisses Bob's other queued Y",
+          "line": 49
+        },
+        {
+          "kind": "it",
+          "name": "Bob's accept-cascade auto-dismisses Bob's other queued change",
+          "line": 100
+        },
+        {
+          "kind": "describe",
+          "name": "Phase 7 — case 3: cross-reviewer accept marks but keeps queued",
+          "line": 144
+        },
+        {
+          "kind": "it",
+          "name": "Bob's accept invalidates Carol's queued change as case 3",
+          "line": 145
+        },
+        {
+          "kind": "describe",
+          "name": "Phase 7 — case 3: direct actions trigger case 3",
+          "line": 220
+        },
+        {
+          "kind": "it",
+          "name": "direct rename by Alice invalidates Bob's queued change as case 3",
+          "line": 221
+        },
+        {
+          "kind": "it",
+          "name": "direct delete by Bob (the reviewer) is case 3, not case 2",
+          "line": 268
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-7-case1-extended.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 7 — case-1 cascade from non-reject invalidation",
+          "line": 47
+        },
+        {
+          "kind": "it",
+          "name": "direct action that invalidates an add-create cascades case-1 to its latent descendants",
+          "line": 48
+        },
+        {
+          "kind": "it",
+          "name": "case-2 invalidation of add-create cascades to its descendants",
+          "line": 109
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-7-lazy-evaluation.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 7 — lazy evaluation: reads do not auto-mutate",
+          "line": 53
+        },
+        {
+          "kind": "it",
+          "name": "GET /proposals/{id} does not transition a queued change to invalid",
+          "line": 54
+        },
+        {
+          "kind": "it",
+          "name": "GET /queue does not auto-dismiss invalid-in-queue changes",
+          "line": 74
+        },
+        {
+          "kind": "it",
+          "name": "Proposer's view shows the persisted disposition",
+          "line": 97
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-7-properties.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 7 — §14 properties",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "moves are non-atomic (detach + add as separate proposals)",
+          "line": 52
+        },
+        {
+          "kind": "it",
+          "name": "ownership reassignment is unilateral and does not invalidate queued changes (sticky routing)",
+          "line": 132
+        },
+        {
+          "kind": "it",
+          "name": "cascade deletion halts at others' taxa (Phase 4 property reaffirmed under Phase 7)",
+          "line": 188
+        }
+      ]
+    },
+    {
+      "path": "test/integration/phase-7-reset.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Phase 7 — reset after each new state path",
+          "line": 56
+        },
+        {
+          "kind": "it",
+          "name": "reset after successful cascade",
+          "line": 57
+        },
+        {
+          "kind": "it",
+          "name": "reset after rolled-back cascade",
+          "line": 87
+        },
+        {
+          "kind": "it",
+          "name": "reset after case-1 cascade (reject of nested add-create)",
+          "line": 125
+        },
+        {
+          "kind": "it",
+          "name": "reset after explicit dismiss",
+          "line": 155
+        },
+        {
+          "kind": "it",
+          "name": "omnibus: reset after a sequence of operations",
+          "line": 205
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/derive-appendix-a.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Appendix A.1 — multi-owner routing and a create cascade",
+          "line": 39
+        },
+        {
+          "kind": "it",
+          "name": "derives four changes with the spec's initial dispositions",
+          "line": 40
+        },
+        {
+          "kind": "describe",
+          "name": "Appendix A.2 — cross-tree move, graft, and nested create",
+          "line": 129
+        },
+        {
+          "kind": "it",
+          "name": "P1 detach is queued to Dana (owner of a2)",
+          "line": 130
+        },
+        {
+          "kind": "it",
+          "name": "P2 graft is queued to Frank; nested create is latent and CONCRETE to Erin",
+          "line": 164
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/derive-deps.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "decisionDeps",
+          "line": 32
+        },
+        {
+          "kind": "it",
+          "name": "no add ancestors → empty decisionDeps",
+          "line": 33
+        },
+        {
+          "kind": "it",
+          "name": "one add-create ancestor → that ancestor in decisionDeps",
+          "line": 52
+        },
+        {
+          "kind": "it",
+          "name": "add-graft ancestor is also a decision dep",
+          "line": 74
+        },
+        {
+          "kind": "it",
+          "name": "multiple add ancestors → top-down order",
+          "line": 101
+        },
+        {
+          "kind": "it",
+          "name": "mixed ancestors: no-op + add → only add appears in decisionDeps",
+          "line": 128
+        },
+        {
+          "kind": "describe",
+          "name": "existenceDeps",
+          "line": 163
+        },
+        {
+          "kind": "it",
+          "name": "rename includes ancestor existence deps + own implicit edge",
+          "line": 164
+        },
+        {
+          "kind": "it",
+          "name": "detach includes own implicit edge",
+          "line": 209
+        },
+        {
+          "kind": "it",
+          "name": "add-create has no own existence dep",
+          "line": 242
+        },
+        {
+          "kind": "it",
+          "name": "add-graft has global-existence dep (parent: null)",
+          "line": 272
+        },
+        {
+          "kind": "it",
+          "name": "ancestor existence deps record the live parent variant correctly",
+          "line": 293
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/derive-disposition.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "initial disposition",
+          "line": 31
+        },
+        {
+          "kind": "it",
+          "name": "no add ancestors → queued",
+          "line": 32
+        },
+        {
+          "kind": "it",
+          "name": "one add-create ancestor → latent",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "multiple add ancestors → still latent",
+          "line": 72
+        },
+        {
+          "kind": "describe",
+          "name": "deferred ⇒ latent invariant",
+          "line": 102
+        },
+        {
+          "kind": "it",
+          "name": "every change with deferred reviewer has disposition latent",
+          "line": 103
+        },
+        {
+          "kind": "describe",
+          "name": "disposition does NOT consider existence deps",
+          "line": 140
+        },
+        {
+          "kind": "it",
+          "name": "a change with non-trivial existence deps but no decision deps is queued",
+          "line": 141
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/derive-routing.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "derive routing: concrete",
+          "line": 31
+        },
+        {
+          "kind": "it",
+          "name": "rename routes to renamed taxon's owner",
+          "line": 32
+        },
+        {
+          "kind": "it",
+          "name": "add-create routes to payload-parent's owner",
+          "line": 54
+        },
+        {
+          "kind": "it",
+          "name": "add-graft routes to payload-parent's owner",
+          "line": 82
+        },
+        {
+          "kind": "it",
+          "name": "detach routes to payload-parent's owner",
+          "line": 111
+        },
+        {
+          "kind": "it",
+          "name": "concrete reviewer preserves registry casing",
+          "line": 143
+        },
+        {
+          "kind": "describe",
+          "name": "derive routing: deferred under add-create",
+          "line": 167
+        },
+        {
+          "kind": "it",
+          "name": "add nested under add-create gets deferred reviewer",
+          "line": 168
+        },
+        {
+          "kind": "it",
+          "name": "nested deferred refs point to IMMEDIATE create parent, not transitive",
+          "line": 195
+        },
+        {
+          "kind": "it",
+          "name": "graft nested under add-create gets deferred reviewer",
+          "line": 231
+        },
+        {
+          "kind": "describe",
+          "name": "derive routing: nested under add-graft is concrete (not deferred)",
+          "line": 260
+        },
+        {
+          "kind": "it",
+          "name": "add nested under add-graft routes concretely to graft target's owner",
+          "line": 261
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/derive-sequencer.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "sequencer injection",
+          "line": 14
+        },
+        {
+          "kind": "it",
+          "name": "derivation uses the injected mintChangeId verbatim",
+          "line": 15
+        },
+        {
+          "kind": "describe",
+          "name": "derivation purity",
+          "line": 53
+        },
+        {
+          "kind": "it",
+          "name": "derive.ts does not import from store, handlers, or HTTP",
+          "line": 54
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/derive-single-change.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "derive: single-change emission",
+          "line": 37
+        },
+        {
+          "kind": "it",
+          "name": "payload with only a single rename emits one change",
+          "line": 38
+        },
+        {
+          "kind": "it",
+          "name": "only a no-op emits zero changes",
+          "line": 48
+        },
+        {
+          "kind": "it",
+          "name": "no-op ancestor of an operative node emits zero changes for the no-op",
+          "line": 56
+        },
+        {
+          "kind": "it",
+          "name": "add-create vs add-graft emit changes with distinct ops",
+          "line": 87
+        },
+        {
+          "kind": "it",
+          "name": "single detach emits one change with op detach",
+          "line": 118
+        },
+        {
+          "kind": "it",
+          "name": "each change carries proposalId and targetRootId",
+          "line": 148
+        },
+        {
+          "kind": "it",
+          "name": "changeIds assigned in DFS pre-order",
+          "line": 158
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/derive-status-tree.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "status tree per-node rules",
+          "line": 36
+        },
+        {
+          "kind": "it",
+          "name": "no-op status node is structural with no changeId",
+          "line": 37
+        },
+        {
+          "kind": "it",
+          "name": "queued rename status node has reviewer username",
+          "line": 47
+        },
+        {
+          "kind": "it",
+          "name": "latent change under create has reviewer null",
+          "line": 70
+        },
+        {
+          "kind": "it",
+          "name": "add-create status node has id:null and name set",
+          "line": 94
+        },
+        {
+          "kind": "it",
+          "name": "add-graft status node has id and no name",
+          "line": 111
+        },
+        {
+          "kind": "it",
+          "name": "detach status node has no children property",
+          "line": 133
+        },
+        {
+          "kind": "describe",
+          "name": "status tree shape mirrors payload",
+          "line": 165
+        },
+        {
+          "kind": "it",
+          "name": "tree node count and nesting matches payload",
+          "line": 166
+        },
+        {
+          "kind": "describe",
+          "name": "status tree reason field",
+          "line": 205
+        },
+        {
+          "kind": "it",
+          "name": "no status node has a reason field in Phase 5",
+          "line": 206
+        },
+        {
+          "kind": "describe",
+          "name": "no concrete-latent in current rules",
+          "line": 236
+        },
+        {
+          "kind": "it",
+          "name": "no derived change is concrete-latent (deferred ⇒ latent, but latent ⇒ ? requires add ancestor)",
+          "line": 237
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/end-to-end-appendix-a1.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Appendix A.1 end-to-end",
+          "line": 48
+        },
+        {
+          "kind": "it",
+          "name": "reproduces the PRD's initial-state dispositions and queue contents",
+          "line": 49
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/end-to-end-appendix-a2.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "Appendix A.2 end-to-end",
+          "line": 50
+        },
+        {
+          "kind": "it",
+          "name": "reproduces initial dispositions and queue contents for P1 and P2",
+          "line": 51
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/end-to-end-multiple-trees.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "multi-tree shared-taxon proposal",
+          "line": 48
+        },
+        {
+          "kind": "it",
+          "name": "rename of a shared taxon routes to its owner regardless of targeted tree",
+          "line": 49
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/end-to-end-no-side-effects.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "submission has no side-effects on the taxon graph or registry",
+          "line": 53
+        },
+        {
+          "kind": "it",
+          "name": "complex multi-owner submission leaves all live state unchanged",
+          "line": 54
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/get-proposal-by-id.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "GET /proposals/{id}",
+          "line": 50
+        },
+        {
+          "kind": "it",
+          "name": "unknown id → 404 proposal-not-found",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "null caller may read",
+          "line": 62
+        },
+        {
+          "kind": "it",
+          "name": "response shape mirrors the 201 status tree",
+          "line": 75
+        },
+        {
+          "kind": "describe",
+          "name": "GET /proposals/{id} status tree per-node rules",
+          "line": 101
+        },
+        {
+          "kind": "it",
+          "name": "no-op nodes are structural with no changeId",
+          "line": 102
+        },
+        {
+          "kind": "it",
+          "name": "queued rename status node has reviewer username",
+          "line": 119
+        },
+        {
+          "kind": "it",
+          "name": "latent under create has reviewer null",
+          "line": 144
+        },
+        {
+          "kind": "it",
+          "name": "no status node has a reason field in Phase 5",
+          "line": 171
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/get-proposals-list.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "GET /proposals: list",
+          "line": 46
+        },
+        {
+          "kind": "it",
+          "name": "empty server returns empty list",
+          "line": 47
+        },
+        {
+          "kind": "it",
+          "name": "list entries omit status tree",
+          "line": 55
+        },
+        {
+          "kind": "it",
+          "name": "null caller may list",
+          "line": 73
+        },
+        {
+          "kind": "describe",
+          "name": "GET /proposals: filters",
+          "line": 86
+        },
+        {
+          "kind": "it",
+          "name": "filter by proposer narrows",
+          "line": 103
+        },
+        {
+          "kind": "it",
+          "name": "proposer filter is case-insensitive",
+          "line": 111
+        },
+        {
+          "kind": "it",
+          "name": "filter by targetRootId narrows",
+          "line": 118
+        },
+        {
+          "kind": "it",
+          "name": "targetRootId filter is exact-string",
+          "line": 125
+        },
+        {
+          "kind": "it",
+          "name": "both filters combine as intersection",
+          "line": 132
+        },
+        {
+          "kind": "it",
+          "name": "unmatched filter returns 200 with empty list",
+          "line": 141
+        },
+        {
+          "kind": "it",
+          "name": "unrecognized query params are ignored",
+          "line": 149
+        },
+        {
+          "kind": "it",
+          "name": "empty proposer= treated as no filter",
+          "line": 156
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/get-queue-auth.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "GET /queue auth",
+          "line": 16
+        },
+        {
+          "kind": "it",
+          "name": "null caller → 403 forbidden",
+          "line": 17
+        },
+        {
+          "kind": "it",
+          "name": "unregistered caller → 403",
+          "line": 25
+        },
+        {
+          "kind": "it",
+          "name": "registered caller → 200 (empty queue when none queued)",
+          "line": 33
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/get-queue-listing.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "GET /queue listing",
+          "line": 61
+        },
+        {
+          "kind": "it",
+          "name": "registered caller sees their queued rename",
+          "line": 62
+        },
+        {
+          "kind": "it",
+          "name": "latent changes do not appear in any queue",
+          "line": 87
+        },
+        {
+          "kind": "it",
+          "name": "latent under graft (concrete reviewer) does NOT appear in queue",
+          "line": 110
+        },
+        {
+          "kind": "it",
+          "name": "add-create taxonRef is to-create with name",
+          "line": 143
+        },
+        {
+          "kind": "it",
+          "name": "add-graft taxonRef is existing with id",
+          "line": 158
+        },
+        {
+          "kind": "it",
+          "name": "queue is case-insensitive on the caller's username",
+          "line": 178
+        },
+        {
+          "kind": "it",
+          "name": "queue ordering is deterministic across two reads",
+          "line": 203
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/payload-existence.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "payload existence: missing edges",
+          "line": 12
+        },
+        {
+          "kind": "it",
+          "name": "rename whose payload-parent does not contain it → payload-edge-missing",
+          "line": 13
+        },
+        {
+          "kind": "it",
+          "name": "detach of non-existent edge → payload-edge-missing",
+          "line": 36
+        },
+        {
+          "kind": "it",
+          "name": "nested no-op whose parent edge does not hold → payload-edge-missing",
+          "line": 65
+        },
+        {
+          "kind": "describe",
+          "name": "payload existence: graft",
+          "line": 101
+        },
+        {
+          "kind": "it",
+          "name": "add-graft of non-existent taxon → graft-target-missing",
+          "line": 102
+        },
+        {
+          "kind": "it",
+          "name": "add-graft of taxon in a different tree → accepted",
+          "line": 117
+        },
+        {
+          "kind": "it",
+          "name": "add-graft of taxon already in same target tree → accepted (§3.3 acceptance-time)",
+          "line": 138
+        },
+        {
+          "kind": "describe",
+          "name": "payload existence: add-create has no live-state requirement",
+          "line": 171
+        },
+        {
+          "kind": "it",
+          "name": "add-create accepted regardless of any live state",
+          "line": 172
+        },
+        {
+          "kind": "describe",
+          "name": "payload existence: top taxon",
+          "line": 186
+        },
+        {
+          "kind": "it",
+          "name": "rename of top taxon (no payload-parent) has only top-taxon existence",
+          "line": 187
+        },
+        {
+          "kind": "describe",
+          "name": "payload existence: DFS pre-order failure surfacing",
+          "line": 197
+        },
+        {
+          "kind": "it",
+          "name": "ancestor existence fails before deeper-node existence",
+          "line": 198
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/payload-first-failure.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "DFS pre-order failure surfacing",
+          "line": 12
+        },
+        {
+          "kind": "it",
+          "name": "shape error in earlier-visited node surfaces before existence error in later sibling",
+          "line": 13
+        },
+        {
+          "kind": "it",
+          "name": "top-taxon failure beats deep existence failure",
+          "line": 39
+        },
+        {
+          "kind": "it",
+          "name": "under-create check fires before name-format on the offending node",
+          "line": 56
+        },
+        {
+          "kind": "describe",
+          "name": "position field",
+          "line": 83
+        },
+        {
+          "kind": "it",
+          "name": "position is non-empty on every failure",
+          "line": 84
+        },
+        {
+          "kind": "describe",
+          "name": "purity: validator does not invoke the invariant engine",
+          "line": 108
+        },
+        {
+          "kind": "it",
+          "name": "validator file imports nothing from src/domain/invariants",
+          "line": 109
+        },
+        {
+          "kind": "it",
+          "name": "validator file does not import HTTP or app",
+          "line": 130
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/payload-name-format.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "payload name format: rename",
+          "line": 33
+        },
+        {
+          "kind": "it",
+          "name": "rename to empty string yields tag 'empty'",
+          "line": 34
+        },
+        {
+          "kind": "it",
+          "name": "rename with leading whitespace yields tag 'leading-whitespace'",
+          "line": 45
+        },
+        {
+          "kind": "it",
+          "name": "rename with trailing whitespace yields tag 'trailing-whitespace'",
+          "line": 56
+        },
+        {
+          "kind": "describe",
+          "name": "payload name format: add-create",
+          "line": 68
+        },
+        {
+          "kind": "it",
+          "name": "add-create with empty name yields 'empty'",
+          "line": 69
+        },
+        {
+          "kind": "it",
+          "name": "add-create with leading whitespace yields 'leading-whitespace'",
+          "line": 84
+        },
+        {
+          "kind": "describe",
+          "name": "payload name format: happy path",
+          "line": 100
+        },
+        {
+          "kind": "it",
+          "name": "rename to valid name passes name-format and proceeds",
+          "line": 101
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/payload-shape.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "payload shape: op recognition",
+          "line": 38
+        },
+        {
+          "kind": "it",
+          "name": "unrecognized op fails with payload-shape",
+          "line": 39
+        },
+        {
+          "kind": "it",
+          "name": "missing op field fails with payload-shape",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "non-object payload root (${JSON.stringify(value)}) fails with payload-shape",
+          "line": 60
+        },
+        {
+          "kind": "it",
+          "name": "children not an array fails with payload-shape",
+          "line": 69
+        },
+        {
+          "kind": "it",
+          "name": "children contains non-object fails when child is visited",
+          "line": 80
+        },
+        {
+          "kind": "describe",
+          "name": "payload shape: per-op field rules",
+          "line": 92
+        },
+        {
+          "kind": "it",
+          "name": "no-op missing id fails with payload-op-fields",
+          "line": 93
+        },
+        {
+          "kind": "it",
+          "name": "rename missing id fails with payload-op-fields",
+          "line": 101
+        },
+        {
+          "kind": "it",
+          "name": "rename missing name fails with payload-op-fields",
+          "line": 109
+        },
+        {
+          "kind": "it",
+          "name": "add-create (id null) missing name fails with payload-op-fields",
+          "line": 117
+        },
+        {
+          "kind": "it",
+          "name": "detach missing id fails with payload-op-fields",
+          "line": 132
+        },
+        {
+          "kind": "it",
+          "name": "detach with children fails with payload-op-fields",
+          "line": 147
+        },
+        {
+          "kind": "it",
+          "name": "add-graft with name field accepted (name ignored)",
+          "line": 172
+        },
+        {
+          "kind": "it",
+          "name": "rename id non-string fails with payload-op-fields",
+          "line": 194
+        },
+        {
+          "kind": "it",
+          "name": "rename name non-string fails with payload-op-fields",
+          "line": 205
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/payload-top-taxon.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "top-taxon: op kind",
+          "line": 12
+        },
+        {
+          "kind": "it",
+          "name": "top op 'add' yields top-taxon-op",
+          "line": 13
+        },
+        {
+          "kind": "it",
+          "name": "top op 'detach' yields top-taxon-op",
+          "line": 24
+        },
+        {
+          "kind": "describe",
+          "name": "top-taxon: id alignment",
+          "line": 36
+        },
+        {
+          "kind": "it",
+          "name": "payload top id mismatches topTaxonId yields top-taxon-mismatch",
+          "line": 37
+        },
+        {
+          "kind": "describe",
+          "name": "top-taxon: reachability",
+          "line": 54
+        },
+        {
+          "kind": "it",
+          "name": "topTaxonId not reachable from targetRootId yields top-taxon-not-in-tree",
+          "line": 55
+        },
+        {
+          "kind": "it",
+          "name": "top is rename and id not in target tree yields top-taxon-not-in-tree",
+          "line": 73
+        },
+        {
+          "kind": "describe",
+          "name": "top-taxon: happy paths",
+          "line": 90
+        },
+        {
+          "kind": "it",
+          "name": "top is no-op, id matches, in target tree → proceeds",
+          "line": 91
+        },
+        {
+          "kind": "it",
+          "name": "top is rename, id matches, in target tree → proceeds",
+          "line": 100
+        },
+        {
+          "kind": "it",
+          "name": "top can be a non-root in-tree taxon (subtree anchor)",
+          "line": 109
+        },
+        {
+          "kind": "describe",
+          "name": "top-taxon: failure ordering",
+          "line": 125
+        },
+        {
+          "kind": "it",
+          "name": "top-taxon-op fires before top-taxon-not-in-tree",
+          "line": 126
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/payload-under-create.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "non-add ops nested under add-create are rejected",
+          "line": 20
+        },
+        {
+          "kind": "it",
+          "name": "rename nested under add-create → payload-op-under-create",
+          "line": 21
+        },
+        {
+          "kind": "it",
+          "name": "detach nested under add-create → payload-op-under-create",
+          "line": 43
+        },
+        {
+          "kind": "it",
+          "name": "no-op nested under add-create → payload-op-under-create",
+          "line": 65
+        },
+        {
+          "kind": "describe",
+          "name": "nested add ops under add-create are permitted",
+          "line": 88
+        },
+        {
+          "kind": "it",
+          "name": "add-create nested under add-create is accepted",
+          "line": 89
+        },
+        {
+          "kind": "it",
+          "name": "add-graft nested under add-create where graft target exists → accepted",
+          "line": 109
+        },
+        {
+          "kind": "it",
+          "name": "add-graft nested under add-create where target missing → graft-target-missing",
+          "line": 134
+        },
+        {
+          "kind": "describe",
+          "name": "nested ops under add-graft (not under create)",
+          "line": 157
+        },
+        {
+          "kind": "it",
+          "name": "no-op nested under add-graft is OK when the live edge holds",
+          "line": 158
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/post-proposals-auth.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /proposals auth",
+          "line": 25
+        },
+        {
+          "kind": "it",
+          "name": "null caller → 403 forbidden",
+          "line": 26
+        },
+        {
+          "kind": "it",
+          "name": "unregistered caller → 403 forbidden",
+          "line": 43
+        },
+        {
+          "kind": "it",
+          "name": "empty X-Username → 403 forbidden",
+          "line": 61
+        },
+        {
+          "kind": "it",
+          "name": "registered caller with valid degenerate payload → 201",
+          "line": 84
+        },
+        {
+          "kind": "it",
+          "name": "auth fires before body parsing (null caller + non-JSON body → 403, not 400)",
+          "line": 120
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/post-proposals-body.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /proposals body schema",
+          "line": 42
+        },
+        {
+          "kind": "it",
+          "name": "non-JSON body → 400 malformed-body",
+          "line": 43
+        },
+        {
+          "kind": "it",
+          "name": "missing targetRootId → 400 malformed-body",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "missing topTaxonId → 400 malformed-body",
+          "line": 61
+        },
+        {
+          "kind": "it",
+          "name": "missing payload → 400 malformed-body",
+          "line": 71
+        },
+        {
+          "kind": "it",
+          "name": "non-string targetRootId → 400 malformed-body",
+          "line": 81
+        },
+        {
+          "kind": "it",
+          "name": "non-string topTaxonId → 400 malformed-body",
+          "line": 92
+        },
+        {
+          "kind": "it",
+          "name": "empty-string targetRootId → 400 malformed-body",
+          "line": 103
+        },
+        {
+          "kind": "it",
+          "name": "non-object payload → 400 malformed-body",
+          "line": 114
+        },
+        {
+          "kind": "it",
+          "name": "extra unrecognized top-level fields are ignored",
+          "line": 125
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/post-proposals-no-mutation.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /proposals: no mutation of taxon graph or registry",
+          "line": 24
+        },
+        {
+          "kind": "it",
+          "name": "successful submission leaves taxa, trees, and users unchanged",
+          "line": 25
+        },
+        {
+          "kind": "it",
+          "name": "failed submission leaves proposal store unchanged",
+          "line": 58
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/post-proposals-payload-errors.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /proposals payload validation via HTTP",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "payload-shape",
+          "line": 52
+        },
+        {
+          "kind": "it",
+          "name": "payload-op-fields",
+          "line": 65
+        },
+        {
+          "kind": "it",
+          "name": "name-format (empty)",
+          "line": 78
+        },
+        {
+          "kind": "it",
+          "name": "top-taxon-op",
+          "line": 91
+        },
+        {
+          "kind": "it",
+          "name": "top-taxon-mismatch",
+          "line": 104
+        },
+        {
+          "kind": "it",
+          "name": "top-taxon-not-in-tree",
+          "line": 122
+        },
+        {
+          "kind": "it",
+          "name": "payload-edge-missing",
+          "line": 140
+        },
+        {
+          "kind": "it",
+          "name": "graft-target-missing",
+          "line": 163
+        },
+        {
+          "kind": "it",
+          "name": "payload-op-under-create",
+          "line": 180
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/post-proposals-success.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /proposals success path",
+          "line": 32
+        },
+        {
+          "kind": "it",
+          "name": "registered proposer + valid payload → 201 with proposalId and status tree",
+          "line": 33
+        },
+        {
+          "kind": "it",
+          "name": "proposer field carries registry's original casing",
+          "line": 62
+        },
+        {
+          "kind": "it",
+          "name": "two submissions produce distinct proposalIds in order p1, p2",
+          "line": 84
+        },
+        {
+          "kind": "it",
+          "name": "rename submission installs queued change to taxon owner",
+          "line": 107
+        },
+        {
+          "kind": "it",
+          "name": "latent change is installed but not queued",
+          "line": 147
+        },
+        {
+          "kind": "describe",
+          "name": "POST /proposals: lock discipline",
+          "line": 189
+        },
+        {
+          "kind": "it",
+          "name": "submit-handler.ts calls withWriteLock exactly once",
+          "line": 190
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/post-proposals-target-tree.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /proposals target tree",
+          "line": 23
+        },
+        {
+          "kind": "it",
+          "name": "unknown targetRootId → 404 unknown-target-tree",
+          "line": 24
+        },
+        {
+          "kind": "it",
+          "name": "targetRootId exists but is not a root → 404 unknown-target-tree",
+          "line": 46
+        },
+        {
+          "kind": "it",
+          "name": "no proposal installed on 404",
+          "line": 73
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/reset-integration.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /reset clears proposal-store state",
+          "line": 43
+        },
+        {
+          "kind": "it",
+          "name": "after a complex multi-proposal session, reset returns 204 and every endpoint is empty",
+          "line": 44
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/serialize-queue-entry.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "simplifyPayloadParent",
+          "line": 44
+        },
+        {
+          "kind": "it",
+          "name": "live → { taxonId }",
+          "line": 45
+        },
+        {
+          "kind": "it",
+          "name": "top → { top: true }",
+          "line": 56
+        },
+        {
+          "kind": "it",
+          "name": "to-create resolves via the injected resolver",
+          "line": 63
+        },
+        {
+          "kind": "it",
+          "name": "to-create with unresolvable parent throws",
+          "line": 72
+        },
+        {
+          "kind": "describe",
+          "name": "toQueueEntry",
+          "line": 85
+        },
+        {
+          "kind": "it",
+          "name": "rename → taxonRef { kind: existing, id }",
+          "line": 86
+        },
+        {
+          "kind": "it",
+          "name": "add-create → taxonRef { kind: to-create, name }",
+          "line": 97
+        },
+        {
+          "kind": "it",
+          "name": "add-graft → taxonRef { kind: existing, id }",
+          "line": 108
+        },
+        {
+          "kind": "it",
+          "name": "queue entry carries changeId, proposalId, op, targetRootId, payloadParent, disposition",
+          "line": 119
+        },
+        {
+          "kind": "it",
+          "name": "invalid entry carries disposition=invalid and reason",
+          "line": 139
+        },
+        {
+          "kind": "it",
+          "name": "invalid entry with no stored reason omits the field",
+          "line": 151
+        },
+        {
+          "kind": "it",
+          "name": "queued entry with stored reason (shouldn't happen, but defensive)",
+          "line": 165
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/serialize-status-tree.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "renderStatusTree: per-node rules",
+          "line": 36
+        },
+        {
+          "kind": "it",
+          "name": "no-op status node is structural with no changeId",
+          "line": 37
+        },
+        {
+          "kind": "it",
+          "name": "rename status node carries changeId and reviewer",
+          "line": 48
+        },
+        {
+          "kind": "it",
+          "name": "add-create status node has id:null and name",
+          "line": 72
+        },
+        {
+          "kind": "it",
+          "name": "add-graft status node has id and no name",
+          "line": 93
+        },
+        {
+          "kind": "it",
+          "name": "detach status node has no children",
+          "line": 113
+        },
+        {
+          "kind": "it",
+          "name": "latent deferred change has reviewer null",
+          "line": 131
+        },
+        {
+          "kind": "describe",
+          "name": "renderStatusTree: tree shape",
+          "line": 168
+        },
+        {
+          "kind": "it",
+          "name": "isomorphic to payload (same node count and nesting)",
+          "line": 169
+        },
+        {
+          "kind": "describe",
+          "name": "renderStatusTree: defensive mismatch detection",
+          "line": 206
+        },
+        {
+          "kind": "it",
+          "name": "throws if change count does not match operative payload count",
+          "line": 207
+        },
+        {
+          "kind": "describe",
+          "name": "renderStatusTree: Phase 6 dispositions",
+          "line": 222
+        },
+        {
+          "kind": "it",
+          "name": "accepted rename surfaces disposition with no reason",
+          "line": 223
+        },
+        {
+          "kind": "it",
+          "name": "accepted add-create surfaces mintedTaxonId as id",
+          "line": 241
+        },
+        {
+          "kind": "it",
+          "name": "non-accepted add-create keeps id null",
+          "line": 264
+        },
+        {
+          "kind": "it",
+          "name": "rejected rename surfaces reason",
+          "line": 280
+        },
+        {
+          "kind": "it",
+          "name": "rejected change with empty-string reason renders as empty string",
+          "line": 298
+        },
+        {
+          "kind": "it",
+          "name": "invalid from failed accept surfaces reason",
+          "line": 314
+        },
+        {
+          "kind": "it",
+          "name": "invalid from cascade surfaces reason referencing the rejected ancestor",
+          "line": 332
+        },
+        {
+          "kind": "it",
+          "name": "queued change has no reason field even if one is somehow stored (defensive)",
+          "line": 368
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/store-ids.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "ID minting",
+          "line": 15
+        },
+        {
+          "kind": "it",
+          "name": "sequential mintProposalId produces p1, p2, p3",
+          "line": 16
+        },
+        {
+          "kind": "it",
+          "name": "sequential mintChangeId produces ch1, ch2, ch3",
+          "line": 22
+        },
+        {
+          "kind": "it",
+          "name": "counters are independent",
+          "line": 28
+        },
+        {
+          "kind": "it",
+          "name": "monotonically increasing",
+          "line": 35
+        },
+        {
+          "kind": "it",
+          "name": "reset returns counters to 1-base",
+          "line": 44
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/store-install.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "install: queue projection",
+          "line": 53
+        },
+        {
+          "kind": "it",
+          "name": "queued + concrete change appears in the user's queue (lowercased key)",
+          "line": 54
+        },
+        {
+          "kind": "it",
+          "name": "latent change does NOT appear in any queue",
+          "line": 66
+        },
+        {
+          "kind": "it",
+          "name": "deferred-reviewer change does NOT appear in any queue",
+          "line": 76
+        },
+        {
+          "kind": "it",
+          "name": "queue key is lowercased; reviewer.username casing preserved on the change record",
+          "line": 88
+        },
+        {
+          "kind": "describe",
+          "name": "install: ordering and lookups",
+          "line": 106
+        },
+        {
+          "kind": "it",
+          "name": "changesByProposal preserved in input order",
+          "line": 107
+        },
+        {
+          "kind": "it",
+          "name": "envelope retrievable by id",
+          "line": 119
+        },
+        {
+          "kind": "it",
+          "name": "changes retrievable by id",
+          "line": 125
+        },
+        {
+          "kind": "describe",
+          "name": "install: error paths",
+          "line": 131
+        },
+        {
+          "kind": "it",
+          "name": "throws plain Error on duplicate changeId within input",
+          "line": 132
+        },
+        {
+          "kind": "it",
+          "name": "throws plain Error on changeId already in store",
+          "line": 143
+        },
+        {
+          "kind": "it",
+          "name": "throws plain Error on duplicate proposalId",
+          "line": 158
+        },
+        {
+          "kind": "describe",
+          "name": "install: synchronous (no await between mutations)",
+          "line": 167
+        },
+        {
+          "kind": "it",
+          "name": "source file's installProposal has no await keyword between mutations",
+          "line": 168
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/store-phase7.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "dismissInvalidQueued",
+          "line": 72
+        },
+        {
+          "kind": "it",
+          "name": "removes an invalid-in-queue change from the queue (disposition unchanged)",
+          "line": 73
+        },
+        {
+          "kind": "it",
+          "name": "throws on disposition === queued",
+          "line": 89
+        },
+        {
+          "kind": "it",
+          "name": "throws on invalid-but-not-in-queue (latent → invalid)",
+          "line": 98
+        },
+        {
+          "kind": "it",
+          "name": "throws on accepted",
+          "line": 108
+        },
+        {
+          "kind": "it",
+          "name": "throws on unknown changeId",
+          "line": 116
+        },
+        {
+          "kind": "it",
+          "name": "idempotency not provided: second dismiss throws",
+          "line": 120
+        },
+        {
+          "kind": "describe",
+          "name": "listQueuedChangesGlobal",
+          "line": 130
+        },
+        {
+          "kind": "it",
+          "name": "returns empty on fresh store",
+          "line": 131
+        },
+        {
+          "kind": "it",
+          "name": "returns a single queued change",
+          "line": 135
+        },
+        {
+          "kind": "it",
+          "name": "returns queued + invalid-in-queue across users in ascending changeId order",
+          "line": 144
+        },
+        {
+          "kind": "it",
+          "name": "excludes auto-dismissed changes",
+          "line": 159
+        },
+        {
+          "kind": "it",
+          "name": "excludes latent-invalid (case-1) changes",
+          "line": 173
+        },
+        {
+          "kind": "it",
+          "name": "excludes accepted changes",
+          "line": 186
+        },
+        {
+          "kind": "it",
+          "name": "returns empty after reset",
+          "line": 199
+        },
+        {
+          "kind": "it",
+          "name": "includes promoted changes after promoteLatentToQueued",
+          "line": 207
+        },
+        {
+          "kind": "describe",
+          "name": "queue-membership relaxation",
+          "line": 218
+        },
+        {
+          "kind": "it",
+          "name": "dismissed invalid change has disposition invalid but is not in queue",
+          "line": 219
+        },
+        {
+          "kind": "it",
+          "name": "invalid-from-queued still in queue until dismissed",
+          "line": 233
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/store-queue-determinism.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "queue ordering: deterministic across reads",
+          "line": 56
+        },
+        {
+          "kind": "it",
+          "name": "two reads return the same order",
+          "line": 57
+        },
+        {
+          "kind": "it",
+          "name": "queue order is changeId-ascending (numeric)",
+          "line": 68
+        },
+        {
+          "kind": "it",
+          "name": "queue lookup is case-insensitive",
+          "line": 85
+        },
+        {
+          "kind": "describe",
+          "name": "listProposals filters",
+          "line": 95
+        },
+        {
+          "kind": "it",
+          "name": "no filters returns all",
+          "line": 102
+        },
+        {
+          "kind": "it",
+          "name": "empty filter object returns all",
+          "line": 106
+        },
+        {
+          "kind": "it",
+          "name": "proposer filter is case-insensitive",
+          "line": 110
+        },
+        {
+          "kind": "it",
+          "name": "targetRootId filter is exact-string",
+          "line": 115
+        },
+        {
+          "kind": "it",
+          "name": "both filters combine as intersection",
+          "line": 120
+        },
+        {
+          "kind": "it",
+          "name": "no match returns empty array (not undefined)",
+          "line": 127
+        },
+        {
+          "kind": "describe",
+          "name": "purity",
+          "line": 132
+        },
+        {
+          "kind": "it",
+          "name": "store file has no HTTP, registry, or taxa imports",
+          "line": 133
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/store-reset.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "reset: collection clearing",
+          "line": 52
+        },
+        {
+          "kind": "it",
+          "name": "reset clears proposals collection",
+          "line": 53
+        },
+        {
+          "kind": "it",
+          "name": "reset clears changes collection",
+          "line": 61
+        },
+        {
+          "kind": "it",
+          "name": "reset clears changesByProposal",
+          "line": 68
+        },
+        {
+          "kind": "it",
+          "name": "reset clears queueByUser",
+          "line": 75
+        },
+        {
+          "kind": "it",
+          "name": "reset resets both ID counters to 1-base",
+          "line": 83
+        },
+        {
+          "kind": "it",
+          "name": "reset is idempotent",
+          "line": 94
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/store-resolve-parent.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "resolveLiveParentId",
+          "line": 53
+        },
+        {
+          "kind": "it",
+          "name": "top ref returns the proposal's topTaxonId",
+          "line": 54
+        },
+        {
+          "kind": "it",
+          "name": "top ref for unknown proposal returns null",
+          "line": 60
+        },
+        {
+          "kind": "it",
+          "name": "live ref returns the id verbatim",
+          "line": 65
+        },
+        {
+          "kind": "it",
+          "name": "to-create with accepted parent returns mintedTaxonId",
+          "line": 73
+        },
+        {
+          "kind": "it",
+          "name": "to-create with queued (unaccepted) parent returns null",
+          "line": 83
+        },
+        {
+          "kind": "it",
+          "name": "to-create with rejected parent returns null",
+          "line": 92
+        },
+        {
+          "kind": "it",
+          "name": "to-create with unknown parentChangeId returns null",
+          "line": 109
+        },
+        {
+          "kind": "it",
+          "name": "resolver source does not import from src/taxa/",
+          "line": 118
+        },
+        {
+          "kind": "it",
+          "name": "resolver source does not import or invoke withWriteLock",
+          "line": 137
+        }
+      ]
+    },
+    {
+      "path": "test/proposals/store-transitions.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "transitionToAccepted",
+          "line": 57
+        },
+        {
+          "kind": "it",
+          "name": "queued → accepted sets fields and removes from queue",
+          "line": 58
+        },
+        {
+          "kind": "it",
+          "name": "queued → accepted with mintedTaxonId records the id",
+          "line": 69
+        },
+        {
+          "kind": "it",
+          "name": "throws on latent source",
+          "line": 80
+        },
+        {
+          "kind": "it",
+          "name": "throws on accepted source",
+          "line": 88
+        },
+        {
+          "kind": "it",
+          "name": "throws on rejected source",
+          "line": 94
+        },
+        {
+          "kind": "it",
+          "name": "throws on invalid source",
+          "line": 100
+        },
+        {
+          "kind": "it",
+          "name": "throws on unknown changeId",
+          "line": 106
+        },
+        {
+          "kind": "it",
+          "name": "stores acceptedBy verbatim (no case normalization at store layer)",
+          "line": 110
+        },
+        {
+          "kind": "describe",
+          "name": "transitionToRejected",
+          "line": 117
+        },
+        {
+          "kind": "it",
+          "name": "queued → rejected sets reason and removes from queue",
+          "line": 118
+        },
+        {
+          "kind": "it",
+          "name": "empty-string reason is permitted",
+          "line": 127
+        },
+        {
+          "kind": "it",
+          "name": "throws on latent source",
+          "line": 133
+        },
+        {
+          "kind": "it",
+          "name": "throws on accepted/rejected/invalid sources",
+          "line": 140
+        },
+        {
+          "kind": "it",
+          "name": "throws on unknown changeId",
+          "line": 154
+        },
+        {
+          "kind": "describe",
+          "name": "transitionToInvalid",
+          "line": 159
+        },
+        {
+          "kind": "it",
+          "name": "queued source stays in queue (broadened invariant)",
+          "line": 160
+        },
+        {
+          "kind": "it",
+          "name": "latent source is not added to queue",
+          "line": 171
+        },
+        {
+          "kind": "it",
+          "name": "throws on accepted source",
+          "line": 180
+        },
+        {
+          "kind": "it",
+          "name": "throws on rejected source",
+          "line": 186
+        },
+        {
+          "kind": "it",
+          "name": "throws on invalid source (no idempotency)",
+          "line": 192
+        },
+        {
+          "kind": "it",
+          "name": "throws on unknown changeId",
+          "line": 198
+        },
+        {
+          "kind": "describe",
+          "name": "promoteLatentToQueued",
+          "line": 203
+        },
+        {
+          "kind": "it",
+          "name": "latent → queued sets concrete reviewer and inserts into queue",
+          "line": 204
+        },
+        {
+          "kind": "it",
+          "name": "promotion overwrites a concrete reviewer (degenerate but lawful)",
+          "line": 225
+        },
+        {
+          "kind": "it",
+          "name": "throws on queued source",
+          "line": 241
+        },
+        {
+          "kind": "it",
+          "name": "throws on accepted/rejected/invalid sources",
+          "line": 246
+        },
+        {
+          "kind": "it",
+          "name": "queue key is lowercased; stored username preserves casing",
+          "line": 260
+        },
+        {
+          "kind": "it",
+          "name": "throws on unknown changeId",
+          "line": 277
+        },
+        {
+          "kind": "describe",
+          "name": "listQueueFor: broadened to {queued, invalid}",
+          "line": 282
+        },
+        {
+          "kind": "it",
+          "name": "returns mixed queued and invalid entries in ascending changeId order",
+          "line": 283
+        },
+        {
+          "kind": "it",
+          "name": "invalid-from-latent does NOT enter the queue",
+          "line": 304
+        },
+        {
+          "kind": "it",
+          "name": "two reads return same order",
+          "line": 315
+        }
+      ]
+    },
+    {
+      "path": "test/reset/reset.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /reset: empty server",
+          "line": 5
+        },
+        {
+          "kind": "it",
+          "name": "returns 204 with empty body",
+          "line": 6
+        },
+        {
+          "kind": "describe",
+          "name": "POST /reset: exempt from §4 authorization gate",
+          "line": 15
+        },
+        {
+          "kind": "it",
+          "name": "no X-Username header → 204",
+          "line": 16
+        },
+        {
+          "kind": "it",
+          "name": "empty X-Username → 204",
+          "line": 22
+        },
+        {
+          "kind": "it",
+          "name": "unregistered well-formed username → 204 (NOT 403)",
+          "line": 31
+        },
+        {
+          "kind": "it",
+          "name": "another well-formed unknown user → 204",
+          "line": 41
+        },
+        {
+          "kind": "it",
+          "name": "whitespace-only X-Username → 204 (NOT 400)",
+          "line": 50
+        },
+        {
+          "kind": "it",
+          "name": "trailing-whitespace X-Username → 204",
+          "line": 60
+        },
+        {
+          "kind": "describe",
+          "name": "POST /reset: idempotence",
+          "line": 70
+        },
+        {
+          "kind": "it",
+          "name": "two consecutive resets both return 204",
+          "line": 71
+        },
+        {
+          "kind": "describe",
+          "name": "POST /reset: wrong method",
+          "line": 80
+        },
+        {
+          "kind": "it",
+          "name": "GET /reset returns 404 or 405 with the standard envelope",
+          "line": 81
+        }
+      ]
+    },
+    {
+      "path": "test/reset/taxa-reset.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /reset clears taxa state",
+          "line": 20
+        },
+        {
+          "kind": "it",
+          "name": "after seeding taxa and edges, reset empties /taxa and /trees",
+          "line": 21
+        },
+        {
+          "kind": "it",
+          "name": "reset zeroes the ID counter (next seed starts at t1)",
+          "line": 58
+        },
+        {
+          "kind": "it",
+          "name": "reset also clears the registry (cross-subsystem composition still works)",
+          "line": 71
+        },
+        {
+          "kind": "it",
+          "name": "reset accepts null, unregistered, and malformed-X-Username callers",
+          "line": 90
+        }
+      ]
+    },
+    {
+      "path": "test/reset/users-reset.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /reset clears the user registry (Phase 2 forward obligation)",
+          "line": 15
+        },
+        {
+          "kind": "it",
+          "name": "registered users are gone after reset",
+          "line": 16
+        },
+        {
+          "kind": "it",
+          "name": "the case-key map is cleared too (no lingering duplicate)",
+          "line": 39
+        },
+        {
+          "kind": "it",
+          "name": "re-register identical-case after reset succeeds",
+          "line": 57
+        }
+      ]
+    },
+    {
+      "path": "test/taxa/delete-edge.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "DELETE edge: detach success",
+          "line": 29
+        },
+        {
+          "kind": "it",
+          "name": "parent-owner detaches an existing edge",
+          "line": 30
+        },
+        {
+          "kind": "it",
+          "name": "detached child with no other parents becomes a root",
+          "line": 51
+        },
+        {
+          "kind": "it",
+          "name": "detach preserves the child's subtree",
+          "line": 71
+        },
+        {
+          "kind": "describe",
+          "name": "DELETE edge: 404 edge-not-found",
+          "line": 102
+        },
+        {
+          "kind": "it",
+          "name": "detach of non-existent edge → 404 edge-not-found",
+          "line": 103
+        },
+        {
+          "kind": "it",
+          "name": "repeated DELETE: first 204, second 404",
+          "line": 121
+        },
+        {
+          "kind": "describe",
+          "name": "DELETE edge: authorization and existence ordering",
+          "line": 146
+        },
+        {
+          "kind": "it",
+          "name": "non-parent-owner → 403 not-parent-owner",
+          "line": 147
+        },
+        {
+          "kind": "it",
+          "name": "null caller → 403",
+          "line": 169
+        },
+        {
+          "kind": "it",
+          "name": "unknown parent → 404 taxon-not-found",
+          "line": 183
+        },
+        {
+          "kind": "it",
+          "name": "unknown child by parent-owner → 404 taxon-not-found",
+          "line": 195
+        },
+        {
+          "kind": "it",
+          "name": "unknown child by non-owner → 403 not-parent-owner (NOT 404)",
+          "line": 208
+        }
+      ]
+    },
+    {
+      "path": "test/taxa/delete-taxon.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "DELETE taxon: success cases",
+          "line": 25
+        },
+        {
+          "kind": "it",
+          "name": "owner deletes a leaf root",
+          "line": 26
+        },
+        {
+          "kind": "it",
+          "name": "owner deletes a wholly-owned subtree",
+          "line": 41
+        },
+        {
+          "kind": "it",
+          "name": "cascade halts at other-owned child (detached, not deleted)",
+          "line": 67
+        },
+        {
+          "kind": "it",
+          "name": "cascade does NOT continue past halt frontier even into owner-owned descendants",
+          "line": 96
+        },
+        {
+          "kind": "it",
+          "name": "delete of a non-root taxon with a single owner-owned parent succeeds",
+          "line": 128
+        },
+        {
+          "kind": "it",
+          "name": "halt-frontier other-owned taxon that is itself shared elsewhere does NOT trip precondition 1",
+          "line": 149
+        },
+        {
+          "kind": "describe",
+          "name": "DELETE taxon: precondition 1 (region contains shared taxon)",
+          "line": 180
+        },
+        {
+          "kind": "it",
+          "name": "region taxon in multiple trees (sibling roots) → 409 delete-region-shared",
+          "line": 181
+        },
+        {
+          "kind": "it",
+          "name": "region taxon shared via ancestor's fan-out → 409 delete-region-shared (disproves parent-count shortcut)",
+          "line": 210
+        },
+        {
+          "kind": "describe",
+          "name": "DELETE taxon: precondition 2 (parent not owned)",
+          "line": 253
+        },
+        {
+          "kind": "it",
+          "name": "N has a parent owned by another user → 409 delete-parent-not-owned",
+          "line": 254
+        },
+        {
+          "kind": "it",
+          "name": "precondition 1 fires before precondition 2 when both would fail",
+          "line": 276
+        },
+        {
+          "kind": "describe",
+          "name": "DELETE taxon: errors",
+          "line": 304
+        },
+        {
+          "kind": "it",
+          "name": "non-owner → 403 not-owner",
+          "line": 305
+        },
+        {
+          "kind": "it",
+          "name": "unknown id → 404 taxon-not-found",
+          "line": 319
+        },
+        {
+          "kind": "it",
+          "name": "null caller → 403 forbidden",
+          "line": 331
+        },
+        {
+          "kind": "it",
+          "name": "unregistered caller → 403 forbidden",
+          "line": 339
+        },
+        {
+          "kind": "describe",
+          "name": "DELETE taxon: post-state consistency",
+          "line": 350
+        },
+        {
+          "kind": "it",
+          "name": "after a successful delete, no dangling references remain",
+          "line": 351
+        }
+      ]
+    },
+    {
+      "path": "test/taxa/http.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "GET /taxa: openness",
+          "line": 55
+        },
+        {
+          "kind": "it",
+          "name": "null user can read",
+          "line": 56
+        },
+        {
+          "kind": "it",
+          "name": "unregistered caller can read",
+          "line": 62
+        },
+        {
+          "kind": "it",
+          "name": "registered caller can read",
+          "line": 68
+        },
+        {
+          "kind": "describe",
+          "name": "GET /taxa: response shape",
+          "line": 76
+        },
+        {
+          "kind": "it",
+          "name": "empty store returns {taxa: []}",
+          "line": 77
+        },
+        {
+          "kind": "it",
+          "name": "wraps in object, not bare array",
+          "line": 84
+        },
+        {
+          "kind": "it",
+          "name": "single taxon entry has all six fields",
+          "line": 92
+        },
+        {
+          "kind": "it",
+          "name": "populates children and parents",
+          "line": 108
+        },
+        {
+          "kind": "it",
+          "name": "shared:true for taxa in multiple trees; shared:false for roots and unshared",
+          "line": 134
+        },
+        {
+          "kind": "it",
+          "name": "preserves owner casing",
+          "line": 154
+        },
+        {
+          "kind": "it",
+          "name": "reads do not gatekeep on invariant violations",
+          "line": 163
+        },
+        {
+          "kind": "describe",
+          "name": "GET /taxa/{id}",
+          "line": 186
+        },
+        {
+          "kind": "it",
+          "name": "returns 200 with {taxon: ...} for existing id",
+          "line": 187
+        },
+        {
+          "kind": "it",
+          "name": "returns 404 taxon-not-found for unknown id",
+          "line": 201
+        },
+        {
+          "kind": "it",
+          "name": "syntactically odd id returns 404 not 400",
+          "line": 210
+        },
+        {
+          "kind": "it",
+          "name": "null user can fetch by id",
+          "line": 218
+        },
+        {
+          "kind": "describe",
+          "name": "GET /trees",
+          "line": 226
+        },
+        {
+          "kind": "it",
+          "name": "empty store returns {roots: []}",
+          "line": 227
+        },
+        {
+          "kind": "it",
+          "name": "lists roots with id and name; excludes non-roots",
+          "line": 234
+        },
+        {
+          "kind": "it",
+          "name": "null user can read",
+          "line": 252
+        },
+        {
+          "kind": "describe",
+          "name": "GET /trees/{rootId}",
+          "line": 259
+        },
+        {
+          "kind": "it",
+          "name": "returns single-root tree with empty children",
+          "line": 260
+        },
+        {
+          "kind": "it",
+          "name": "recursively expands children",
+          "line": 278
+        },
+        {
+          "kind": "it",
+          "name": "shared taxon appears once per tree with shared:true",
+          "line": 299
+        },
+        {
+          "kind": "it",
+          "name": "Node shape omits parents",
+          "line": 325
+        },
+        {
+          "kind": "it",
+          "name": "unknown rootId returns 404 root-not-found",
+          "line": 340
+        },
+        {
+          "kind": "it",
+          "name": "non-root taxon id returns 404 root-not-found",
+          "line": 349
+        },
+        {
+          "kind": "it",
+          "name": "null user can read",
+          "line": 364
+        },
+        {
+          "kind": "describe",
+          "name": "Structural — no handler invokes the gate or the invariant engine",
+          "line": 372
+        },
+        {
+          "kind": "it",
+          "name": "unregistered caller can read all four endpoints (sanity for openness)",
+          "line": 376
+        }
+      ]
+    },
+    {
+      "path": "test/taxa/patch-taxon.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "PATCH /taxa/{id}: rename success",
+          "line": 37
+        },
+        {
+          "kind": "it",
+          "name": "owner renames their own taxon",
+          "line": 38
+        },
+        {
+          "kind": "it",
+          "name": "rename to current name is a no-op success",
+          "line": 53
+        },
+        {
+          "kind": "it",
+          "name": "ownership check is case-insensitive",
+          "line": 66
+        },
+        {
+          "kind": "describe",
+          "name": "PATCH /taxa/{id}: rename conflicts",
+          "line": 79
+        },
+        {
+          "kind": "it",
+          "name": "in-tree clash → 409 in-tree-name-clash",
+          "line": 80
+        },
+        {
+          "kind": "it",
+          "name": "cross-tree clash surfaces the other root",
+          "line": 107
+        },
+        {
+          "kind": "describe",
+          "name": "PATCH /taxa/{id}: owner reassignment",
+          "line": 135
+        },
+        {
+          "kind": "it",
+          "name": "owner reassignment to a registered user succeeds",
+          "line": 136
+        },
+        {
+          "kind": "it",
+          "name": "after reassignment the prior owner gets 403 on subsequent PATCH",
+          "line": 150
+        },
+        {
+          "kind": "it",
+          "name": "owner reassignment canonicalizes casing to the registry's stored form",
+          "line": 170
+        },
+        {
+          "kind": "it",
+          "name": "self-reassignment is a no-op success",
+          "line": 184
+        },
+        {
+          "kind": "it",
+          "name": "unregistered new owner → 400 unregistered-owner",
+          "line": 197
+        },
+        {
+          "kind": "it",
+          "name": "null owner → 400 (username-format violation, value not a string)",
+          "line": 213
+        },
+        {
+          "kind": "it",
+          "name": "empty-string owner → 400 (empty)",
+          "line": 227
+        },
+        {
+          "kind": "describe",
+          "name": "PATCH /taxa/{id}: combined rename + reassign",
+          "line": 242
+        },
+        {
+          "kind": "it",
+          "name": "both apply atomically on success",
+          "line": 243
+        },
+        {
+          "kind": "it",
+          "name": "rename failure rolls back the owner change too",
+          "line": 261
+        },
+        {
+          "kind": "describe",
+          "name": "PATCH /taxa/{id}: errors and validation order",
+          "line": 291
+        },
+        {
+          "kind": "it",
+          "name": "unknown taxon → 404",
+          "line": 292
+        },
+        {
+          "kind": "it",
+          "name": "non-owner → 403 not-owner",
+          "line": 305
+        },
+        {
+          "kind": "it",
+          "name": "null caller → 403 (no details.tag from this layer)",
+          "line": 320
+        },
+        {
+          "kind": "it",
+          "name": "empty body → 400 empty-patch",
+          "line": 332
+        },
+        {
+          "kind": "it",
+          "name": "non-JSON body → 400 malformed-body",
+          "line": 346
+        },
+        {
+          "kind": "it",
+          "name": "malformed name → 400 with format tag",
+          "line": 360
+        },
+        {
+          "kind": "it",
+          "name": "validation order: unregistered-owner fires before checkRename",
+          "line": 374
+        },
+        {
+          "kind": "it",
+          "name": "validation order: malformed-body fires before owner-registry lookup",
+          "line": 399
+        }
+      ]
+    },
+    {
+      "path": "test/taxa/post-taxa.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /taxa: happy path",
+          "line": 27
+        },
+        {
+          "kind": "it",
+          "name": "registered creator gets 201 with the full serialized taxon",
+          "line": 28
+        },
+        {
+          "kind": "it",
+          "name": "created taxon is visible in GET /taxa, /taxa/{id}, /trees",
+          "line": 50
+        },
+        {
+          "kind": "it",
+          "name": "IDs increment monotonically across creates",
+          "line": 75
+        },
+        {
+          "kind": "it",
+          "name": "owner is stored in registered casing regardless of X-Username casing",
+          "line": 89
+        },
+        {
+          "kind": "describe",
+          "name": "POST /taxa: auth gate",
+          "line": 102
+        },
+        {
+          "kind": "it",
+          "name": "null caller is forbidden",
+          "line": 103
+        },
+        {
+          "kind": "it",
+          "name": "unregistered caller is forbidden",
+          "line": 115
+        },
+        {
+          "kind": "describe",
+          "name": "POST /taxa: body validation",
+          "line": 128
+        },
+        {
+          "kind": "it",
+          "name": "non-JSON body is malformed-body 400",
+          "line": 129
+        },
+        {
+          "kind": "it",
+          "name": "missing name is missing-name 400",
+          "line": 143
+        },
+        {
+          "kind": "it",
+          "name": "non-string name is missing-name 400",
+          "line": 156
+        },
+        {
+          "kind": "it",
+          "name": "empty name is the format validator's tag 400",
+          "line": 169
+        },
+        {
+          "kind": "it",
+          "name": "leading-whitespace name is leading-whitespace 400",
+          "line": 182
+        },
+        {
+          "kind": "it",
+          "name": "validation order: malformed-body before missing-name",
+          "line": 195
+        },
+        {
+          "kind": "it",
+          "name": "validation order: missing-name before format check",
+          "line": 207
+        },
+        {
+          "kind": "describe",
+          "name": "POST /taxa: reset and concurrency",
+          "line": 220
+        },
+        {
+          "kind": "it",
+          "name": "POST /reset clears created taxa and zeros the counter",
+          "line": 221
+        },
+        {
+          "kind": "it",
+          "name": "ten concurrent POSTs yield exactly ten distinct IDs t1..t10",
+          "line": 247
+        }
+      ]
+    },
+    {
+      "path": "test/taxa/put-edge-subtree.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "PUT edge: subtree-merging",
+          "line": 23
+        },
+        {
+          "kind": "it",
+          "name": "child's subtree contains the parent → 409 cycle",
+          "line": 24
+        },
+        {
+          "kind": "it",
+          "name": "child's subtree contains a taxon already reachable from parent's root → 409 in-tree-duplicate",
+          "line": 49
+        },
+        {
+          "kind": "it",
+          "name": "child's deep descendant has a name clashing with parent's tree (case variant) → 409 in-tree-name-clash",
+          "line": 79
+        },
+        {
+          "kind": "it",
+          "name": "child's subtree shares with another tree (no violation) → 204",
+          "line": 108
+        }
+      ]
+    },
+    {
+      "path": "test/taxa/put-edge.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "PUT edge: happy path",
+          "line": 20
+        },
+        {
+          "kind": "it",
+          "name": "parent-owner adds a safe edge",
+          "line": 21
+        },
+        {
+          "kind": "it",
+          "name": "existing edge is idempotent (204)",
+          "line": 42
+        },
+        {
+          "kind": "describe",
+          "name": "PUT edge: authorization and existence ordering",
+          "line": 63
+        },
+        {
+          "kind": "it",
+          "name": "non-parent-owner → 403 not-parent-owner",
+          "line": 64
+        },
+        {
+          "kind": "it",
+          "name": "null caller → 403 forbidden",
+          "line": 83
+        },
+        {
+          "kind": "it",
+          "name": "unknown parent → 404 taxon-not-found",
+          "line": 96
+        },
+        {
+          "kind": "it",
+          "name": "unknown child by parent-owner → 404 taxon-not-found",
+          "line": 108
+        },
+        {
+          "kind": "it",
+          "name": "unknown child by non-owner → 403 not-parent-owner (NOT 404)",
+          "line": 121
+        },
+        {
+          "kind": "describe",
+          "name": "PUT edge: self-loop short-circuit",
+          "line": 136
+        },
+        {
+          "kind": "it",
+          "name": "parentId === childId → 400 same-parent-and-child",
+          "line": 137
+        },
+        {
+          "kind": "describe",
+          "name": "PUT edge: invariant conflicts",
+          "line": 151
+        },
+        {
+          "kind": "it",
+          "name": "creating a cycle → 409 cycle",
+          "line": 152
+        },
+        {
+          "kind": "it",
+          "name": "creating an in-tree diamond → 409 in-tree-duplicate",
+          "line": 171
+        },
+        {
+          "kind": "it",
+          "name": "creating an in-tree name clash → 409 in-tree-name-clash (case variant)",
+          "line": 197
+        }
+      ]
+    },
+    {
+      "path": "test/taxa/serialize.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "serializeTaxon",
+          "line": 40
+        },
+        {
+          "kind": "it",
+          "name": "returns undefined for unknown id",
+          "line": 41
+        },
+        {
+          "kind": "it",
+          "name": "exposes all six fields including shared:false for a root",
+          "line": 46
+        },
+        {
+          "kind": "it",
+          "name": "populates children and parents",
+          "line": 58
+        },
+        {
+          "kind": "it",
+          "name": "marks shared:true for taxa in multiple trees",
+          "line": 71
+        },
+        {
+          "kind": "describe",
+          "name": "serializeAllTaxa",
+          "line": 85
+        },
+        {
+          "kind": "it",
+          "name": "empty graph yields empty array",
+          "line": 86
+        },
+        {
+          "kind": "it",
+          "name": "returns one entry per taxon with full shape",
+          "line": 90
+        },
+        {
+          "kind": "it",
+          "name": "response is internally consistent (every parent/child pair is symmetric)",
+          "line": 106
+        },
+        {
+          "kind": "describe",
+          "name": "serializeRootsList",
+          "line": 134
+        },
+        {
+          "kind": "it",
+          "name": "empty graph yields empty array",
+          "line": 135
+        },
+        {
+          "kind": "it",
+          "name": "lists only roots with id and name",
+          "line": 141
+        },
+        {
+          "kind": "describe",
+          "name": "serializeTreeFrom",
+          "line": 154
+        },
+        {
+          "kind": "it",
+          "name": "returns undefined for unknown rootId",
+          "line": 155
+        },
+        {
+          "kind": "it",
+          "name": "returns undefined when the id exists but is not a root",
+          "line": 160
+        },
+        {
+          "kind": "it",
+          "name": "single root with no children",
+          "line": 168
+        },
+        {
+          "kind": "it",
+          "name": "recursively expands children",
+          "line": 183
+        },
+        {
+          "kind": "it",
+          "name": "shared taxon appears once per tree with shared:true",
+          "line": 199
+        },
+        {
+          "kind": "it",
+          "name": "Node shape omits parents",
+          "line": 218
+        }
+      ]
+    },
+    {
+      "path": "test/taxa/store-writes.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "createTaxon",
+          "line": 20
+        },
+        {
+          "kind": "it",
+          "name": "mints t1 first on a fresh store and inserts as a root",
+          "line": 21
+        },
+        {
+          "kind": "it",
+          "name": "continues the counter across creates",
+          "line": 31
+        },
+        {
+          "kind": "it",
+          "name": "stores owner verbatim — no normalization",
+          "line": 37
+        },
+        {
+          "kind": "it",
+          "name": "interoperates with seed (same counter)",
+          "line": 42
+        },
+        {
+          "kind": "describe",
+          "name": "setTaxonFields",
+          "line": 49
+        },
+        {
+          "kind": "it",
+          "name": "updates name only",
+          "line": 50
+        },
+        {
+          "kind": "it",
+          "name": "updates owner only",
+          "line": 57
+        },
+        {
+          "kind": "it",
+          "name": "updates both fields",
+          "line": 63
+        },
+        {
+          "kind": "it",
+          "name": "no-op patch (empty object) returns the current taxon unchanged",
+          "line": 69
+        },
+        {
+          "kind": "it",
+          "name": "throws plain Error on unknown id",
+          "line": 75
+        },
+        {
+          "kind": "it",
+          "name": "stores owner verbatim (no normalization at the store seam)",
+          "line": 79
+        },
+        {
+          "kind": "describe",
+          "name": "addEdge",
+          "line": 86
+        },
+        {
+          "kind": "it",
+          "name": "updates both indices atomically",
+          "line": 87
+        },
+        {
+          "kind": "it",
+          "name": "is idempotent on re-entry (Set semantics)",
+          "line": 97
+        },
+        {
+          "kind": "it",
+          "name": "throws on unknown parent",
+          "line": 107
+        },
+        {
+          "kind": "it",
+          "name": "throws on unknown child",
+          "line": 112
+        },
+        {
+          "kind": "describe",
+          "name": "removeEdge",
+          "line": 118
+        },
+        {
+          "kind": "it",
+          "name": "returns true when an edge existed and was removed",
+          "line": 119
+        },
+        {
+          "kind": "it",
+          "name": "returns false when the edge did not exist",
+          "line": 129
+        },
+        {
+          "kind": "it",
+          "name": "does not throw on unknown parent",
+          "line": 135
+        },
+        {
+          "kind": "it",
+          "name": "does not throw on unknown child",
+          "line": 140
+        },
+        {
+          "kind": "describe",
+          "name": "deleteRegion",
+          "line": 146
+        },
+        {
+          "kind": "it",
+          "name": "removes region taxa and detaches halt-frontier edges in one call",
+          "line": 147
+        },
+        {
+          "kind": "it",
+          "name": "preserves dual-index consistency afterwards",
+          "line": 171
+        },
+        {
+          "kind": "it",
+          "name": "empty region with empty frontier is a no-op",
+          "line": 204
+        },
+        {
+          "kind": "it",
+          "name": "frontier-only call removes the edges without removing taxa",
+          "line": 213
+        },
+        {
+          "kind": "it",
+          "name": "removes outgoing-only edges of region taxa when frontier not enumerated",
+          "line": 229
+        },
+        {
+          "kind": "describe",
+          "name": "seed helper continues to work after Phase 4 additions",
+          "line": 254
+        },
+        {
+          "kind": "it",
+          "name": "seed and createTaxon share the same counter",
+          "line": 255
+        },
+        {
+          "kind": "it",
+          "name": "seed still mints t1 after reset",
+          "line": 263
+        }
+      ]
+    },
+    {
+      "path": "test/taxa/store.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "empty store baseline",
+          "line": 15
+        },
+        {
+          "kind": "it",
+          "name": "snapshot is empty at boot",
+          "line": 16
+        },
+        {
+          "kind": "it",
+          "name": "listRoots is empty",
+          "line": 23
+        },
+        {
+          "kind": "it",
+          "name": "getById returns undefined on empty store",
+          "line": 27
+        },
+        {
+          "kind": "describe",
+          "name": "seed: ID minting",
+          "line": 32
+        },
+        {
+          "kind": "it",
+          "name": "first minted ID is t1",
+          "line": 33
+        },
+        {
+          "kind": "it",
+          "name": "mints monotonically across taxa in one call",
+          "line": 40
+        },
+        {
+          "kind": "it",
+          "name": "mints monotonically across calls",
+          "line": 51
+        },
+        {
+          "kind": "describe",
+          "name": "seed: edge installation",
+          "line": 64
+        },
+        {
+          "kind": "it",
+          "name": "installs edges in both indices",
+          "line": 65
+        },
+        {
+          "kind": "it",
+          "name": "multi-edge consistency: textbook DAG",
+          "line": 81
+        },
+        {
+          "kind": "it",
+          "name": "permits cycles",
+          "line": 106
+        },
+        {
+          "kind": "it",
+          "name": "permits self-loop",
+          "line": 127
+        },
+        {
+          "kind": "it",
+          "name": "permits in-tree diamond (invariant 2 violation)",
+          "line": 137
+        },
+        {
+          "kind": "it",
+          "name": "rejects an edge referencing an unknown ID with a plain Error",
+          "line": 156
+        },
+        {
+          "kind": "it",
+          "name": "rejects an edge referencing an unknown parent",
+          "line": 173
+        },
+        {
+          "kind": "it",
+          "name": "accepts pre-existing IDs in subsequent edges",
+          "line": 184
+        },
+        {
+          "kind": "describe",
+          "name": "getById and listRoots",
+          "line": 200
+        },
+        {
+          "kind": "it",
+          "name": "getById returns the stored entity",
+          "line": 201
+        },
+        {
+          "kind": "it",
+          "name": "getById returns undefined for an unknown ID",
+          "line": 210
+        },
+        {
+          "kind": "it",
+          "name": "listRoots lists parentless taxa",
+          "line": 215
+        },
+        {
+          "kind": "it",
+          "name": "listRoots excludes non-root taxa",
+          "line": 232
+        },
+        {
+          "kind": "describe",
+          "name": "reset",
+          "line": 245
+        },
+        {
+          "kind": "it",
+          "name": "clears all three indices",
+          "line": 246
+        },
+        {
+          "kind": "it",
+          "name": "zeroes the ID counter so the next mint is t1",
+          "line": 262
+        },
+        {
+          "kind": "describe",
+          "name": "snapshot: live view per Decision 6",
+          "line": 275
+        },
+        {
+          "kind": "it",
+          "name": "reflects current store state",
+          "line": 276
+        },
+        {
+          "kind": "it",
+          "name": "is a live view: post-snapshot mutations are visible through it",
+          "line": 282
+        }
+      ]
+    },
+    {
+      "path": "test/users/http.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "POST /users: openness",
+          "line": 27
+        },
+        {
+          "kind": "it",
+          "name": "null user (no X-Username) can register",
+          "line": 28
+        },
+        {
+          "kind": "describe",
+          "name": "POST /users: success shape",
+          "line": 42
+        },
+        {
+          "kind": "it",
+          "name": "echoes original casing on 201",
+          "line": 43
+        },
+        {
+          "kind": "it",
+          "name": "accepts internal whitespace",
+          "line": 49
+        },
+        {
+          "kind": "describe",
+          "name": "POST /users: body-shape failures (malformed-body)",
+          "line": 56
+        },
+        {
+          "kind": "it",
+          "name": "non-JSON body → 400 malformed-body",
+          "line": 57
+        },
+        {
+          "kind": "it",
+          "name": "JSON string (not an object) → 400 malformed-body",
+          "line": 65
+        },
+        {
+          "kind": "it",
+          "name": "JSON array → 400 malformed-body",
+          "line": 72
+        },
+        {
+          "kind": "it",
+          "name": "missing body → 400 malformed-body",
+          "line": 79
+        },
+        {
+          "kind": "describe",
+          "name": "POST /users: field-presence failures (missing-username)",
+          "line": 88
+        },
+        {
+          "kind": "it",
+          "name": "empty object → 400 missing-username",
+          "line": 89
+        },
+        {
+          "kind": "it",
+          "name": "non-string username (number) → 400 missing-username",
+          "line": 97
+        },
+        {
+          "kind": "it",
+          "name": "null username → 400 missing-username",
+          "line": 104
+        },
+        {
+          "kind": "describe",
+          "name": "POST /users: format failures (validator's tag surfaces)",
+          "line": 112
+        },
+        {
+          "kind": "it",
+          "name": "empty string → 400 empty",
+          "line": 113
+        },
+        {
+          "kind": "it",
+          "name": "leading whitespace → 400 leading-whitespace",
+          "line": 120
+        },
+        {
+          "kind": "it",
+          "name": "trailing whitespace → 400 trailing-whitespace",
+          "line": 127
+        },
+        {
+          "kind": "describe",
+          "name": "POST /users: duplicate (case-insensitive conflict)",
+          "line": 135
+        },
+        {
+          "kind": "it",
+          "name": "identical-case duplicate → 409 duplicate-username",
+          "line": 136
+        },
+        {
+          "kind": "it",
+          "name": "different-case duplicate → 409 duplicate-username; original casing wins",
+          "line": 156
+        },
+        {
+          "kind": "describe",
+          "name": "POST /users: validation precedes duplicate check",
+          "line": 176
+        },
+        {
+          "kind": "it",
+          "name": "malformed username → 400 (not 409) even when collision exists",
+          "line": 177
+        },
+        {
+          "kind": "it",
+          "name": "body-shape failure → 400 (not 409)",
+          "line": 194
+        },
+        {
+          "kind": "describe",
+          "name": "POST /users: failed registration leaves registry unchanged",
+          "line": 212
+        },
+        {
+          "kind": "it",
+          "name": "empty username does not get listed",
+          "line": 213
+        },
+        {
+          "kind": "describe",
+          "name": "GET /users: openness and shape",
+          "line": 226
+        },
+        {
+          "kind": "it",
+          "name": "empty registry returns {users: []}",
+          "line": 227
+        },
+        {
+          "kind": "it",
+          "name": "null user can list",
+          "line": 235
+        },
+        {
+          "kind": "it",
+          "name": "registration order is preserved",
+          "line": 252
+        },
+        {
+          "kind": "it",
+          "name": "original casing is preserved",
+          "line": 265
+        },
+        {
+          "kind": "it",
+          "name": "response top-level is an object with a 'users' key (not a bare array)",
+          "line": 278
+        }
+      ]
+    },
+    {
+      "path": "test/users/store.test.ts",
+      "tests": [
+        {
+          "kind": "describe",
+          "name": "user registry store: empty at boot",
+          "line": 15
+        },
+        {
+          "kind": "it",
+          "name": "list is empty",
+          "line": 16
+        },
+        {
+          "kind": "it",
+          "name": "isRegistered returns false",
+          "line": 20
+        },
+        {
+          "kind": "it",
+          "name": "originalCasing returns undefined",
+          "line": 24
+        },
+        {
+          "kind": "describe",
+          "name": "user registry store: register a fresh name",
+          "line": 29
+        },
+        {
+          "kind": "it",
+          "name": "returns ok and adds the name",
+          "line": 30
+        },
+        {
+          "kind": "describe",
+          "name": "user registry store: case-insensitive membership",
+          "line": 37
+        },
+        {
+          "kind": "it",
+          "name": "isRegistered matches different case (lower lookup of upper)",
+          "line": 38
+        },
+        {
+          "kind": "it",
+          "name": "originalCasing returns the stored form regardless of lookup case",
+          "line": 45
+        },
+        {
+          "kind": "it",
+          "name": "originalCasing returns undefined for unknown name",
+          "line": 52
+        },
+        {
+          "kind": "describe",
+          "name": "user registry store: duplicate detection",
+          "line": 59
+        },
+        {
+          "kind": "it",
+          "name": "identical-case re-register returns duplicate",
+          "line": 60
+        },
+        {
+          "kind": "it",
+          "name": "different-case re-register returns duplicate; original casing wins",
+          "line": 66
+        },
+        {
+          "kind": "describe",
+          "name": "user registry store: list preserves registration order",
+          "line": 74
+        },
+        {
+          "kind": "it",
+          "name": "registration order survives multiple inserts",
+          "line": 75
+        },
+        {
+          "kind": "it",
+          "name": "list preserves original casing",
+          "line": 82
+        },
+        {
+          "kind": "describe",
+          "name": "user registry store: reset clears membership",
+          "line": 89
+        },
+        {
+          "kind": "it",
+          "name": "after reset, list is empty and isRegistered is false",
+          "line": 90
+        },
+        {
+          "kind": "it",
+          "name": "after reset, the case-key map is cleared (no lingering duplicate)",
+          "line": 99
+        },
+        {
+          "kind": "describe",
+          "name": "user registry store: register does not mutate input",
+          "line": 107
+        },
+        {
+          "kind": "it",
+          "name": "input string is returned by originalCasing exactly",
+          "line": 108
+        }
+      ]
+    }
+  ]
+}

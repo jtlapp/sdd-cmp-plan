@@ -1,0 +1,527 @@
+{
+  "area": "proposals-store",
+  "scope": "Proposal store internals: id allocation, install, state transitions, queue determinism, resolve-parent. Mostly cc-openspec; cc-only does not have a dedicated store test layer.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [],
+    "testCount": 0
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/proposals/store-ids.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "ID minting",
+            "line": 15
+          },
+          {
+            "kind": "it",
+            "name": "sequential mintProposalId produces p1, p2, p3",
+            "line": 16
+          },
+          {
+            "kind": "it",
+            "name": "sequential mintChangeId produces ch1, ch2, ch3",
+            "line": 22
+          },
+          {
+            "kind": "it",
+            "name": "counters are independent",
+            "line": 28
+          },
+          {
+            "kind": "it",
+            "name": "monotonically increasing",
+            "line": 35
+          },
+          {
+            "kind": "it",
+            "name": "reset returns counters to 1-base",
+            "line": 44
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/store-install.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "install: queue projection",
+            "line": 53
+          },
+          {
+            "kind": "it",
+            "name": "queued + concrete change appears in the user's queue (lowercased key)",
+            "line": 54
+          },
+          {
+            "kind": "it",
+            "name": "latent change does NOT appear in any queue",
+            "line": 66
+          },
+          {
+            "kind": "it",
+            "name": "deferred-reviewer change does NOT appear in any queue",
+            "line": 76
+          },
+          {
+            "kind": "it",
+            "name": "queue key is lowercased; reviewer.username casing preserved on the change record",
+            "line": 88
+          },
+          {
+            "kind": "describe",
+            "name": "install: ordering and lookups",
+            "line": 106
+          },
+          {
+            "kind": "it",
+            "name": "changesByProposal preserved in input order",
+            "line": 107
+          },
+          {
+            "kind": "it",
+            "name": "envelope retrievable by id",
+            "line": 119
+          },
+          {
+            "kind": "it",
+            "name": "changes retrievable by id",
+            "line": 125
+          },
+          {
+            "kind": "describe",
+            "name": "install: error paths",
+            "line": 131
+          },
+          {
+            "kind": "it",
+            "name": "throws plain Error on duplicate changeId within input",
+            "line": 132
+          },
+          {
+            "kind": "it",
+            "name": "throws plain Error on changeId already in store",
+            "line": 143
+          },
+          {
+            "kind": "it",
+            "name": "throws plain Error on duplicate proposalId",
+            "line": 158
+          },
+          {
+            "kind": "describe",
+            "name": "install: synchronous (no await between mutations)",
+            "line": 167
+          },
+          {
+            "kind": "it",
+            "name": "source file's installProposal has no await keyword between mutations",
+            "line": 168
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/store-phase7.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "dismissInvalidQueued",
+            "line": 72
+          },
+          {
+            "kind": "it",
+            "name": "removes an invalid-in-queue change from the queue (disposition unchanged)",
+            "line": 73
+          },
+          {
+            "kind": "it",
+            "name": "throws on disposition === queued",
+            "line": 89
+          },
+          {
+            "kind": "it",
+            "name": "throws on invalid-but-not-in-queue (latent → invalid)",
+            "line": 98
+          },
+          {
+            "kind": "it",
+            "name": "throws on accepted",
+            "line": 108
+          },
+          {
+            "kind": "it",
+            "name": "throws on unknown changeId",
+            "line": 116
+          },
+          {
+            "kind": "it",
+            "name": "idempotency not provided: second dismiss throws",
+            "line": 120
+          },
+          {
+            "kind": "describe",
+            "name": "listQueuedChangesGlobal",
+            "line": 130
+          },
+          {
+            "kind": "it",
+            "name": "returns empty on fresh store",
+            "line": 131
+          },
+          {
+            "kind": "it",
+            "name": "returns a single queued change",
+            "line": 135
+          },
+          {
+            "kind": "it",
+            "name": "returns queued + invalid-in-queue across users in ascending changeId order",
+            "line": 144
+          },
+          {
+            "kind": "it",
+            "name": "excludes auto-dismissed changes",
+            "line": 159
+          },
+          {
+            "kind": "it",
+            "name": "excludes latent-invalid (case-1) changes",
+            "line": 173
+          },
+          {
+            "kind": "it",
+            "name": "excludes accepted changes",
+            "line": 186
+          },
+          {
+            "kind": "it",
+            "name": "returns empty after reset",
+            "line": 199
+          },
+          {
+            "kind": "it",
+            "name": "includes promoted changes after promoteLatentToQueued",
+            "line": 207
+          },
+          {
+            "kind": "describe",
+            "name": "queue-membership relaxation",
+            "line": 218
+          },
+          {
+            "kind": "it",
+            "name": "dismissed invalid change has disposition invalid but is not in queue",
+            "line": 219
+          },
+          {
+            "kind": "it",
+            "name": "invalid-from-queued still in queue until dismissed",
+            "line": 233
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/store-queue-determinism.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "queue ordering: deterministic across reads",
+            "line": 56
+          },
+          {
+            "kind": "it",
+            "name": "two reads return the same order",
+            "line": 57
+          },
+          {
+            "kind": "it",
+            "name": "queue order is changeId-ascending (numeric)",
+            "line": 68
+          },
+          {
+            "kind": "it",
+            "name": "queue lookup is case-insensitive",
+            "line": 85
+          },
+          {
+            "kind": "describe",
+            "name": "listProposals filters",
+            "line": 95
+          },
+          {
+            "kind": "it",
+            "name": "no filters returns all",
+            "line": 102
+          },
+          {
+            "kind": "it",
+            "name": "empty filter object returns all",
+            "line": 106
+          },
+          {
+            "kind": "it",
+            "name": "proposer filter is case-insensitive",
+            "line": 110
+          },
+          {
+            "kind": "it",
+            "name": "targetRootId filter is exact-string",
+            "line": 115
+          },
+          {
+            "kind": "it",
+            "name": "both filters combine as intersection",
+            "line": 120
+          },
+          {
+            "kind": "it",
+            "name": "no match returns empty array (not undefined)",
+            "line": 127
+          },
+          {
+            "kind": "describe",
+            "name": "purity",
+            "line": 132
+          },
+          {
+            "kind": "it",
+            "name": "store file has no HTTP, registry, or taxa imports",
+            "line": 133
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/store-resolve-parent.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "resolveLiveParentId",
+            "line": 53
+          },
+          {
+            "kind": "it",
+            "name": "top ref returns the proposal's topTaxonId",
+            "line": 54
+          },
+          {
+            "kind": "it",
+            "name": "top ref for unknown proposal returns null",
+            "line": 60
+          },
+          {
+            "kind": "it",
+            "name": "live ref returns the id verbatim",
+            "line": 65
+          },
+          {
+            "kind": "it",
+            "name": "to-create with accepted parent returns mintedTaxonId",
+            "line": 73
+          },
+          {
+            "kind": "it",
+            "name": "to-create with queued (unaccepted) parent returns null",
+            "line": 83
+          },
+          {
+            "kind": "it",
+            "name": "to-create with rejected parent returns null",
+            "line": 92
+          },
+          {
+            "kind": "it",
+            "name": "to-create with unknown parentChangeId returns null",
+            "line": 109
+          },
+          {
+            "kind": "it",
+            "name": "resolver source does not import from src/taxa/",
+            "line": 118
+          },
+          {
+            "kind": "it",
+            "name": "resolver source does not import or invoke withWriteLock",
+            "line": 137
+          }
+        ]
+      },
+      {
+        "path": "test/proposals/store-transitions.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "transitionToAccepted",
+            "line": 57
+          },
+          {
+            "kind": "it",
+            "name": "queued → accepted sets fields and removes from queue",
+            "line": 58
+          },
+          {
+            "kind": "it",
+            "name": "queued → accepted with mintedTaxonId records the id",
+            "line": 69
+          },
+          {
+            "kind": "it",
+            "name": "throws on latent source",
+            "line": 80
+          },
+          {
+            "kind": "it",
+            "name": "throws on accepted source",
+            "line": 88
+          },
+          {
+            "kind": "it",
+            "name": "throws on rejected source",
+            "line": 94
+          },
+          {
+            "kind": "it",
+            "name": "throws on invalid source",
+            "line": 100
+          },
+          {
+            "kind": "it",
+            "name": "throws on unknown changeId",
+            "line": 106
+          },
+          {
+            "kind": "it",
+            "name": "stores acceptedBy verbatim (no case normalization at store layer)",
+            "line": 110
+          },
+          {
+            "kind": "describe",
+            "name": "transitionToRejected",
+            "line": 117
+          },
+          {
+            "kind": "it",
+            "name": "queued → rejected sets reason and removes from queue",
+            "line": 118
+          },
+          {
+            "kind": "it",
+            "name": "empty-string reason is permitted",
+            "line": 127
+          },
+          {
+            "kind": "it",
+            "name": "throws on latent source",
+            "line": 133
+          },
+          {
+            "kind": "it",
+            "name": "throws on accepted/rejected/invalid sources",
+            "line": 140
+          },
+          {
+            "kind": "it",
+            "name": "throws on unknown changeId",
+            "line": 154
+          },
+          {
+            "kind": "describe",
+            "name": "transitionToInvalid",
+            "line": 159
+          },
+          {
+            "kind": "it",
+            "name": "queued source stays in queue (broadened invariant)",
+            "line": 160
+          },
+          {
+            "kind": "it",
+            "name": "latent source is not added to queue",
+            "line": 171
+          },
+          {
+            "kind": "it",
+            "name": "throws on accepted source",
+            "line": 180
+          },
+          {
+            "kind": "it",
+            "name": "throws on rejected source",
+            "line": 186
+          },
+          {
+            "kind": "it",
+            "name": "throws on invalid source (no idempotency)",
+            "line": 192
+          },
+          {
+            "kind": "it",
+            "name": "throws on unknown changeId",
+            "line": 198
+          },
+          {
+            "kind": "describe",
+            "name": "promoteLatentToQueued",
+            "line": 203
+          },
+          {
+            "kind": "it",
+            "name": "latent → queued sets concrete reviewer and inserts into queue",
+            "line": 204
+          },
+          {
+            "kind": "it",
+            "name": "promotion overwrites a concrete reviewer (degenerate but lawful)",
+            "line": 225
+          },
+          {
+            "kind": "it",
+            "name": "throws on queued source",
+            "line": 241
+          },
+          {
+            "kind": "it",
+            "name": "throws on accepted/rejected/invalid sources",
+            "line": 246
+          },
+          {
+            "kind": "it",
+            "name": "queue key is lowercased; stored username preserves casing",
+            "line": 260
+          },
+          {
+            "kind": "it",
+            "name": "throws on unknown changeId",
+            "line": 277
+          },
+          {
+            "kind": "describe",
+            "name": "listQueueFor: broadened to {queued, invalid}",
+            "line": 282
+          },
+          {
+            "kind": "it",
+            "name": "returns mixed queued and invalid entries in ascending changeId order",
+            "line": 283
+          },
+          {
+            "kind": "it",
+            "name": "invalid-from-latent does NOT enter the queue",
+            "line": 304
+          },
+          {
+            "kind": "it",
+            "name": "two reads return same order",
+            "line": 315
+          }
+        ]
+      }
+    ],
+    "testCount": 96
+  }
+}

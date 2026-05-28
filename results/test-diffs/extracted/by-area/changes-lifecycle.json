@@ -1,0 +1,1318 @@
+{
+  "area": "changes-lifecycle",
+  "scope": "Single-review actions (accept/reject/dismiss), promotion, cascade application & journaling, invalidation (eager + lazy), deletion planning. The PRD §11.4 three-mode invalidation and §6.3 deletion logic live here.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/acceptAddValidation.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "graft that would create a cycle → 409",
+            "line": 28
+          },
+          {
+            "kind": "test",
+            "name": "graft that would create an in-tree duplicate (diamond) → 409",
+            "line": 73
+          },
+          {
+            "kind": "test",
+            "name": "graft brings a subtree whose names clash with the target tree → 409",
+            "line": 111
+          },
+          {
+            "kind": "test",
+            "name": "happy cross-tree graft → 200; grafted taxon becomes shared",
+            "line": 152
+          },
+          {
+            "kind": "test",
+            "name": "create whose name clashes with an existing sibling → 409",
+            "line": 180
+          },
+          {
+            "kind": "test",
+            "name": "create whose name clashes case-insensitively → 409 (§3.4)",
+            "line": 209
+          },
+          {
+            "kind": "test",
+            "name": "happy create at root level → 200, new taxon attached",
+            "line": 234
+          }
+        ]
+      },
+      {
+        "path": "test/acceptHappy.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "accept rename: live taxon name updates, change becomes accepted, dequeued",
+            "line": 38
+          },
+          {
+            "kind": "test",
+            "name": "accept add-create: new taxon owned by accepting reviewer, attached to parent",
+            "line": 71
+          },
+          {
+            "kind": "test",
+            "name": "accept add-graft: edge added, grafted taxon stays owned by original owner (§9.3)",
+            "line": 108
+          },
+          {
+            "kind": "test",
+            "name": "accept detach: edge removed, detached child survives",
+            "line": 150
+          }
+        ]
+      },
+      {
+        "path": "test/acceptRenameValidation.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "rename to a name that clashes in the target tree → 409 conflict, change auto-dismissed (§11.4 case 2)",
+            "line": 47
+          },
+          {
+            "kind": "test",
+            "name": "rename clashes in ANOTHER containing tree (not the target) → 409 conflict",
+            "line": 86
+          },
+          {
+            "kind": "test",
+            "name": "rename across two trees both clean → accepted; both trees see new name",
+            "line": 119
+          },
+          {
+            "kind": "test",
+            "name": "rename to the same name (case-insensitive no-op) → accepted",
+            "line": 153
+          }
+        ]
+      },
+      {
+        "path": "test/cascadeHappy.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "cascade rooted at a queued rename with no descendants accepts only the seed",
+            "line": 54
+          },
+          {
+            "kind": "test",
+            "name": "cascade extends through ownership transfer (Appendix A.1 Urban Fantasy / Paranormal Romance)",
+            "line": 74
+          },
+          {
+            "kind": "test",
+            "name": "cascade stops at boundaries routed to other owners; bounded change stays queued for that owner",
+            "line": 139
+          },
+          {
+            "kind": "test",
+            "name": "cascade rooted at an add-create with no nested ops accepts only the seed",
+            "line": 207
+          },
+          {
+            "kind": "test",
+            "name": "cascade accepts mixed nested ops (rename, add, detach) in payload-topological order",
+            "line": 229
+          },
+          {
+            "kind": "test",
+            "name": "self-routed cascade — reviewer is also the proposer",
+            "line": 277
+          }
+        ]
+      },
+      {
+        "path": "test/cascadeRollback.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "cascade rolls back on mid-cascade in-tree name clash; live state and bookkeeping restored",
+            "line": 49
+          },
+          {
+            "kind": "test",
+            "name": "cascade rolls back on cross-tree name clash; restores both trees",
+            "line": 102
+          },
+          {
+            "kind": "test",
+            "name": "cascade rolls back on mid-cascade cycle (graft of an ancestor)",
+            "line": 154
+          },
+          {
+            "kind": "test",
+            "name": "cascade rolls back on mid-cascade in-tree duplicate (diamond)",
+            "line": 203
+          },
+          {
+            "kind": "test",
+            "name": "cascade rolls back on first-step failure with nothing applied",
+            "line": 248
+          },
+          {
+            "kind": "test",
+            "name": "§12.2 non-equivalence: same change validates standalone but cascade rolls back when an earlier step would set up the clash",
+            "line": 282
+          }
+        ]
+      },
+      {
+        "path": "test/deletion.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "planDeletion: lone root → region [N]",
+            "line": 23
+          },
+          {
+            "kind": "test",
+            "name": "planDeletion: wholly-U-owned subtree → entire subtree in region",
+            "line": 31
+          },
+          {
+            "kind": "test",
+            "name": "planDeletion: halt at other-owned child — region stops before it",
+            "line": 46
+          },
+          {
+            "kind": "test",
+            "name": "planDeletion: stranded U-owned descendant beneath an other-owned halt is NOT in region",
+            "line": 57
+          },
+          {
+            "kind": "test",
+            "name": "planDeletion: precondition 1 — region taxon is shared → violation shared_in_region",
+            "line": 72
+          },
+          {
+            "kind": "test",
+            "name": "planDeletion: precondition 1 — a region descendant is shared into another tree",
+            "line": 90
+          },
+          {
+            "kind": "test",
+            "name": "planDeletion: precondition 2 — N has one foreign-owned parent → violation parent_not_owned",
+            "line": 108
+          },
+          {
+            "kind": "test",
+            "name": "planDeletion: precondition 2 — N has one U-owned parent → ok",
+            "line": 125
+          },
+          {
+            "kind": "test",
+            "name": "planDeletion: an other-owned halt-frontier taxon may itself be shared — does NOT trip precondition 1",
+            "line": 136
+          }
+        ]
+      },
+      {
+        "path": "test/dismiss.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "dismiss happy path: case-3 invalid change → 200; removed from queue",
+            "line": 79
+          },
+          {
+            "kind": "test",
+            "name": "dismiss on a still-queued (still valid) change → 409 change_not_invalid",
+            "line": 98
+          },
+          {
+            "kind": "test",
+            "name": "dismiss on a case-1 invalid (never queued) change → 409 change_not_in_queue",
+            "line": 123
+          },
+          {
+            "kind": "test",
+            "name": "dismiss on a case-2 (already auto-dismissed) change → 409 change_not_in_queue",
+            "line": 157
+          },
+          {
+            "kind": "test",
+            "name": "dismiss on an accepted change → 409 change_not_invalid",
+            "line": 189
+          },
+          {
+            "kind": "test",
+            "name": "dismiss on a rejected change → 409 change_not_invalid",
+            "line": 215
+          },
+          {
+            "kind": "test",
+            "name": "dismiss auth: null caller → 403",
+            "line": 243
+          },
+          {
+            "kind": "test",
+            "name": "dismiss auth: unregistered caller → 403",
+            "line": 250
+          },
+          {
+            "kind": "test",
+            "name": "dismiss auth: malformed X-Username (NBSP-prefixed) → 400",
+            "line": 257
+          },
+          {
+            "kind": "test",
+            "name": "dismiss on unknown change id → 404",
+            "line": 267
+          },
+          {
+            "kind": "test",
+            "name": "dismiss as non-reviewer → 403",
+            "line": 274
+          },
+          {
+            "kind": "test",
+            "name": "dismiss is idempotent in effect but not in state: second dismiss → 409 change_not_in_queue",
+            "line": 282
+          }
+        ]
+      },
+      {
+        "path": "test/invalidation.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "§11.4 case 1: an add becoming invalid propagates to its payload descendants",
+            "line": 78
+          },
+          {
+            "kind": "test",
+            "name": "§11.4 case 1: invalidation cascades through nested add chain (A1 → A2 → A3)",
+            "line": 136
+          },
+          {
+            "kind": "test",
+            "name": "§11.4 case 2: successful accept auto-dismisses a sibling that now clashes",
+            "line": 183
+          },
+          {
+            "kind": "test",
+            "name": "§11.4 case 2: failed accept auto-dismisses the change itself (replaces Phase-6 placeholder)",
+            "line": 230
+          },
+          {
+            "kind": "test",
+            "name": "§11.4 case 2 via cascade: cascade succeeds; a sibling queued change broken by it auto-dismisses",
+            "line": 268
+          },
+          {
+            "kind": "test",
+            "name": "§11.4 case 3: direct rename by another user makes a queued rename clash; marked invalid, kept queued",
+            "line": 309
+          },
+          {
+            "kind": "test",
+            "name": "§11.4 case 3: direct detach by another user (Appendix A.2 tail) invalidates a queued create under the grafted taxon",
+            "line": 347
+          },
+          {
+            "kind": "test",
+            "name": "§11.4 case 3: a different reviewer's accept (on a different proposal) invalidates Y's queued change",
+            "line": 405
+          }
+        ]
+      },
+      {
+        "path": "test/invalidationLazy.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "unrelated writes do NOT eagerly transition a queued change's state — only a lazy seam does",
+            "line": 54
+          },
+          {
+            "kind": "test",
+            "name": "lazy detection on GET /queue: a queued change broken externally surfaces as invalid in queue",
+            "line": 94
+          },
+          {
+            "kind": "test",
+            "name": "lazy detection on review-action entry: case-3 invalidation surfaces for non-targeted queued changes",
+            "line": 131
+          },
+          {
+            "kind": "test",
+            "name": "idempotence: two successive GET /queue with no intervening writes return the same response",
+            "line": 184
+          }
+        ]
+      },
+      {
+        "path": "test/promotion.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "Appendix A.1 cascade-shape: accept create → nested create promotes to accepter's queue",
+            "line": 37
+          },
+          {
+            "kind": "test",
+            "name": "nested rename under create routes to renamed-taxon's owner (not accepter)",
+            "line": 101
+          },
+          {
+            "kind": "test",
+            "name": "nested add under graft promotes to grafted-taxon's owner (§9.3)",
+            "line": 143
+          },
+          {
+            "kind": "test",
+            "name": "nested detach under graft promotes to grafted-taxon's owner",
+            "line": 192
+          },
+          {
+            "kind": "test",
+            "name": "only direct dependents promote: deeper add stays latent until its own parent accepts",
+            "line": 238
+          },
+          {
+            "kind": "test",
+            "name": "sibling dependents under one accepted add all promote in change-id order",
+            "line": 297
+          },
+          {
+            "kind": "test",
+            "name": "existence dep broken between submission and graft accept → dependent invalidated",
+            "line": 340
+          }
+        ]
+      },
+      {
+        "path": "test/reject.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "reject rename: change marked rejected, live name unchanged, dequeued",
+            "line": 41
+          },
+          {
+            "kind": "test",
+            "name": "reject detach: edge survives, no descendants to worry about",
+            "line": 63
+          },
+          {
+            "kind": "test",
+            "name": "reject add-create with no nested ops: state goes rejected, no taxon created",
+            "line": 87
+          },
+          {
+            "kind": "test",
+            "name": "reject add-create with nested create: outer rejected, inner invalid with reason citing outer",
+            "line": 108
+          },
+          {
+            "kind": "test",
+            "name": "reject add-graft with mixed nested ops: all descendants invalidated",
+            "line": 145
+          },
+          {
+            "kind": "test",
+            "name": "multi-level cascade: rejecting an outer add invalidates ALL nested descendants",
+            "line": 198
+          },
+          {
+            "kind": "test",
+            "name": "reject of a rename DOES NOT invalidate its descendants (decision #1 keystone)",
+            "line": 239
+          },
+          {
+            "kind": "test",
+            "name": "reject of a detach: detach has no children so propagation is moot; siblings untouched",
+            "line": 285
+          }
+        ]
+      }
+    ],
+    "testCount": 75
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/changes/accept-handler.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept: auth + precondition triplet",
+            "line": 73
+          },
+          {
+            "kind": "it",
+            "name": "null caller → 403 forbidden",
+            "line": 74
+          },
+          {
+            "kind": "it",
+            "name": "unregistered caller → 403 forbidden",
+            "line": 82
+          },
+          {
+            "kind": "it",
+            "name": "unknown change id → 404 change-not-found",
+            "line": 91
+          },
+          {
+            "kind": "it",
+            "name": "non-reviewer caller → 403 not-reviewer",
+            "line": 103
+          },
+          {
+            "kind": "it",
+            "name": "case-different caller passes reviewer check",
+            "line": 129
+          },
+          {
+            "kind": "it",
+            "name": "non-queued (latent) → 409 change-not-queued",
+            "line": 152
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept: rename success",
+            "line": 190
+          },
+          {
+            "kind": "it",
+            "name": "rename applies to live graph and transitions to accepted",
+            "line": 191
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept: add-create success",
+            "line": 222
+          },
+          {
+            "kind": "it",
+            "name": "mints new taxon owned by caller and adds edge",
+            "line": 223
+          },
+          {
+            "kind": "it",
+            "name": "accepting reviewer becomes owner (not the proposer)",
+            "line": 256
+          },
+          {
+            "kind": "it",
+            "name": "acceptedBy preserves registry casing regardless of header casing",
+            "line": 279
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept: add-graft success",
+            "line": 301
+          },
+          {
+            "kind": "it",
+            "name": "adds edge to live graph",
+            "line": 302
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept: detach success",
+            "line": 340
+          },
+          {
+            "kind": "it",
+            "name": "removes edge from live graph (no invariant check)",
+            "line": 341
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept: failure → invalid + stays in queue",
+            "line": 377
+          },
+          {
+            "kind": "it",
+            "name": "invariant violation (name clash) → 409 accept-invariant-violation; change invalid in queue",
+            "line": 378
+          },
+          {
+            "kind": "it",
+            "name": "retry on invalid change still refuses with change-not-queued",
+            "line": 421
+          },
+          {
+            "kind": "it",
+            "name": "precondition failure (target deleted) → 409 accept-precondition-failed",
+            "line": 459
+          },
+          {
+            "kind": "it",
+            "name": "failed add-create does not insert a zombie taxon",
+            "line": 504
+          },
+          {
+            "kind": "it",
+            "name": "failed accept does not mutate live graph",
+            "line": 537
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept: response shape",
+            "line": 602
+          },
+          {
+            "kind": "it",
+            "name": "response status field matches GET /proposals/{id}",
+            "line": 603
+          }
+        ]
+      },
+      {
+        "path": "test/changes/apply.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "applyAcceptedChange — rename",
+            "line": 97
+          },
+          {
+            "kind": "it",
+            "name": "success: renames the live taxon",
+            "line": 98
+          },
+          {
+            "kind": "it",
+            "name": "failure on in-tree name clash: violation returned, no mutation",
+            "line": 106
+          },
+          {
+            "kind": "describe",
+            "name": "applyAcceptedChange — add-graft",
+            "line": 127
+          },
+          {
+            "kind": "it",
+            "name": "success: adds the edge",
+            "line": 128
+          },
+          {
+            "kind": "it",
+            "name": "failure on cycle: violation returned, edge not added",
+            "line": 141
+          },
+          {
+            "kind": "describe",
+            "name": "applyAcceptedChange — add-create",
+            "line": 163
+          },
+          {
+            "kind": "it",
+            "name": "success: inserts the new taxon with the accepting reviewer as owner and adds the edge",
+            "line": 164
+          },
+          {
+            "kind": "it",
+            "name": "failure on in-tree name clash: violation returned, no taxon inserted",
+            "line": 182
+          },
+          {
+            "kind": "describe",
+            "name": "applyAcceptedChange — detach",
+            "line": 206
+          },
+          {
+            "kind": "it",
+            "name": "success: removes the edge",
+            "line": 207
+          },
+          {
+            "kind": "it",
+            "name": "detach never returns a violation (subtractive on edges)",
+            "line": 221
+          }
+        ]
+      },
+      {
+        "path": "test/changes/cascade-handler.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept-cascade — auth and preconditions",
+            "line": 71
+          },
+          {
+            "kind": "it",
+            "name": "null caller → 403 forbidden",
+            "line": 72
+          },
+          {
+            "kind": "it",
+            "name": "unknown change id → 404 change-not-found",
+            "line": 80
+          },
+          {
+            "kind": "it",
+            "name": "non-reviewer → 403 not-reviewer",
+            "line": 92
+          },
+          {
+            "kind": "it",
+            "name": "non-queued (rejected) → 409 change-not-queued",
+            "line": 113
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept-cascade — single-change cascade",
+            "line": 139
+          },
+          {
+            "kind": "it",
+            "name": "queued rename with no dependents behaves like single-accept",
+            "line": 140
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept-cascade — multi-step frontier extension",
+            "line": 175
+          },
+          {
+            "kind": "it",
+            "name": "cascades through nested add-creates routed to same reviewer",
+            "line": 176
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept-cascade — rollback on failure",
+            "line": 221
+          },
+          {
+            "kind": "it",
+            "name": "mid-cascade in-tree-duplicate rollback restores pre-cascade state",
+            "line": 222
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept-cascade — halts at other-reviewer",
+            "line": 283
+          },
+          {
+            "kind": "it",
+            "name": "does not fold a dependent routed to a different reviewer",
+            "line": 284
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/accept-cascade — response shape",
+            "line": 358
+          },
+          {
+            "kind": "it",
+            "name": "returns the proposal status tree with cascade-applied dispositions",
+            "line": 359
+          }
+        ]
+      },
+      {
+        "path": "test/changes/cascade-journal.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "CascadeJournal — change record",
+            "line": 77
+          },
+          {
+            "kind": "it",
+            "name": "journals a change before transition; rollback restores",
+            "line": 78
+          },
+          {
+            "kind": "it",
+            "name": "rollback restores reason field",
+            "line": 93
+          },
+          {
+            "kind": "it",
+            "name": "first-touch only: second journal call is a no-op",
+            "line": 109
+          },
+          {
+            "kind": "describe",
+            "name": "CascadeJournal — queue membership",
+            "line": 122
+          },
+          {
+            "kind": "it",
+            "name": "rollback re-inserts a removed change",
+            "line": 123
+          },
+          {
+            "kind": "it",
+            "name": "rollback removes an inserted change",
+            "line": 134
+          },
+          {
+            "kind": "describe",
+            "name": "CascadeJournal — taxa store",
+            "line": 151
+          },
+          {
+            "kind": "it",
+            "name": "rollback restores an edge after addEdge",
+            "line": 152
+          },
+          {
+            "kind": "it",
+            "name": "rollback restores an edge after removeEdge",
+            "line": 168
+          },
+          {
+            "kind": "it",
+            "name": "rollback removes an inserted taxon",
+            "line": 185
+          },
+          {
+            "kind": "it",
+            "name": "rollback restores a renamed taxon",
+            "line": 195
+          },
+          {
+            "kind": "it",
+            "name": "empty journal rollback is a no-op",
+            "line": 207
+          },
+          {
+            "kind": "describe",
+            "name": "CascadeJournal — full sequence",
+            "line": 213
+          },
+          {
+            "kind": "it",
+            "name": "rollback restores byte-identical state across multiple mutations",
+            "line": 214
+          }
+        ]
+      },
+      {
+        "path": "test/changes/case1-cascade.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "runCase1Cascade",
+            "line": 66
+          },
+          {
+            "kind": "it",
+            "name": "cascades from a rejected add-create to direct latent descendants",
+            "line": 67
+          },
+          {
+            "kind": "it",
+            "name": "cascades from an invalid add-create with 'became invalid' verb",
+            "line": 87
+          },
+          {
+            "kind": "it",
+            "name": "chains transitively when descendants are themselves add-*",
+            "line": 106
+          },
+          {
+            "kind": "it",
+            "name": "op-restricted at top: rename M does not cascade",
+            "line": 131
+          },
+          {
+            "kind": "it",
+            "name": "op-restricted at top: detach M does not cascade",
+            "line": 147
+          },
+          {
+            "kind": "it",
+            "name": "short-circuits on already-terminal descendants",
+            "line": 164
+          },
+          {
+            "kind": "it",
+            "name": "does not transition M itself",
+            "line": 187
+          },
+          {
+            "kind": "it",
+            "name": "scoped to M's proposal only",
+            "line": 203
+          },
+          {
+            "kind": "it",
+            "name": "uses listChangesForProposal (does not consult live state)",
+            "line": 249
+          },
+          {
+            "kind": "it",
+            "name": "recursion does not re-mark already-cascaded descendants",
+            "line": 265
+          }
+        ]
+      },
+      {
+        "path": "test/changes/dismiss-handler.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/dismiss — auth",
+            "line": 63
+          },
+          {
+            "kind": "it",
+            "name": "null caller → 403 forbidden",
+            "line": 64
+          },
+          {
+            "kind": "it",
+            "name": "unknown change id → 404 change-not-found",
+            "line": 70
+          },
+          {
+            "kind": "it",
+            "name": "non-reviewer → 403 not-reviewer",
+            "line": 82
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/dismiss — disposition preconditions",
+            "line": 100
+          },
+          {
+            "kind": "it",
+            "name": "queued → 409 change-not-dismissible",
+            "line": 101
+          },
+          {
+            "kind": "it",
+            "name": "accepted → 409 change-not-dismissible",
+            "line": 116
+          },
+          {
+            "kind": "it",
+            "name": "rejected → 409 change-not-dismissible",
+            "line": 135
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/dismiss — success path",
+            "line": 155
+          },
+          {
+            "kind": "it",
+            "name": "invalid-in-queue change is removed from queue; disposition unchanged",
+            "line": 156
+          },
+          {
+            "kind": "it",
+            "name": "response status tree matches GET /proposals/{id}",
+            "line": 177
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/dismiss — lock discipline",
+            "line": 198
+          },
+          {
+            "kind": "it",
+            "name": "dismiss handler does not import invariant-engine, invalidation walk, or case1-cascade",
+            "line": 199
+          }
+        ]
+      },
+      {
+        "path": "test/changes/invalidation-walk.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "runSideEffectWalk",
+            "line": 99
+          },
+          {
+            "kind": "it",
+            "name": "invalidates a queued rename whose target no longer exists",
+            "line": 100
+          },
+          {
+            "kind": "it",
+            "name": "leaves still-valid queued changes alone",
+            "line": 125
+          },
+          {
+            "kind": "it",
+            "name": "case-2: review-accept by reviewer auto-dismisses their other queued change",
+            "line": 145
+          },
+          {
+            "kind": "it",
+            "name": "case-3: review-accept by non-reviewer leaves invalid change in queue",
+            "line": 166
+          },
+          {
+            "kind": "it",
+            "name": "direct action by reviewer of affected change is case 3, not case 2",
+            "line": 186
+          },
+          {
+            "kind": "it",
+            "name": "case-insensitive actor-reviewer match for case-2",
+            "line": 208
+          },
+          {
+            "kind": "it",
+            "name": "skips recentlyTransitioned changes",
+            "line": 227
+          },
+          {
+            "kind": "it",
+            "name": "walks across proposals (cross-proposal invalidation)",
+            "line": 247
+          },
+          {
+            "kind": "it",
+            "name": "invalidates add-create with sibling name clash and propagates case-1 to descendants",
+            "line": 277
+          },
+          {
+            "kind": "it",
+            "name": "skips changes whose disposition is not queued (e.g., already-invalid)",
+            "line": 326
+          },
+          {
+            "kind": "it",
+            "name": "does not enter withWriteLock",
+            "line": 350
+          }
+        ]
+      },
+      {
+        "path": "test/changes/preconditions.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "runAcceptPreconditions: rename",
+            "line": 56
+          },
+          {
+            "kind": "it",
+            "name": "passes when target taxon exists and name is well-formed",
+            "line": 57
+          },
+          {
+            "kind": "it",
+            "name": "fails with taxon-not-found when target missing",
+            "line": 69
+          },
+          {
+            "kind": "it",
+            "name": "fails defensively on bad name format",
+            "line": 90
+          },
+          {
+            "kind": "describe",
+            "name": "runAcceptPreconditions: add-graft",
+            "line": 112
+          },
+          {
+            "kind": "it",
+            "name": "passes when parent and child exist and edge absent",
+            "line": 113
+          },
+          {
+            "kind": "it",
+            "name": "fails with taxon-not-found when parent missing",
+            "line": 132
+          },
+          {
+            "kind": "it",
+            "name": "fails with taxon-not-found when grafted child missing",
+            "line": 150
+          },
+          {
+            "kind": "it",
+            "name": "fails with edge-already-present when graft edge exists",
+            "line": 169
+          },
+          {
+            "kind": "describe",
+            "name": "runAcceptPreconditions: add-create",
+            "line": 196
+          },
+          {
+            "kind": "it",
+            "name": "passes when parent exists and name is well-formed",
+            "line": 197
+          },
+          {
+            "kind": "it",
+            "name": "fails with taxon-not-found when parent missing",
+            "line": 210
+          },
+          {
+            "kind": "it",
+            "name": "fails defensively on bad name format",
+            "line": 229
+          },
+          {
+            "kind": "it",
+            "name": "resolves to-create payload-parent via store helper",
+            "line": 250
+          },
+          {
+            "kind": "describe",
+            "name": "runAcceptPreconditions: detach",
+            "line": 280
+          },
+          {
+            "kind": "it",
+            "name": "passes when edge exists",
+            "line": 281
+          },
+          {
+            "kind": "it",
+            "name": "fails with taxon-not-found when parent missing",
+            "line": 296
+          },
+          {
+            "kind": "it",
+            "name": "fails with taxon-not-found when target missing",
+            "line": 314
+          },
+          {
+            "kind": "it",
+            "name": "fails with edge-not-found when edge missing",
+            "line": 333
+          }
+        ]
+      },
+      {
+        "path": "test/changes/promotion.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "promotion on add-create accept",
+            "line": 58
+          },
+          {
+            "kind": "it",
+            "name": "rename direct dependent under add-create whose existence dep is the edge from the create",
+            "line": 64
+          },
+          {
+            "kind": "describe",
+            "name": "promotion is one level (grandchildren stay latent)",
+            "line": 122
+          },
+          {
+            "kind": "it",
+            "name": "grandchildren remain latent until parent accept",
+            "line": 123
+          },
+          {
+            "kind": "describe",
+            "name": "promotion: rename and detach accepts do not trigger promotion",
+            "line": 166
+          },
+          {
+            "kind": "it",
+            "name": "rename accept does not promote anything",
+            "line": 167
+          },
+          {
+            "kind": "describe",
+            "name": "promotion: existence-dep failure → invalid",
+            "line": 192
+          },
+          {
+            "kind": "it",
+            "name": "descendant whose existence dep fails goes invalid at promotion",
+            "line": 193
+          },
+          {
+            "kind": "describe",
+            "name": "promotion: deferred reviewer resolves to acceptedBy",
+            "line": 243
+          },
+          {
+            "kind": "it",
+            "name": "nested add-create's reviewer becomes the accepting reviewer",
+            "line": 244
+          }
+        ]
+      },
+      {
+        "path": "test/changes/reject-handler.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/reject: auth + precondition triplet",
+            "line": 63
+          },
+          {
+            "kind": "it",
+            "name": "null caller → 403",
+            "line": 64
+          },
+          {
+            "kind": "it",
+            "name": "unknown change id → 404 change-not-found",
+            "line": 70
+          },
+          {
+            "kind": "it",
+            "name": "non-reviewer → 403 not-reviewer",
+            "line": 82
+          },
+          {
+            "kind": "it",
+            "name": "latent change → 409 change-not-queued",
+            "line": 108
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/reject: body validation",
+            "line": 138
+          },
+          {
+            "kind": "it",
+            "name": "no body → 200, default reason",
+            "line": 156
+          },
+          {
+            "kind": "it",
+            "name": "empty JSON {} → 200, default reason",
+            "line": 168
+          },
+          {
+            "kind": "it",
+            "name": "reason string → 200, stored verbatim",
+            "line": 180
+          },
+          {
+            "kind": "it",
+            "name": "empty-string reason → 200, stored as empty string",
+            "line": 192
+          },
+          {
+            "kind": "it",
+            "name": "extra fields ignored",
+            "line": 204
+          },
+          {
+            "kind": "it",
+            "name": "non-string reason → 400 payload-shape",
+            "line": 216
+          },
+          {
+            "kind": "it",
+            "name": "body is array → 400 malformed-body",
+            "line": 229
+          },
+          {
+            "kind": "it",
+            "name": "body is non-JSON → 400 malformed-body",
+            "line": 242
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/reject: per-op cascade behavior",
+            "line": 256
+          },
+          {
+            "kind": "it",
+            "name": "reject rename → only the one change transitions; no cascade",
+            "line": 257
+          },
+          {
+            "kind": "it",
+            "name": "reject add-create cascades to direct dependents",
+            "line": 282
+          },
+          {
+            "kind": "it",
+            "name": "reject add-create cascades transitively (grandchildren invalid)",
+            "line": 316
+          },
+          {
+            "kind": "it",
+            "name": "reject add-graft cascades to descendants",
+            "line": 357
+          },
+          {
+            "kind": "it",
+            "name": "cascaded-invalid changes do NOT enter the queue",
+            "line": 403
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/reject: live graph untouched",
+            "line": 435
+          },
+          {
+            "kind": "it",
+            "name": "reject does not mutate live taxa or edges",
+            "line": 436
+          },
+          {
+            "kind": "it",
+            "name": "reject handler source does not call invariant-engine",
+            "line": 467
+          },
+          {
+            "kind": "describe",
+            "name": "POST /changes/:id/reject: response shape",
+            "line": 479
+          },
+          {
+            "kind": "it",
+            "name": "response status field matches GET /proposals/{id}",
+            "line": 480
+          }
+        ]
+      },
+      {
+        "path": "test/changes/route-mount.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "route mount: POST /changes/:id/accept",
+            "line": 9
+          },
+          {
+            "kind": "it",
+            "name": "null caller receives 403",
+            "line": 10
+          },
+          {
+            "kind": "it",
+            "name": "unknown id with registered caller returns 404",
+            "line": 16
+          },
+          {
+            "kind": "describe",
+            "name": "route mount: POST /changes/:id/reject",
+            "line": 31
+          },
+          {
+            "kind": "it",
+            "name": "null caller receives 403",
+            "line": 32
+          },
+          {
+            "kind": "it",
+            "name": "unknown id with registered caller returns 404",
+            "line": 38
+          }
+        ]
+      }
+    ],
+    "testCount": 163
+  }
+}

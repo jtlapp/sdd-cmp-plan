@@ -1,0 +1,2656 @@
+{
+  "project": "sdd-cmp-cc-only",
+  "root": "/Users/joe/repos/sdd-cmp-cc-only",
+  "files": [
+    {
+      "path": "test/acceptAddValidation.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "graft that would create a cycle → 409",
+          "line": 28
+        },
+        {
+          "kind": "test",
+          "name": "graft that would create an in-tree duplicate (diamond) → 409",
+          "line": 73
+        },
+        {
+          "kind": "test",
+          "name": "graft brings a subtree whose names clash with the target tree → 409",
+          "line": 111
+        },
+        {
+          "kind": "test",
+          "name": "happy cross-tree graft → 200; grafted taxon becomes shared",
+          "line": 152
+        },
+        {
+          "kind": "test",
+          "name": "create whose name clashes with an existing sibling → 409",
+          "line": 180
+        },
+        {
+          "kind": "test",
+          "name": "create whose name clashes case-insensitively → 409 (§3.4)",
+          "line": 209
+        },
+        {
+          "kind": "test",
+          "name": "happy create at root level → 200, new taxon attached",
+          "line": 234
+        }
+      ]
+    },
+    {
+      "path": "test/acceptHappy.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "accept rename: live taxon name updates, change becomes accepted, dequeued",
+          "line": 38
+        },
+        {
+          "kind": "test",
+          "name": "accept add-create: new taxon owned by accepting reviewer, attached to parent",
+          "line": 71
+        },
+        {
+          "kind": "test",
+          "name": "accept add-graft: edge added, grafted taxon stays owned by original owner (§9.3)",
+          "line": 108
+        },
+        {
+          "kind": "test",
+          "name": "accept detach: edge removed, detached child survives",
+          "line": 150
+        }
+      ]
+    },
+    {
+      "path": "test/acceptRenameValidation.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "rename to a name that clashes in the target tree → 409 conflict, change auto-dismissed (§11.4 case 2)",
+          "line": 47
+        },
+        {
+          "kind": "test",
+          "name": "rename clashes in ANOTHER containing tree (not the target) → 409 conflict",
+          "line": 86
+        },
+        {
+          "kind": "test",
+          "name": "rename across two trees both clean → accepted; both trees see new name",
+          "line": 119
+        },
+        {
+          "kind": "test",
+          "name": "rename to the same name (case-insensitive no-op) → accepted",
+          "line": 153
+        }
+      ]
+    },
+    {
+      "path": "test/app.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "GET /health: 200 with status:ok JSON body",
+          "line": 7
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset: 204 with empty body and no X-Username header",
+          "line": 15
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset: callable with an unregistered (well-formed) X-Username",
+          "line": 22
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset: callable with a malformed X-Username",
+          "line": 32
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset: callable with an empty X-Username (null user)",
+          "line": 43
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset: idempotent — two calls in a row both return 204",
+          "line": 52
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset: invokes every registered reset callback",
+          "line": 60
+        },
+        {
+          "kind": "test",
+          "name": "GET on unknown path: 404 with §15.6 envelope, not Hono's default text",
+          "line": 75
+        },
+        {
+          "kind": "test",
+          "name": "Unsupported method on a known path: error envelope, never raw text/HTML",
+          "line": 86
+        }
+      ]
+    },
+    {
+      "path": "test/cascadeHappy.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "cascade rooted at a queued rename with no descendants accepts only the seed",
+          "line": 54
+        },
+        {
+          "kind": "test",
+          "name": "cascade extends through ownership transfer (Appendix A.1 Urban Fantasy / Paranormal Romance)",
+          "line": 74
+        },
+        {
+          "kind": "test",
+          "name": "cascade stops at boundaries routed to other owners; bounded change stays queued for that owner",
+          "line": 139
+        },
+        {
+          "kind": "test",
+          "name": "cascade rooted at an add-create with no nested ops accepts only the seed",
+          "line": 207
+        },
+        {
+          "kind": "test",
+          "name": "cascade accepts mixed nested ops (rename, add, detach) in payload-topological order",
+          "line": 229
+        },
+        {
+          "kind": "test",
+          "name": "self-routed cascade — reviewer is also the proposer",
+          "line": 277
+        }
+      ]
+    },
+    {
+      "path": "test/cascadeRollback.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "cascade rolls back on mid-cascade in-tree name clash; live state and bookkeeping restored",
+          "line": 49
+        },
+        {
+          "kind": "test",
+          "name": "cascade rolls back on cross-tree name clash; restores both trees",
+          "line": 102
+        },
+        {
+          "kind": "test",
+          "name": "cascade rolls back on mid-cascade cycle (graft of an ancestor)",
+          "line": 154
+        },
+        {
+          "kind": "test",
+          "name": "cascade rolls back on mid-cascade in-tree duplicate (diamond)",
+          "line": 203
+        },
+        {
+          "kind": "test",
+          "name": "cascade rolls back on first-step failure with nothing applied",
+          "line": 248
+        },
+        {
+          "kind": "test",
+          "name": "§12.2 non-equivalence: same change validates standalone but cascade rolls back when an earlier step would set up the clash",
+          "line": 282
+        }
+      ]
+    },
+    {
+      "path": "test/deletion.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "planDeletion: lone root → region [N]",
+          "line": 23
+        },
+        {
+          "kind": "test",
+          "name": "planDeletion: wholly-U-owned subtree → entire subtree in region",
+          "line": 31
+        },
+        {
+          "kind": "test",
+          "name": "planDeletion: halt at other-owned child — region stops before it",
+          "line": 46
+        },
+        {
+          "kind": "test",
+          "name": "planDeletion: stranded U-owned descendant beneath an other-owned halt is NOT in region",
+          "line": 57
+        },
+        {
+          "kind": "test",
+          "name": "planDeletion: precondition 1 — region taxon is shared → violation shared_in_region",
+          "line": 72
+        },
+        {
+          "kind": "test",
+          "name": "planDeletion: precondition 1 — a region descendant is shared into another tree",
+          "line": 90
+        },
+        {
+          "kind": "test",
+          "name": "planDeletion: precondition 2 — N has one foreign-owned parent → violation parent_not_owned",
+          "line": 108
+        },
+        {
+          "kind": "test",
+          "name": "planDeletion: precondition 2 — N has one U-owned parent → ok",
+          "line": 125
+        },
+        {
+          "kind": "test",
+          "name": "planDeletion: an other-owned halt-frontier taxon may itself be shared — does NOT trip precondition 1",
+          "line": 136
+        }
+      ]
+    },
+    {
+      "path": "test/dismiss.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "dismiss happy path: case-3 invalid change → 200; removed from queue",
+          "line": 79
+        },
+        {
+          "kind": "test",
+          "name": "dismiss on a still-queued (still valid) change → 409 change_not_invalid",
+          "line": 98
+        },
+        {
+          "kind": "test",
+          "name": "dismiss on a case-1 invalid (never queued) change → 409 change_not_in_queue",
+          "line": 123
+        },
+        {
+          "kind": "test",
+          "name": "dismiss on a case-2 (already auto-dismissed) change → 409 change_not_in_queue",
+          "line": 157
+        },
+        {
+          "kind": "test",
+          "name": "dismiss on an accepted change → 409 change_not_invalid",
+          "line": 189
+        },
+        {
+          "kind": "test",
+          "name": "dismiss on a rejected change → 409 change_not_invalid",
+          "line": 215
+        },
+        {
+          "kind": "test",
+          "name": "dismiss auth: null caller → 403",
+          "line": 243
+        },
+        {
+          "kind": "test",
+          "name": "dismiss auth: unregistered caller → 403",
+          "line": 250
+        },
+        {
+          "kind": "test",
+          "name": "dismiss auth: malformed X-Username (NBSP-prefixed) → 400",
+          "line": 257
+        },
+        {
+          "kind": "test",
+          "name": "dismiss on unknown change id → 404",
+          "line": 267
+        },
+        {
+          "kind": "test",
+          "name": "dismiss as non-reviewer → 403",
+          "line": 274
+        },
+        {
+          "kind": "test",
+          "name": "dismiss is idempotent in effect but not in state: second dismiss → 409 change_not_in_queue",
+          "line": 282
+        }
+      ]
+    },
+    {
+      "path": "test/domainIntegration.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "integration: register two users, build a multi-tree graph, exercise all four reads",
+          "line": 38
+        },
+        {
+          "kind": "test",
+          "name": "integration: §15.6 envelope codes (400, 403, 404) round-trip through the new routes",
+          "line": 94
+        },
+        {
+          "kind": "test",
+          "name": "integration: Phase-1 notFound fallback still applies to unknown route paths",
+          "line": 111
+        },
+        {
+          "kind": "test",
+          "name": "integration: POST /reset wipes BOTH the registry and the taxon store in one call",
+          "line": 120
+        }
+      ]
+    },
+    {
+      "path": "test/errors.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "STATUS_BY_CODE: §15.6 mapping is exact",
+          "line": 13
+        },
+        {
+          "kind": "test",
+          "name": "errorBody: envelope shape without details",
+          "line": 20
+        },
+        {
+          "kind": "test",
+          "name": "errorBody: envelope shape with details",
+          "line": 25
+        },
+        {
+          "kind": "test",
+          "name": "errorBody: omits details when undefined (not present as null)",
+          "line": 32
+        },
+        {
+          "kind": "test",
+          "name": "httpError: each code returns its mapped status with the envelope",
+          "line": 37
+        },
+        {
+          "kind": "test",
+          "name": "httpError: passes through details",
+          "line": 56
+        },
+        {
+          "kind": "test",
+          "name": "ApiError: carries code, message, and details",
+          "line": 67
+        }
+      ]
+    },
+    {
+      "path": "test/identityMiddleware.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "identityWithRegistry: absent header → handler sees null identity",
+          "line": 40
+        },
+        {
+          "kind": "test",
+          "name": "identityWithRegistry: empty X-Username → handler sees null identity",
+          "line": 49
+        },
+        {
+          "kind": "test",
+          "name": "identityWithRegistry: malformed X-Username → 400 validation_error, handler never runs",
+          "line": 59
+        },
+        {
+          "kind": "test",
+          "name": "identityWithRegistry: well-formed but unregistered → 403 forbidden, handler never runs",
+          "line": 76
+        },
+        {
+          "kind": "test",
+          "name": "identityWithRegistry: registered exact-case → handler sees canonical identity",
+          "line": 87
+        },
+        {
+          "kind": "test",
+          "name": "identityWithRegistry: case-variant header maps to canonical form (decision #4)",
+          "line": 98
+        },
+        {
+          "kind": "test",
+          "name": "identityWithRegistry: malformed and unregistered both conform to §15.6 envelope",
+          "line": 112
+        },
+        {
+          "kind": "test",
+          "name": "identityFormatOnly: absent header → null identity, handler runs",
+          "line": 130
+        },
+        {
+          "kind": "test",
+          "name": "identityFormatOnly: malformed X-Username STILL 400s (format check applies)",
+          "line": 140
+        },
+        {
+          "kind": "test",
+          "name": "identityFormatOnly: unregistered well-formed header → handler runs (decision #1)",
+          "line": 150
+        },
+        {
+          "kind": "test",
+          "name": "identityFormatOnly: registered header still resolves to canonical identity",
+          "line": 161
+        }
+      ]
+    },
+    {
+      "path": "test/invalidation.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "§11.4 case 1: an add becoming invalid propagates to its payload descendants",
+          "line": 78
+        },
+        {
+          "kind": "test",
+          "name": "§11.4 case 1: invalidation cascades through nested add chain (A1 → A2 → A3)",
+          "line": 136
+        },
+        {
+          "kind": "test",
+          "name": "§11.4 case 2: successful accept auto-dismisses a sibling that now clashes",
+          "line": 183
+        },
+        {
+          "kind": "test",
+          "name": "§11.4 case 2: failed accept auto-dismisses the change itself (replaces Phase-6 placeholder)",
+          "line": 230
+        },
+        {
+          "kind": "test",
+          "name": "§11.4 case 2 via cascade: cascade succeeds; a sibling queued change broken by it auto-dismisses",
+          "line": 268
+        },
+        {
+          "kind": "test",
+          "name": "§11.4 case 3: direct rename by another user makes a queued rename clash; marked invalid, kept queued",
+          "line": 309
+        },
+        {
+          "kind": "test",
+          "name": "§11.4 case 3: direct detach by another user (Appendix A.2 tail) invalidates a queued create under the grafted taxon",
+          "line": 347
+        },
+        {
+          "kind": "test",
+          "name": "§11.4 case 3: a different reviewer's accept (on a different proposal) invalidates Y's queued change",
+          "line": 405
+        }
+      ]
+    },
+    {
+      "path": "test/invalidationLazy.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "unrelated writes do NOT eagerly transition a queued change's state — only a lazy seam does",
+          "line": 54
+        },
+        {
+          "kind": "test",
+          "name": "lazy detection on GET /queue: a queued change broken externally surfaces as invalid in queue",
+          "line": 94
+        },
+        {
+          "kind": "test",
+          "name": "lazy detection on review-action entry: case-3 invalidation surfaces for non-targeted queued changes",
+          "line": 131
+        },
+        {
+          "kind": "test",
+          "name": "idempotence: two successive GET /queue with no intervening writes return the same response",
+          "line": 184
+        }
+      ]
+    },
+    {
+      "path": "test/invariants.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "invariant 1: a linear chain has no cycles",
+          "line": 31
+        },
+        {
+          "kind": "test",
+          "name": "invariant 1: a cross-tree diamond has no cycle",
+          "line": 41
+        },
+        {
+          "kind": "test",
+          "name": "invariant 1: a self-edge A→A is a cycle that names A",
+          "line": 51
+        },
+        {
+          "kind": "test",
+          "name": "invariant 1: a two-cycle A→B→A reports both taxa",
+          "line": 63
+        },
+        {
+          "kind": "test",
+          "name": "invariant 1: a three-cycle reachable from a root chain is reported as a cycle",
+          "line": 77
+        },
+        {
+          "kind": "test",
+          "name": "invariant 1: a cyclic graph does NOT cause invariant 2 or 3 to also fire spuriously",
+          "line": 95
+        },
+        {
+          "kind": "test",
+          "name": "invariant 2: a linear chain passes",
+          "line": 110
+        },
+        {
+          "kind": "test",
+          "name": "invariant 2: a cross-tree diamond passes (diamonds across trees are permitted)",
+          "line": 118
+        },
+        {
+          "kind": "test",
+          "name": "invariant 2: an in-tree diamond reports the duplicated taxon with its root",
+          "line": 128
+        },
+        {
+          "kind": "test",
+          "name": "invariant 2: a deeper in-tree diamond is still caught",
+          "line": 146
+        },
+        {
+          "kind": "test",
+          "name": "invariant 2: shared-across-trees AND duplicated-within-one fires only for the in-tree case",
+          "line": 165
+        },
+        {
+          "kind": "test",
+          "name": "invariant 2: two independent in-tree diamonds in different trees both fire",
+          "line": 190
+        },
+        {
+          "kind": "test",
+          "name": "invariant 3: a tree with distinct names passes",
+          "line": 223
+        },
+        {
+          "kind": "test",
+          "name": "invariant 3: two taxa with the same exact name in the same tree clash",
+          "line": 233
+        },
+        {
+          "kind": "test",
+          "name": "invariant 3: case-variant names collide (§3.4 case-insensitive)",
+          "line": 249
+        },
+        {
+          "kind": "test",
+          "name": "invariant 3: same name across different trees is fine (per-tree only)",
+          "line": 263
+        },
+        {
+          "kind": "test",
+          "name": "invariant 3: a shared taxon clashing in one of its containing trees fires for that tree",
+          "line": 275
+        },
+        {
+          "kind": "test",
+          "name": "invariant 3: rename simulation — a name that clashes in another containing tree is caught",
+          "line": 296
+        },
+        {
+          "kind": "test",
+          "name": "evaluateAll: a graph violating only invariant 1 reports cycle, not 2 or 3",
+          "line": 328
+        },
+        {
+          "kind": "test",
+          "name": "evaluateAll: a graph violating only invariant 2 reports duplicate, not 1 or 3",
+          "line": 339
+        },
+        {
+          "kind": "test",
+          "name": "evaluateAll: a graph violating only invariant 3 reports name_clash, not 1 or 2",
+          "line": 356
+        },
+        {
+          "kind": "test",
+          "name": "evaluateAll: a graph violating BOTH 2 and 3 reports both, attributed correctly",
+          "line": 370
+        },
+        {
+          "kind": "test",
+          "name": "evaluateAll: an empty graph is ok:true",
+          "line": 402
+        },
+        {
+          "kind": "test",
+          "name": "evaluateAll: a non-trivial clean multi-tree graph is ok:true",
+          "line": 408
+        }
+      ]
+    },
+    {
+      "path": "test/phase4Integration.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "integration: multi-owner story — create, transfer ownership, recipient acts, original blocked",
+          "line": 63
+        },
+        {
+          "kind": "test",
+          "name": "integration: §14 bullet 4 stranded U-owned demonstration end-to-end",
+          "line": 103
+        },
+        {
+          "kind": "test",
+          "name": "integration: cross-tree rename — succeeds when no clash, 409s when target name conflicts in another tree",
+          "line": 134
+        },
+        {
+          "kind": "test",
+          "name": "integration: reset between flows wipes everything, ID counter restarts",
+          "line": 168
+        },
+        {
+          "kind": "test",
+          "name": "integration: a delete blocked by precondition fails 409, then Alice fixes the shape and the retry succeeds",
+          "line": 188
+        }
+      ]
+    },
+    {
+      "path": "test/phase7Integration.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "Appendix A.1 end-to-end via accept-cascade",
+          "line": 84
+        },
+        {
+          "kind": "test",
+          "name": "Appendix A.2 end-to-end with case-3 invalidation and dismiss",
+          "line": 148
+        },
+        {
+          "kind": "test",
+          "name": "§14 collaborative deletion: U-owned shared taxon blocks delete until detached via proposals",
+          "line": 228
+        },
+        {
+          "kind": "test",
+          "name": "§14 ownership reassignment reroutes promotion-time reviewer",
+          "line": 281
+        },
+        {
+          "kind": "test",
+          "name": "§14 cascade-delete halts at other-owned; queued change under detached taxon becomes case-3 invalid",
+          "line": 336
+        },
+        {
+          "kind": "test",
+          "name": "reset across Phase-7 lifecycle: clears cascade, case-3 invalid, and case-2 auto-dismissed state",
+          "line": 404
+        }
+      ]
+    },
+    {
+      "path": "test/phase7StatusView.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "proposer view shows `invalid` for all three §11.4 cases, identically",
+          "line": 54
+        },
+        {
+          "kind": "test",
+          "name": "/queue includes case-3 invalid entries but NOT case-1 / case-2",
+          "line": 144
+        },
+        {
+          "kind": "test",
+          "name": "successful cascade leaves queue clean of the cascade's accepted set",
+          "line": 211
+        }
+      ]
+    },
+    {
+      "path": "test/promotion.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "Appendix A.1 cascade-shape: accept create → nested create promotes to accepter's queue",
+          "line": 37
+        },
+        {
+          "kind": "test",
+          "name": "nested rename under create routes to renamed-taxon's owner (not accepter)",
+          "line": 101
+        },
+        {
+          "kind": "test",
+          "name": "nested add under graft promotes to grafted-taxon's owner (§9.3)",
+          "line": 143
+        },
+        {
+          "kind": "test",
+          "name": "nested detach under graft promotes to grafted-taxon's owner",
+          "line": 192
+        },
+        {
+          "kind": "test",
+          "name": "only direct dependents promote: deeper add stays latent until its own parent accepts",
+          "line": 238
+        },
+        {
+          "kind": "test",
+          "name": "sibling dependents under one accepted add all promote in change-id order",
+          "line": 297
+        },
+        {
+          "kind": "test",
+          "name": "existence dep broken between submission and graft accept → dependent invalidated",
+          "line": 340
+        }
+      ]
+    },
+    {
+      "path": "test/proposalsDependencies.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "nested add under add-create → latent (decision dep)",
+          "line": 24
+        },
+        {
+          "kind": "test",
+          "name": "nested add under add-graft → latent",
+          "line": 56
+        },
+        {
+          "kind": "test",
+          "name": "nested rename under add-create → latent (path-based, not target-based)",
+          "line": 85
+        },
+        {
+          "kind": "test",
+          "name": "nested detach under add-graft → latent",
+          "line": 116
+        },
+        {
+          "kind": "test",
+          "name": "nested add under top rename → queued (rename is existence dep only)",
+          "line": 147
+        },
+        {
+          "kind": "test",
+          "name": "stacked renames → all queued (no add ancestors anywhere)",
+          "line": 172
+        },
+        {
+          "kind": "test",
+          "name": "nested detach under no-op anchor → queued",
+          "line": 206
+        },
+        {
+          "kind": "test",
+          "name": "Appendix A.1 dispositions match the worked example",
+          "line": 229
+        },
+        {
+          "kind": "test",
+          "name": "top no-op is structural; every operative path includes it (observable via tree shape)",
+          "line": 303
+        }
+      ]
+    },
+    {
+      "path": "test/proposalsDisposition.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "exactly one decision-dep ancestor → latent",
+          "line": 30
+        },
+        {
+          "kind": "test",
+          "name": "two decision-dep ancestors → still latent (any add ancestor suffices)",
+          "line": 55
+        },
+        {
+          "kind": "test",
+          "name": "deep no-op/rename chain (no add anywhere) → terminal change queued",
+          "line": 92
+        },
+        {
+          "kind": "test",
+          "name": "sibling ops don't gate each other (an add sibling doesn't make a rename sibling latent)",
+          "line": 133
+        },
+        {
+          "kind": "test",
+          "name": "no-op payload node is structural, carries no changeId",
+          "line": 161
+        },
+        {
+          "kind": "test",
+          "name": "every queued change has exactly one entry; every latent change has zero",
+          "line": 187
+        }
+      ]
+    },
+    {
+      "path": "test/proposalsIntegration.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "Appendix A.1: routing across Alice/Bob; latent change not in any queue",
+          "line": 28
+        },
+        {
+          "kind": "test",
+          "name": "Appendix A.2: two independent proposals for a cross-tree move",
+          "line": 105
+        },
+        {
+          "kind": "test",
+          "name": "self-routed proposal: change appears in proposer's own queue",
+          "line": 192
+        },
+        {
+          "kind": "test",
+          "name": "reset across the lifecycle: ids restart, no pre-reset residue",
+          "line": 214
+        }
+      ]
+    },
+    {
+      "path": "test/proposalsList.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "GET /proposals: empty server → empty list",
+          "line": 21
+        },
+        {
+          "kind": "test",
+          "name": "GET /proposals: one proposal → one summary",
+          "line": 28
+        },
+        {
+          "kind": "test",
+          "name": "GET /proposals: multiple proposals in submission order",
+          "line": 48
+        },
+        {
+          "kind": "test",
+          "name": "GET /proposals?proposer=alice → only Alice's proposals",
+          "line": 78
+        },
+        {
+          "kind": "test",
+          "name": "GET /proposals?proposer=ALICE → case-insensitive via registry canonical form",
+          "line": 99
+        },
+        {
+          "kind": "test",
+          "name": "GET /proposals?proposer=unregistered → empty list (decision #10)",
+          "line": 115
+        },
+        {
+          "kind": "test",
+          "name": "GET /proposals: null caller may read",
+          "line": 130
+        },
+        {
+          "kind": "test",
+          "name": "GET /proposals: malformed X-Username → 400",
+          "line": 136
+        }
+      ]
+    },
+    {
+      "path": "test/proposalsParse.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "POST /proposals: minimal valid no-op top → 201",
+          "line": 38
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: invalid JSON body → 400",
+          "line": 53
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: non-object body (${JSON.stringify(v)}) → 400",
+          "line": 69
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: missing ${omit} → 400",
+          "line": 79
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: targetRootId not a string → 400",
+          "line": 94
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: topTaxonId not a string → 400",
+          "line": 104
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: payload not a JSON object → 400",
+          "line": 114
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: unknown top-level keys ignored (decision #14)",
+          "line": 126
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: each op accepted in a valid position",
+          "line": 139
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: invalid op ${JSON.stringify(badOp)} → 400",
+          "line": 182
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: no-op without id → 400",
+          "line": 195
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: no-op with non-string id → 400",
+          "line": 205
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: rename without id → 400",
+          "line": 215
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: rename without name → 400",
+          "line": 230
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: rename with bad name ${JSON.stringify(bad)} → 400",
+          "line": 245
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: add without id key → 400 (missing key is not null)",
+          "line": 260
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: add (create) requires name → 400 without it",
+          "line": 274
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: add (create) with bad-format name → 400",
+          "line": 288
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: add with non-null non-string id → 400",
+          "line": 302
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: detach with children → 400 (leaf rule)",
+          "line": 316
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: detach without id → 400",
+          "line": 336
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: children not an array → 400",
+          "line": 346
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: child entry not an object → 400",
+          "line": 356
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: unknown extra keys on a payload node are ignored",
+          "line": 366
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: top op = add → 400",
+          "line": 383
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: top op = detach → 400",
+          "line": 393
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: payload.id mismatches topTaxonId → 400 (decision #2)",
+          "line": 403
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: topTaxonId names unknown taxon → 404",
+          "line": 413
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: top taxon exists but not in target tree → 409",
+          "line": 423
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: targetRootId unknown → 404",
+          "line": 439
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: targetRootId is not a root (has parents) → 409",
+          "line": 449
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: nested rename with unknown id → 404",
+          "line": 464
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: nested detach with unknown id → 404",
+          "line": 478
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: nested graft with unknown id → 404",
+          "line": 492
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: nested no-op with unknown id → 404",
+          "line": 506
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: null user → 403",
+          "line": 522
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: unregistered well-formed caller → 403",
+          "line": 532
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals: malformed X-Username (NBSP) → 400",
+          "line": 542
+        }
+      ]
+    },
+    {
+      "path": "test/proposalsPartialPayload.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "listing only one of three children leaves the others unmentioned",
+          "line": 19
+        },
+        {
+          "kind": "test",
+          "name": "partial payload + nested detach leaves siblings of the detach untouched in the change set",
+          "line": 50
+        },
+        {
+          "kind": "test",
+          "name": "listing a non-existent child is a 404, not 'partial' lenience",
+          "line": 89
+        }
+      ]
+    },
+    {
+      "path": "test/proposalsReset.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "POST /reset clears the proposals registry",
+          "line": 19
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset clears every reviewer's queue",
+          "line": 35
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset restarts the change-id counter at c1 (and the proposal-id counter at p1)",
+          "line": 65
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset is still §4-exempt (null caller may invoke it)",
+          "line": 101
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset is §4-exempt for malformed-header callers too",
+          "line": 119
+        },
+        {
+          "kind": "test",
+          "name": "post-reset the new proposal subsystem is fully usable",
+          "line": 130
+        }
+      ]
+    },
+    {
+      "path": "test/proposalsRouting.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "rename routes to the renamed taxon's owner, not the parent's",
+          "line": 34
+        },
+        {
+          "kind": "test",
+          "name": "detach routes to the payload-parent's owner, not the child's",
+          "line": 68
+        },
+        {
+          "kind": "test",
+          "name": "add-create routes to the payload-parent's owner",
+          "line": 98
+        },
+        {
+          "kind": "test",
+          "name": "add-graft routes to the payload-parent's owner (not the grafted taxon's)",
+          "line": 123
+        },
+        {
+          "kind": "test",
+          "name": "no-op produces no change in any queue",
+          "line": 151
+        },
+        {
+          "kind": "test",
+          "name": "rename + nested add under same taxon route to different/same reviewers per §10.1",
+          "line": 168
+        },
+        {
+          "kind": "test",
+          "name": "rename targeting C + nested add → both route to C's owner",
+          "line": 209
+        },
+        {
+          "kind": "test",
+          "name": "graft preserves ownership: nested ops under graft route to grafted taxon's owner",
+          "line": 246
+        },
+        {
+          "kind": "test",
+          "name": "proposer is not auto-reviewer of her own proposal",
+          "line": 300
+        }
+      ]
+    },
+    {
+      "path": "test/proposalsStatusView.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "status view shape matches submitted payload (A.1)",
+          "line": 35
+        },
+        {
+          "kind": "test",
+          "name": "every operative node carries a changeId; every no-op has none",
+          "line": 97
+        },
+        {
+          "kind": "test",
+          "name": "status nodes echo op/id/name fields submitted (unknown keys dropped)",
+          "line": 128
+        },
+        {
+          "kind": "test",
+          "name": "disposition is one of the five real states, or 'structural' for no-op",
+          "line": 154
+        },
+        {
+          "kind": "test",
+          "name": "reason field is absent in Phase 5 (no rejection/invalidation paths exercised)",
+          "line": 183
+        },
+        {
+          "kind": "test",
+          "name": "GET /proposals/{id} is readable by anyone (including null user)",
+          "line": 207
+        },
+        {
+          "kind": "test",
+          "name": "GET /proposals/{id} unknown id → 404",
+          "line": 225
+        },
+        {
+          "kind": "test",
+          "name": "GET /proposals/{id} malformed X-Username → 400",
+          "line": 233
+        },
+        {
+          "kind": "test",
+          "name": "POST /proposals body's payload equals subsequent GET's payload",
+          "line": 252
+        }
+      ]
+    },
+    {
+      "path": "test/queueRead.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "GET /queue: null caller → 200, empty list",
+          "line": 28
+        },
+        {
+          "kind": "test",
+          "name": "GET /queue: unregistered → 403",
+          "line": 35
+        },
+        {
+          "kind": "test",
+          "name": "GET /queue: malformed X-Username → 400",
+          "line": 43
+        },
+        {
+          "kind": "test",
+          "name": "GET /queue: registered caller with no incoming changes → empty list",
+          "line": 49
+        },
+        {
+          "kind": "test",
+          "name": "GET /queue: queued rename entry shape",
+          "line": 59
+        },
+        {
+          "kind": "test",
+          "name": "GET /queue: queued add-create entry shape (no taxonId, has name + parent)",
+          "line": 90
+        },
+        {
+          "kind": "test",
+          "name": "GET /queue: queued add-graft entry shape (taxonId + parent, no name)",
+          "line": 115
+        },
+        {
+          "kind": "test",
+          "name": "GET /queue: queued detach entry shape (taxonId + parent, no name)",
+          "line": 141
+        },
+        {
+          "kind": "test",
+          "name": "GET /queue: routed changes appear only in their reviewer's queue",
+          "line": 168
+        },
+        {
+          "kind": "test",
+          "name": "GET /queue: latent changes are never in any queue",
+          "line": 205
+        },
+        {
+          "kind": "test",
+          "name": "GET /queue: entries ordered by change-id (submission order)",
+          "line": 262
+        }
+      ]
+    },
+    {
+      "path": "test/reachability.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "reachability: empty graph has no roots",
+          "line": 28
+        },
+        {
+          "kind": "test",
+          "name": "reachability: a single isolated taxon is its own root",
+          "line": 33
+        },
+        {
+          "kind": "test",
+          "name": "reachability: in a chain A→B→C, only A is a root",
+          "line": 39
+        },
+        {
+          "kind": "test",
+          "name": "reachability: cross-tree diamond (A→C, B→C) has roots [A, B]",
+          "line": 49
+        },
+        {
+          "kind": "test",
+          "name": "reachability: detach makes a previously-child taxon a root again",
+          "line": 59
+        },
+        {
+          "kind": "test",
+          "name": "reachability: in chain A→B→C, every taxon's containing tree is {A}",
+          "line": 72
+        },
+        {
+          "kind": "test",
+          "name": "reachability: cross-tree diamond — C's containing trees are {A, B}",
+          "line": 85
+        },
+        {
+          "kind": "test",
+          "name": "reachability: deeper multi-root graph — D in two trees, B in one",
+          "line": 95
+        },
+        {
+          "kind": "test",
+          "name": "reachability: a taxon with no parents is its own containing tree",
+          "line": 110
+        },
+        {
+          "kind": "test",
+          "name": "reachability: treesContaining on an unknown id returns []",
+          "line": 116
+        },
+        {
+          "kind": "test",
+          "name": "reachability: an isolated root is not shared",
+          "line": 123
+        },
+        {
+          "kind": "test",
+          "name": "reachability: a linear-chain taxon is not shared",
+          "line": 129
+        },
+        {
+          "kind": "test",
+          "name": "reachability: a taxon reachable from two distinct roots is shared",
+          "line": 137
+        },
+        {
+          "kind": "test",
+          "name": "reachability: in-tree diamond does NOT make a taxon shared (single root)",
+          "line": 147
+        },
+        {
+          "kind": "test",
+          "name": "reachability: a clean tree reports no in-tree duplicates",
+          "line": 164
+        },
+        {
+          "kind": "test",
+          "name": "reachability: in-tree diamond reports the duplicated taxon",
+          "line": 174
+        },
+        {
+          "kind": "test",
+          "name": "reachability: cross-tree diamond is NOT an in-tree duplicate in either tree",
+          "line": 187
+        },
+        {
+          "kind": "test",
+          "name": "reachability: visit counts pin path-count semantics on a diamond",
+          "line": 198
+        },
+        {
+          "kind": "test",
+          "name": "reachability: descendants of a leaf is empty",
+          "line": 217
+        },
+        {
+          "kind": "test",
+          "name": "reachability: descendants from the root covers the whole tree",
+          "line": 223
+        },
+        {
+          "kind": "test",
+          "name": "reachability: descendants from mid-tree is the strict downward closure",
+          "line": 236
+        },
+        {
+          "kind": "test",
+          "name": "reachability: descendants is cycle-safe",
+          "line": 248
+        }
+      ]
+    },
+    {
+      "path": "test/reads.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "GET /taxa: empty store → 200 with empty list",
+          "line": 42
+        },
+        {
+          "kind": "test",
+          "name": "GET /taxa: returns taxa in creation order with the full record shape",
+          "line": 49
+        },
+        {
+          "kind": "test",
+          "name": "GET /taxa/{id}: existing taxon → 200 with full record",
+          "line": 70
+        },
+        {
+          "kind": "test",
+          "name": "GET /taxa/{id}: missing id → 404 with not_found envelope",
+          "line": 81
+        },
+        {
+          "kind": "test",
+          "name": "GET /taxa/{id}: a shared taxon lists both parents in attachment order",
+          "line": 90
+        },
+        {
+          "kind": "test",
+          "name": "GET /trees: empty store → 200 with empty list",
+          "line": 104
+        },
+        {
+          "kind": "test",
+          "name": "GET /trees: two roots with chains under each — both appear with parentIds: []",
+          "line": 111
+        },
+        {
+          "kind": "test",
+          "name": "GET /trees: a previously-root taxon attached under another parent no longer appears",
+          "line": 129
+        },
+        {
+          "kind": "test",
+          "name": "GET /trees/{rootId}: a leaf root → { id, name, owner, children: [] }",
+          "line": 142
+        },
+        {
+          "kind": "test",
+          "name": "GET /trees/{rootId}: two-children root expands them in insertion order",
+          "line": 153
+        },
+        {
+          "kind": "test",
+          "name": "GET /trees/{rootId}: deeper subtree expanded fully",
+          "line": 168
+        },
+        {
+          "kind": "test",
+          "name": "GET /trees/{rootId}: a shared child appears under both roots when each tree is fetched",
+          "line": 182
+        },
+        {
+          "kind": "test",
+          "name": "GET /trees/{id}: non-root existing id → 404 with 'not a root' message",
+          "line": 195
+        },
+        {
+          "kind": "test",
+          "name": "GET /trees/{id}: missing id → 404 not_found",
+          "line": 207
+        },
+        {
+          "kind": "test",
+          "name": "GET /trees/{rootId}: fixture-induced in-tree diamond finitizes (decision #1)",
+          "line": 215
+        },
+        {
+          "kind": "test",
+          "name": "reads: all four endpoints accept the null user (no X-Username)",
+          "line": 249
+        },
+        {
+          "kind": "test",
+          "name": "reads: all four endpoints accept a registered caller",
+          "line": 258
+        },
+        {
+          "kind": "test",
+          "name": "reads: all four endpoints 403 on an unregistered non-null caller",
+          "line": 268
+        },
+        {
+          "kind": "test",
+          "name": "reads: all four endpoints 400 on malformed X-Username (NBSP-prefixed)",
+          "line": 279
+        },
+        {
+          "kind": "test",
+          "name": "reset: clearing wipes taxa AND resets the ID counter to t1",
+          "line": 294
+        },
+        {
+          "kind": "test",
+          "name": "reset: previously-issued taxon ids 404 on /taxa/{id} and /trees/{id}",
+          "line": 314
+        },
+        {
+          "kind": "test",
+          "name": "reset: trees endpoint after reset returns empty",
+          "line": 325
+        }
+      ]
+    },
+    {
+      "path": "test/registry.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "POST /users: registers a well-formed name → 201 with canonical body",
+          "line": 31
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: internal whitespace is allowed",
+          "line": 39
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: single non-whitespace character",
+          "line": 46
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: multiple distinct registrations succeed in order",
+          "line": 52
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: missing username field → 400 validation_error",
+          "line": 64
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: non-string username (null, number, object, array) → 400",
+          "line": 73
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: empty-string username → 400",
+          "line": 84
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: leading-whitespace username → 400",
+          "line": 93
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: trailing-whitespace username → 400",
+          "line": 102
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: whitespace-only username (space/tab/newline) → 400",
+          "line": 111
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: malformed JSON body → 400",
+          "line": 119
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: bare JSON value (string, array) instead of object → 400",
+          "line": 128
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: exact-duplicate registration → 409 conflict",
+          "line": 138
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: case-variant duplicate → 409 (case-insensitive per §4)",
+          "line": 150
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: lower-then-upper duplicate also 409 (symmetric)",
+          "line": 160
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: caller with NO X-Username can register → 201 (bootstrap)",
+          "line": 169
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: caller with empty X-Username (null user) can register → 201",
+          "line": 176
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: unregistered well-formed X-Username can still register → 201",
+          "line": 182
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: registered caller can register a different name → 201",
+          "line": 193
+        },
+        {
+          "kind": "test",
+          "name": "POST /users: malformed X-Username → 400 even with otherwise-valid body (decision #2)",
+          "line": 200
+        },
+        {
+          "kind": "test",
+          "name": "GET /users: empty registry → 200 with users: []",
+          "line": 217
+        },
+        {
+          "kind": "test",
+          "name": "GET /users: returns canonical first-registered casing (decision #4)",
+          "line": 225
+        },
+        {
+          "kind": "test",
+          "name": "GET /users: available to the null user (no X-Username)",
+          "line": 233
+        },
+        {
+          "kind": "test",
+          "name": "GET /users: available to a registered caller",
+          "line": 240
+        },
+        {
+          "kind": "test",
+          "name": "GET /users: case-variant of a registered caller is accepted",
+          "line": 247
+        },
+        {
+          "kind": "test",
+          "name": "GET /users: unregistered non-null X-Username → 403 forbidden",
+          "line": 254
+        },
+        {
+          "kind": "test",
+          "name": "GET /users: malformed X-Username → 400 validation_error",
+          "line": 265
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset: clears the registry — list goes back to empty",
+          "line": 276
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset: post-reset, the previously-registered name is unregistered",
+          "line": 291
+        },
+        {
+          "kind": "test",
+          "name": "POST /reset: post-reset, prior X-Username is treated as unregistered → 403 on GET /users",
+          "line": 300
+        }
+      ]
+    },
+    {
+      "path": "test/reject.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "reject rename: change marked rejected, live name unchanged, dequeued",
+          "line": 41
+        },
+        {
+          "kind": "test",
+          "name": "reject detach: edge survives, no descendants to worry about",
+          "line": 63
+        },
+        {
+          "kind": "test",
+          "name": "reject add-create with no nested ops: state goes rejected, no taxon created",
+          "line": 87
+        },
+        {
+          "kind": "test",
+          "name": "reject add-create with nested create: outer rejected, inner invalid with reason citing outer",
+          "line": 108
+        },
+        {
+          "kind": "test",
+          "name": "reject add-graft with mixed nested ops: all descendants invalidated",
+          "line": 145
+        },
+        {
+          "kind": "test",
+          "name": "multi-level cascade: rejecting an outer add invalidates ALL nested descendants",
+          "line": 198
+        },
+        {
+          "kind": "test",
+          "name": "reject of a rename DOES NOT invalidate its descendants (decision #1 keystone)",
+          "line": 239
+        },
+        {
+          "kind": "test",
+          "name": "reject of a detach: detach has no children so propagation is moot; siblings untouched",
+          "line": 285
+        }
+      ]
+    },
+    {
+      "path": "test/requireWriter.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "requireWriter: null identity (no X-Username) → 403 forbidden",
+          "line": 36
+        },
+        {
+          "kind": "test",
+          "name": "requireWriter: null identity (empty X-Username) → 403 forbidden",
+          "line": 46
+        },
+        {
+          "kind": "test",
+          "name": "requireWriter: registered identity → handler runs and sees canonical identity",
+          "line": 57
+        },
+        {
+          "kind": "test",
+          "name": "chain: malformed X-Username short-circuits at identity layer → 400, never reaches write gate",
+          "line": 74
+        },
+        {
+          "kind": "test",
+          "name": "chain: unregistered non-null X-Username short-circuits at identity layer → 403 forbidden (unregistered, not null-write)",
+          "line": 88
+        },
+        {
+          "kind": "test",
+          "name": "chain: registered caller with case-variant header → 200 (case-insensitive resolution)",
+          "line": 104
+        }
+      ]
+    },
+    {
+      "path": "test/reviewAuth.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "${action}: null caller → 403 forbidden",
+          "line": 37
+        },
+        {
+          "kind": "test",
+          "name": "${action}: unregistered well-formed caller → 403",
+          "line": 46
+        },
+        {
+          "kind": "test",
+          "name": "${action}: malformed X-Username (NBSP-prefixed) → 400",
+          "line": 58
+        },
+        {
+          "kind": "test",
+          "name": "${action}: unknown change id → 404",
+          "line": 70
+        },
+        {
+          "kind": "test",
+          "name": "${action}: registered non-reviewer → 403",
+          "line": 82
+        },
+        {
+          "kind": "test",
+          "name": "accept on an already-accepted change → 409",
+          "line": 96
+        },
+        {
+          "kind": "test",
+          "name": "reject on an already-rejected change → 409",
+          "line": 108
+        },
+        {
+          "kind": "test",
+          "name": "accept on a latent change → 409",
+          "line": 118
+        },
+        {
+          "kind": "test",
+          "name": "accept on an invalid change → 409",
+          "line": 153
+        }
+      ]
+    },
+    {
+      "path": "test/reviewIntegration.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "Appendix A.1: full walkthrough using single accepts (no cascade)",
+          "line": 46
+        },
+        {
+          "kind": "test",
+          "name": "Appendix A.1: variant where Alice accepts c1 rename first",
+          "line": 130
+        },
+        {
+          "kind": "test",
+          "name": "Appendix A.2: graft accept + detach reject leaves taxon shared across trees",
+          "line": 187
+        },
+        {
+          "kind": "test",
+          "name": "failed accept does not mutate live state; change transitions to invalid (§11.4 case 2)",
+          "line": 265
+        },
+        {
+          "kind": "test",
+          "name": "rename of a shared taxon propagates to both trees on accept",
+          "line": 317
+        },
+        {
+          "kind": "test",
+          "name": "self-routed accept: proposer accepts her own change",
+          "line": 352
+        },
+        {
+          "kind": "test",
+          "name": "reset clears post-accept and post-reject state",
+          "line": 368
+        }
+      ]
+    },
+    {
+      "path": "test/taxa.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "taxa: a freshly-reset store has zero taxa",
+          "line": 30
+        },
+        {
+          "kind": "test",
+          "name": "taxa: getState exposes empty taxa and parentsOf maps after reset",
+          "line": 36
+        },
+        {
+          "kind": "test",
+          "name": "taxa: createTaxonFixture assigns t1, t2, t3 in monotonic order",
+          "line": 45
+        },
+        {
+          "kind": "test",
+          "name": "taxa: each new taxon starts with empty childIds and no parents",
+          "line": 55
+        },
+        {
+          "kind": "test",
+          "name": "taxa: name and owner are stored verbatim (no format enforcement in the store)",
+          "line": 62
+        },
+        {
+          "kind": "test",
+          "name": "taxa: attaching a child puts it on the parent's childIds in attachment order",
+          "line": 73
+        },
+        {
+          "kind": "test",
+          "name": "taxa: the derived parent set lists parents in attachment order",
+          "line": 83
+        },
+        {
+          "kind": "test",
+          "name": "taxa: re-attaching the same edge is idempotent",
+          "line": 93
+        },
+        {
+          "kind": "test",
+          "name": "taxa: detachChildFixture removes the edge from both endpoints",
+          "line": 103
+        },
+        {
+          "kind": "test",
+          "name": "taxa: detachChildFixture on a non-existent edge is a no-op",
+          "line": 113
+        },
+        {
+          "kind": "test",
+          "name": "taxa: attachChildFixture throws on unknown parent or child (fixture-author bug)",
+          "line": 123
+        },
+        {
+          "kind": "test",
+          "name": "taxa: deeply-nested attachments preserve insertion order and per-id distinctness",
+          "line": 130
+        },
+        {
+          "kind": "test",
+          "name": "taxa: clear() empties the store AND resets the ID counter",
+          "line": 145
+        },
+        {
+          "kind": "test",
+          "name": "taxa: clear() removes edges from the parents-of index too",
+          "line": 156
+        },
+        {
+          "kind": "test",
+          "name": "taxa: allTaxa returns taxa in creation order (insertion-ordered Map)",
+          "line": 166
+        }
+      ]
+    },
+    {
+      "path": "test/taxaCreate.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "POST /taxa: registered caller creates a root taxon owned by themselves",
+          "line": 51
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: consecutive creates issue distinct monotonic IDs",
+          "line": 65
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: freshly created taxon appears in reads as a root",
+          "line": 83
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: two registered users each create their own taxa, owners distinct",
+          "line": 112
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: null user (no X-Username) → 403 forbidden",
+          "line": 128
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: unregistered well-formed caller → 403 forbidden",
+          "line": 136
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: malformed X-Username (NBSP-prefixed) → 400 validation_error",
+          "line": 143
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: invalid JSON → 400",
+          "line": 153
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: non-object body → 400",
+          "line": 161
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: missing 'name' field → 400",
+          "line": 170
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: 'name' not a string → 400",
+          "line": 178
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: name format violations → 400 (empty, leading/trailing whitespace)",
+          "line": 187
+        },
+        {
+          "kind": "test",
+          "name": "POST /taxa: unknown body keys (including 'owner') are ignored — caller is owner per §6.1",
+          "line": 200
+        }
+      ]
+    },
+    {
+      "path": "test/taxaDelete.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "DELETE taxon: lone root with no children → region {N}, 204",
+          "line": 95
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: root with U-owned children only → cascade deletes everything",
+          "line": 106
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: deep U-owned chain (4+ levels) → all deleted",
+          "line": 127
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: non-root N with one U-owned parent → N's region deleted; parent survives, edge gone",
+          "line": 144
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: single other-owned child at halt point — child not deleted, edge removed, child becomes root",
+          "line": 165
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: halt-frontier child with another parent — survives, retains other parent",
+          "line": 183
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: stranded U-owned descendant below an other-owned halt point — survives (§14 bullet 4)",
+          "line": 204
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: multiple other-owned children at the halt frontier — each detached, edges removed",
+          "line": 227
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: halt-and-detach applies at every level, not just N's children",
+          "line": 253
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: N itself is shared (has two parents) → 409 shared_in_region",
+          "line": 279
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: a U-owned descendant in the region is shared into another tree → 409 shared_in_region",
+          "line": 301
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: a stranded U-owned descendant beneath an other-owned halt point is shared — does NOT trip precondition 1 (it's not in the region)",
+          "line": 323
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: an other-owned halt-frontier taxon is itself shared → 204 (§6.3 parenthetical)",
+          "line": 347
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: N has one parent owned by someone else → 409 parent_not_owned",
+          "line": 370
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: N has multiple parents — at least one precondition fires; tests accept either",
+          "line": 390
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: non-owner caller → 403; no state changes",
+          "line": 418
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: null user → 403",
+          "line": 429
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: unregistered caller → 403",
+          "line": 438
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: malformed X-Username → 400",
+          "line": 447
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: unknown id → 404",
+          "line": 456
+        },
+        {
+          "kind": "test",
+          "name": "DELETE taxon: a precondition-failed delete leaves state byte-identical (no partial cascade)",
+          "line": 466
+        }
+      ]
+    },
+    {
+      "path": "test/taxaEdgeAdd.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "PUT edge: parent owner adds a previously-disconnected child → 204; edge present on both ends",
+          "line": 69
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: re-adding an existing edge → 204 idempotent, no duplicate entries",
+          "line": 84
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: child attached under two different trees → both trees show it; child is shared",
+          "line": 99
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: unknown parent → 404",
+          "line": 118
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: unknown child → 404",
+          "line": 126
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: non-parent-owner caller (even child-owner) → 403",
+          "line": 134
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: null user → 403",
+          "line": 146
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: malformed X-Username → 400",
+          "line": 155
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: self-loop X→X → 409 cycle",
+          "line": 166
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: deeper cycle (attach ancestor under descendant) → 409 cycle",
+          "line": 178
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: in-tree diamond (child reachable from same root twice) → 409 in_tree_duplicate",
+          "line": 197
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: in-tree name clash → 409 name_clash",
+          "line": 217
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: grafting a subtree whose internal name clashes with the receiving tree → 409",
+          "line": 235
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: same name allowed under two different trees",
+          "line": 253
+        },
+        {
+          "kind": "test",
+          "name": "PUT edge: invariant rejection leaves state byte-identical (no partial edge)",
+          "line": 269
+        }
+      ]
+    },
+    {
+      "path": "test/taxaEdgeRemove.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "DELETE edge: parent owner detaches a single-parent child → 204; child becomes a root",
+          "line": 83
+        },
+        {
+          "kind": "test",
+          "name": "DELETE edge: detaching a shared child → 204; child retains other parents",
+          "line": 102
+        },
+        {
+          "kind": "test",
+          "name": "DELETE edge: detach preserves the child's subtree (§7 detach ≠ delete)",
+          "line": 120
+        },
+        {
+          "kind": "test",
+          "name": "DELETE edge: unknown parent → 404",
+          "line": 144
+        },
+        {
+          "kind": "test",
+          "name": "DELETE edge: unknown child → 404",
+          "line": 152
+        },
+        {
+          "kind": "test",
+          "name": "DELETE edge: both exist but no edge between them → 404 (decision #3)",
+          "line": 160
+        },
+        {
+          "kind": "test",
+          "name": "DELETE edge: non-parent-owner → 403",
+          "line": 171
+        },
+        {
+          "kind": "test",
+          "name": "DELETE edge: null user → 403",
+          "line": 184
+        },
+        {
+          "kind": "test",
+          "name": "DELETE edge: unregistered caller → 403",
+          "line": 195
+        },
+        {
+          "kind": "test",
+          "name": "DELETE edge: malformed X-Username → 400",
+          "line": 206
+        },
+        {
+          "kind": "test",
+          "name": "DELETE edge: post-detach the child is still in /taxa (detach is not delete)",
+          "line": 217
+        }
+      ]
+    },
+    {
+      "path": "test/taxaEdit.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: owner renames → 200 with updated record",
+          "line": 80
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: owner reassigns to another registered user — recipient may then act, original cannot",
+          "line": 95
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: both name AND owner in one call → both applied atomically",
+          "line": 114
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: reassigning owner to self → 200 no-op",
+          "line": 127
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: setting name to the current value → 200 no-op (validates trivially)",
+          "line": 138
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: case-only name change (Fantasy → FANTASY) → 200, casing updates",
+          "line": 149
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: unknown id → 404",
+          "line": 161
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: non-owner caller → 403",
+          "line": 169
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: null user → 403",
+          "line": 180
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: unregistered caller → 403",
+          "line": 189
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: malformed X-Username (NBSP) → 400",
+          "line": 198
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: empty body → 400 (decision #1)",
+          "line": 209
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: body without name/owner (only unknown keys) → 400",
+          "line": 219
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: name not a string → 400",
+          "line": 228
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: malformed name (empty, leading/trailing whitespace) → 400",
+          "line": 239
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: owner not a string / null / empty / malformed → 400",
+          "line": 250
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: owner well-formed but unregistered → 400 (decision #9)",
+          "line": 262
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: unknown keys alongside a valid change are ignored (decision #6)",
+          "line": 272
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: rename to a sibling's name in same tree → 409 conflict (name_clash)",
+          "line": 284
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: rename to case-variant of sibling → 409 (case-insensitive per §3.4)",
+          "line": 300
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: cross-tree rename — valid in 'own' tree, invalid in another containing tree → 409 (the §3.3 / §14 bullet-5 keystone)",
+          "line": 313
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: rename that doesn't clash anywhere → 200, visible in every containing tree",
+          "line": 341
+        },
+        {
+          "kind": "test",
+          "name": "PATCH /taxa/{id}: 409 envelope carries kind + offending root/taxa in details",
+          "line": 364
+        }
+      ]
+    },
+    {
+      "path": "test/taxonName.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "validateTaxonName: accepts a single non-whitespace character",
+          "line": 9
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: accepts a multi-word name with internal whitespace",
+          "line": 15
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: accepts internal tabs and newlines",
+          "line": 20
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: accepts hyphenated names",
+          "line": 25
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: accepts single-character digits and punctuation",
+          "line": 29
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: rejects the empty string",
+          "line": 34
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: rejects whitespace-only strings",
+          "line": 40
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: rejects leading whitespace",
+          "line": 47
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: rejects trailing whitespace",
+          "line": 53
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: rejects leading/trailing tab and newline",
+          "line": 59
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: rejects both-side whitespace",
+          "line": 65
+        },
+        {
+          "kind": "test",
+          "name": "validateTaxonName: rejects non-string inputs",
+          "line": 69
+        },
+        {
+          "kind": "test",
+          "name": "taxonNamesEqual: case-insensitive equality (§3.4)",
+          "line": 76
+        },
+        {
+          "kind": "test",
+          "name": "taxonNamesEqual: distinct strings unequal",
+          "line": 81
+        },
+        {
+          "kind": "test",
+          "name": "taxonNamesEqual: whitespace is significant for equality",
+          "line": 85
+        }
+      ]
+    },
+    {
+      "path": "test/username.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "parseUsername: undefined → null user",
+          "line": 6
+        },
+        {
+          "kind": "test",
+          "name": "parseUsername: null → null user",
+          "line": 10
+        },
+        {
+          "kind": "test",
+          "name": "parseUsername: empty string → null user (not malformed)",
+          "line": 14
+        },
+        {
+          "kind": "test",
+          "name": "parseUsername: well-formed name → valid",
+          "line": 18
+        },
+        {
+          "kind": "test",
+          "name": "parseUsername: internal whitespace is allowed",
+          "line": 24
+        },
+        {
+          "kind": "test",
+          "name": "parseUsername: leading space → malformed (not null)",
+          "line": 29
+        },
+        {
+          "kind": "test",
+          "name": "parseUsername: trailing space → malformed",
+          "line": 35
+        },
+        {
+          "kind": "test",
+          "name": "parseUsername: both-side whitespace → malformed",
+          "line": 41
+        },
+        {
+          "kind": "test",
+          "name": "parseUsername: whitespace-only is malformed (not null)",
+          "line": 45
+        },
+        {
+          "kind": "test",
+          "name": "parseUsername: leading/trailing tab and newline → malformed",
+          "line": 53
+        },
+        {
+          "kind": "test",
+          "name": "usernamesEqual: case-insensitive equality (§4)",
+          "line": 59
+        },
+        {
+          "kind": "test",
+          "name": "usernamesEqual: distinct strings unequal",
+          "line": 64
+        }
+      ]
+    },
+    {
+      "path": "test/usersIntegration.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "integration: register Alice and Bob, list, then 403/400 paths through createApp",
+          "line": 31
+        },
+        {
+          "kind": "test",
+          "name": "integration: POST /reset clears registry; previously-valid X-Username now 403s",
+          "line": 61
+        },
+        {
+          "kind": "test",
+          "name": "integration: POST /users error envelope codes round-trip through §15.6 helpers",
+          "line": 82
+        },
+        {
+          "kind": "test",
+          "name": "integration: /reset remains §4-exempt for malformed AND unregistered callers",
+          "line": 112
+        }
+      ]
+    },
+    {
+      "path": "test/writeLock.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "withWriteLock: two writes started in the same tick run sequentially",
+          "line": 11
+        },
+        {
+          "kind": "test",
+          "name": "withWriteLock: a write that throws does NOT stall subsequent writes",
+          "line": 26
+        },
+        {
+          "kind": "test",
+          "name": "withWriteLock: an async write holds the lock until it resolves",
+          "line": 37
+        },
+        {
+          "kind": "test",
+          "name": "withWriteLock: many writes complete in submission order",
+          "line": 62
+        },
+        {
+          "kind": "test",
+          "name": "withWriteLock: rejection is surfaced to the caller, not swallowed",
+          "line": 78
+        }
+      ]
+    },
+    {
+      "path": "test/writeSerialization.test.ts",
+      "tests": [
+        {
+          "kind": "test",
+          "name": "write serialization: two POST /taxa fired in the same tick produce distinct ids in submission order",
+          "line": 42
+        },
+        {
+          "kind": "test",
+          "name": "write serialization: a PATCH issued same-tick after a POST sees the POSTed taxon",
+          "line": 62
+        },
+        {
+          "kind": "test",
+          "name": "write serialization: POST /reset runs under the lock (§15) — writes before observe pre-reset, after observe empty state",
+          "line": 84
+        },
+        {
+          "kind": "test",
+          "name": "write serialization: two POST /proposals fired in the same tick produce ordered proposal+change ids",
+          "line": 111
+        },
+        {
+          "kind": "test",
+          "name": "write serialization: two POST /changes/.../accept fired in the same tick are serialized, both reflected in live state",
+          "line": 159
+        },
+        {
+          "kind": "test",
+          "name": "write serialization: two POST /changes/.../accept-cascade fired in the same tick serialize cleanly",
+          "line": 221
+        },
+        {
+          "kind": "test",
+          "name": "write serialization: a parent-add and a follow-up read see the consistent post-write state",
+          "line": 290
+        }
+      ]
+    }
+  ]
+}

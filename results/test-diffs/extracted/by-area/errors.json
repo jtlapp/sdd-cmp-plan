@@ -1,0 +1,123 @@
+{
+  "area": "errors",
+  "scope": "Error envelope shape and shared error response structure.",
+  "ccOnly": {
+    "project": "sdd-cmp-cc-only",
+    "root": "/Users/joe/repos/sdd-cmp-cc-only",
+    "files": [
+      {
+        "path": "test/errors.test.ts",
+        "tests": [
+          {
+            "kind": "test",
+            "name": "STATUS_BY_CODE: §15.6 mapping is exact",
+            "line": 13
+          },
+          {
+            "kind": "test",
+            "name": "errorBody: envelope shape without details",
+            "line": 20
+          },
+          {
+            "kind": "test",
+            "name": "errorBody: envelope shape with details",
+            "line": 25
+          },
+          {
+            "kind": "test",
+            "name": "errorBody: omits details when undefined (not present as null)",
+            "line": 32
+          },
+          {
+            "kind": "test",
+            "name": "httpError: each code returns its mapped status with the envelope",
+            "line": 37
+          },
+          {
+            "kind": "test",
+            "name": "httpError: passes through details",
+            "line": 56
+          },
+          {
+            "kind": "test",
+            "name": "ApiError: carries code, message, and details",
+            "line": 67
+          }
+        ]
+      }
+    ],
+    "testCount": 7
+  },
+  "ccOpenspec": {
+    "project": "sdd-cmp-cc-openspec",
+    "root": "/Users/joe/repos/sdd-cmp-cc-openspec",
+    "files": [
+      {
+        "path": "test/errors/envelope.test.ts",
+        "tests": [
+          {
+            "kind": "describe",
+            "name": "error envelope: ApiError → mapped status",
+            "line": 35
+          },
+          {
+            "kind": "it",
+            "name": "${code} maps to ${status}",
+            "line": 45
+          },
+          {
+            "kind": "describe",
+            "name": "error envelope: details handling",
+            "line": 58
+          },
+          {
+            "kind": "it",
+            "name": "includes details verbatim when supplied",
+            "line": 59
+          },
+          {
+            "kind": "it",
+            "name": "omits details key entirely when not supplied",
+            "line": 72
+          },
+          {
+            "kind": "describe",
+            "name": "error envelope: unexpected throws",
+            "line": 83
+          },
+          {
+            "kind": "it",
+            "name": "plain Error → internal_error / 500",
+            "line": 84
+          },
+          {
+            "kind": "it",
+            "name": "non-Error throw (string) → internal_error / 500",
+            "line": 95
+          },
+          {
+            "kind": "it",
+            "name": "original throw is logged server-side",
+            "line": 105
+          },
+          {
+            "kind": "describe",
+            "name": "error envelope: Content-Type",
+            "line": 119
+          },
+          {
+            "kind": "it",
+            "name": "is application/json for ApiError responses",
+            "line": 120
+          },
+          {
+            "kind": "it",
+            "name": "is application/json for unexpected-throw responses",
+            "line": 128
+          }
+        ]
+      }
+    ],
+    "testCount": 12
+  }
+}

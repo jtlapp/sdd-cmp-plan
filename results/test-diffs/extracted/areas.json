@@ -1,0 +1,278 @@
+{
+  "_doc": "Maps functional areas to the test files in each project that cover them. Patterns match the path relative to project root (e.g. 'test/proposals/foo.test.ts'). Glob syntax: '*' matches non-slash chars, '**' matches anything. The same area may be split across multiple files in each project; the comparison agent receives the union.",
+  "areas": [
+    {
+      "name": "app-smoke",
+      "scope": "Basic app/health smoke tests, top-level wiring.",
+      "ccOnly": ["test/app.test.ts"],
+      "ccOpenspec": ["test/app.test.ts", "test/health.test.ts"]
+    },
+    {
+      "name": "auth",
+      "scope": "Registered-user gate, X-Username envelope, reviewer authorization.",
+      "ccOnly": [
+        "test/requireWriter.test.ts",
+        "test/reviewAuth.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/auth/envelope.test.ts",
+        "test/auth/require-registered.test.ts",
+        "test/changes/reviewer-auth.test.ts",
+        "test/proposals/post-proposals-auth.test.ts",
+        "test/proposals/get-queue-auth.test.ts"
+      ]
+    },
+    {
+      "name": "format",
+      "scope": "Taxon-name and username format/normalization rules, comparison helpers.",
+      "ccOnly": [
+        "test/taxonName.test.ts",
+        "test/username.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/format/compare.test.ts",
+        "test/format/taxon-name.test.ts",
+        "test/format/username.test.ts"
+      ]
+    },
+    {
+      "name": "identity",
+      "scope": "Identity middleware, divergence detection, identity exposure on responses.",
+      "ccOnly": ["test/identityMiddleware.test.ts"],
+      "ccOpenspec": [
+        "test/identity/divergence.test.ts",
+        "test/identity/exposure.test.ts",
+        "test/identity/middleware-unit.test.ts",
+        "test/identity/middleware.test.ts"
+      ]
+    },
+    {
+      "name": "users",
+      "scope": "POST /users (registration), GET /users (listing).",
+      "ccOnly": [
+        "test/registry.test.ts",
+        "test/usersIntegration.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/users/http.test.ts",
+        "test/users/store.test.ts"
+      ]
+    },
+    {
+      "name": "taxa",
+      "scope": "POST/PATCH/DELETE /taxa, edge endpoints, GET /taxa, GET /trees, taxon store mechanics.",
+      "ccOnly": [
+        "test/taxa.test.ts",
+        "test/taxaCreate.test.ts",
+        "test/taxaDelete.test.ts",
+        "test/taxaEdgeAdd.test.ts",
+        "test/taxaEdgeRemove.test.ts",
+        "test/taxaEdit.test.ts",
+        "test/reads.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/taxa/delete-edge.test.ts",
+        "test/taxa/delete-taxon.test.ts",
+        "test/taxa/http.test.ts",
+        "test/taxa/patch-taxon.test.ts",
+        "test/taxa/post-taxa.test.ts",
+        "test/taxa/put-edge-subtree.test.ts",
+        "test/taxa/put-edge.test.ts",
+        "test/taxa/serialize.test.ts",
+        "test/taxa/store-writes.test.ts",
+        "test/taxa/store.test.ts"
+      ]
+    },
+    {
+      "name": "domain",
+      "scope": "Pure domain invariants: reachability, owner-scoped regions, check-add-create, wrappers, multi-tree consistency.",
+      "ccOnly": [
+        "test/invariants.test.ts",
+        "test/reachability.test.ts",
+        "test/domainIntegration.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/domain/check-add-create.test.ts",
+        "test/domain/invariants.test.ts",
+        "test/domain/owner-scoped-region.test.ts",
+        "test/domain/reachability.test.ts",
+        "test/domain/wrappers.test.ts"
+      ]
+    },
+    {
+      "name": "concurrency",
+      "scope": "Write lock, serialization of concurrent mutations.",
+      "ccOnly": [
+        "test/writeLock.test.ts",
+        "test/writeSerialization.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/concurrency/write-lock.test.ts"
+      ]
+    },
+    {
+      "name": "reset",
+      "scope": "POST /reset restoring fresh-boot state across all domains.",
+      "ccOnly": [
+        "test/proposalsReset.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/reset/reset.test.ts",
+        "test/reset/taxa-reset.test.ts",
+        "test/reset/users-reset.test.ts",
+        "test/proposals/reset-integration.test.ts",
+        "test/proposals/store-reset.test.ts"
+      ]
+    },
+    {
+      "name": "errors",
+      "scope": "Error envelope shape and shared error response structure.",
+      "ccOnly": ["test/errors.test.ts"],
+      "ccOpenspec": ["test/errors/envelope.test.ts"]
+    },
+    {
+      "name": "proposals-payload",
+      "scope": "Payload-level validation of POST /proposals body: shape, op recognition, top-taxon constraints, first-failure semantics.",
+      "ccOnly": [
+        "test/proposalsParse.test.ts",
+        "test/proposalsPartialPayload.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/proposals/payload-existence.test.ts",
+        "test/proposals/payload-first-failure.test.ts",
+        "test/proposals/payload-name-format.test.ts",
+        "test/proposals/payload-shape.test.ts",
+        "test/proposals/payload-top-taxon.test.ts",
+        "test/proposals/payload-under-create.test.ts",
+        "test/proposals/post-proposals-body.test.ts",
+        "test/proposals/post-proposals-payload-errors.test.ts"
+      ]
+    },
+    {
+      "name": "proposals-routing",
+      "scope": "POST /proposals success path, target tree resolution, no-mutation guarantees on rejection.",
+      "ccOnly": [],
+      "ccOpenspec": [
+        "test/proposals/post-proposals-no-mutation.test.ts",
+        "test/proposals/post-proposals-success.test.ts",
+        "test/proposals/post-proposals-target-tree.test.ts"
+      ]
+    },
+    {
+      "name": "proposals-derive",
+      "scope": "Deriving per-change disposition, dependencies, reviewer routing, and status tree from the submitted payload (pure logic).",
+      "ccOnly": [
+        "test/proposalsDependencies.test.ts",
+        "test/proposalsDisposition.test.ts",
+        "test/proposalsRouting.test.ts",
+        "test/proposalsStatusView.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/proposals/derive-appendix-a.test.ts",
+        "test/proposals/derive-deps.test.ts",
+        "test/proposals/derive-disposition.test.ts",
+        "test/proposals/derive-routing.test.ts",
+        "test/proposals/derive-sequencer.test.ts",
+        "test/proposals/derive-single-change.test.ts",
+        "test/proposals/derive-status-tree.test.ts"
+      ]
+    },
+    {
+      "name": "proposals-queue",
+      "scope": "GET /proposals (list with proposer filter), GET /queue (reviewer's queue), GET /proposals/{id}, serialization of queue/status views.",
+      "ccOnly": [
+        "test/proposalsList.test.ts",
+        "test/queueRead.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/proposals/get-proposal-by-id.test.ts",
+        "test/proposals/get-proposals-list.test.ts",
+        "test/proposals/get-queue-listing.test.ts",
+        "test/proposals/serialize-queue-entry.test.ts",
+        "test/proposals/serialize-status-tree.test.ts"
+      ]
+    },
+    {
+      "name": "proposals-store",
+      "scope": "Proposal store internals: id allocation, install, state transitions, queue determinism, resolve-parent. Mostly cc-openspec; cc-only does not have a dedicated store test layer.",
+      "ccOnly": [],
+      "ccOpenspec": [
+        "test/proposals/store-ids.test.ts",
+        "test/proposals/store-install.test.ts",
+        "test/proposals/store-phase7.test.ts",
+        "test/proposals/store-queue-determinism.test.ts",
+        "test/proposals/store-resolve-parent.test.ts",
+        "test/proposals/store-transitions.test.ts"
+      ]
+    },
+    {
+      "name": "changes-lifecycle",
+      "scope": "Single-review actions (accept/reject/dismiss), promotion, cascade application & journaling, invalidation (eager + lazy), deletion planning. The PRD §11.4 three-mode invalidation and §6.3 deletion logic live here.",
+      "ccOnly": [
+        "test/acceptAddValidation.test.ts",
+        "test/acceptHappy.test.ts",
+        "test/acceptRenameValidation.test.ts",
+        "test/cascadeHappy.test.ts",
+        "test/cascadeRollback.test.ts",
+        "test/deletion.test.ts",
+        "test/dismiss.test.ts",
+        "test/invalidation.test.ts",
+        "test/invalidationLazy.test.ts",
+        "test/promotion.test.ts",
+        "test/reject.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/changes/accept-handler.test.ts",
+        "test/changes/apply.test.ts",
+        "test/changes/cascade-handler.test.ts",
+        "test/changes/cascade-journal.test.ts",
+        "test/changes/case1-cascade.test.ts",
+        "test/changes/dismiss-handler.test.ts",
+        "test/changes/invalidation-walk.test.ts",
+        "test/changes/preconditions.test.ts",
+        "test/changes/promotion.test.ts",
+        "test/changes/reject-handler.test.ts",
+        "test/changes/route-mount.test.ts"
+      ]
+    },
+    {
+      "name": "proposals-end-to-end",
+      "scope": "Full propose→review→accept/reject flows across the wire, multi-tree, appendix A scenarios, no-side-effects on failure.",
+      "ccOnly": [
+        "test/proposalsIntegration.test.ts",
+        "test/reviewIntegration.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/proposals/end-to-end-appendix-a1.test.ts",
+        "test/proposals/end-to-end-appendix-a2.test.ts",
+        "test/proposals/end-to-end-multiple-trees.test.ts",
+        "test/proposals/end-to-end-no-side-effects.test.ts"
+      ]
+    },
+    {
+      "name": "integration",
+      "scope": "Phase-specific cross-cutting integration scenarios: multi-owner trees, failed accepts, reset behavior, status views, lazy evaluation properties.",
+      "ccOnly": [
+        "test/phase4Integration.test.ts",
+        "test/phase7Integration.test.ts",
+        "test/phase7StatusView.test.ts"
+      ],
+      "ccOpenspec": [
+        "test/app.integration.test.ts",
+        "test/app.phase3.integration.test.ts",
+        "test/app.phase4.integration.test.ts",
+        "test/integration/phase-6-cross-tree.test.ts",
+        "test/integration/phase-6-failed-accept.test.ts",
+        "test/integration/phase-6-multi-owner.test.ts",
+        "test/integration/phase-6-reject-cascade.test.ts",
+        "test/integration/phase-6-reset.test.ts",
+        "test/integration/phase-6-review-loop.test.ts",
+        "test/integration/phase-7-case-classification.test.ts",
+        "test/integration/phase-7-case1-extended.test.ts",
+        "test/integration/phase-7-lazy-evaluation.test.ts",
+        "test/integration/phase-7-properties.test.ts",
+        "test/integration/phase-7-reset.test.ts"
+      ]
+    }
+  ]
+}
