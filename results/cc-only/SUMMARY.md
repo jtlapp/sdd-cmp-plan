@@ -91,5 +91,5 @@ Quantitative engagement and spec-issue summary across the seven phase transcript
 - **(c) Topics user provided input on** — subset of (b) the user's reply explicitly addressed.
 - **(d) Problems raised** — spec issues only: gaps, ambiguities, inconsistencies, or contradictions in the PRD or phase brief. Implementation issues and pure design-preference questions are not counted.
 - **(e) Problems user answered** — subset of (d) where the user's reply gave a resolution or direction.
-- **(f) Critical problems raised** — subset of (e) where the problem's resolution has a material impact on functionality.
+- **(f) Critical problems raised** — user-selected subset of (e) where the problem's resolution has a material impact on functionality.
 - **(g) Critical problems user answered** — subset of (f) where the user's reply gave a resolution or direction.
