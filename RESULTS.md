@@ -110,28 +110,27 @@ For every phase, each project froze a `phase-N-initial.md` test plan before writ
 | Total deltas across 7 phases | 54 | 53 |
 | Added | 31 | 24 |
 | Revised | 16 | 11 |
-| Renamed | 1 | 0 |
 | Removed | 5 | 17 |
-| Confirmed-no-test | 1 | 1 |
+| Cosmetic | 2 | 1 |
 | % substantive (Added + Revised + Removed) | 96.3% | 98.1% |
-| % cosmetic (Renamed + Confirmed-no-test) | 3.7% | 1.9% |
+| % cosmetic | 3.7% | 1.9% |
 | Phases where this project's initial plan predicted more accurately | 2 | 4 |
 | Phases tied | 1 | 1 |
 
 ### Per-phase deltas
 
-`A / R / Re / X / C` = Added / Revised / Renamed / Removed / Confirmed-no-test.
+`A / R / X / Cos` = Added / Revised / Removed / Cosmetic.
 
-| Phase | Vanilla CC A/R/Re/X/C | Vanilla CC total | OpenSpec A/R/Re/X/C | OpenSpec total | More accurate |
+| Phase | Vanilla CC A/R/X/Cos | Vanilla CC total | OpenSpec A/R/X/Cos | OpenSpec total | More accurate |
 | ---: | --- | ---: | --- | ---: | --- |
-| 1 | 2 / 1 / 1 / 0 / 1 | 5 | 2 / 1 / 0 / 0 / 1 | 4 | OpenSpec |
-| 2 | 6 / 1 / 0 / 0 / 0 | 7 | 3 / 2 / 0 / 2 / 0 | 7 | tie |
-| 3 | 7 / 1 / 0 / 0 / 0 | 8 | 5 / 1 / 0 / 1 / 0 | 7 | OpenSpec |
-| 4 | 7 / 1 / 0 / 0 / 0 | 8 | 5 / 0 / 0 / 5 / 0 | 10 | Vanilla CC |
-| 5 | 5 / 3 / 0 / 0 / 0 | 8 | 3 / 1 / 0 / 3 / 0 | 7 | OpenSpec |
-| 6 | 2 / 4 / 0 / 3 / 0 | 9 | 6 / 4 / 0 / 1 / 0 | 11 | Vanilla CC |
-| 7 | 2 / 5 / 0 / 2 / 0 | 9 | 0 / 2 / 0 / 5 / 0 | 7 | OpenSpec |
-| **Total** | **31 / 16 / 1 / 5 / 1** | **54** | **24 / 11 / 0 / 17 / 1** | **53** | OpenSpec 4, Vanilla CC 2, tie 1 |
+| 1 | 2 / 1 / 0 / 2 | 5 | 2 / 1 / 0 / 1 | 4 | OpenSpec |
+| 2 | 6 / 1 / 0 / 0 | 7 | 3 / 2 / 2 / 0 | 7 | tie |
+| 3 | 7 / 1 / 0 / 0 | 8 | 5 / 1 / 1 / 0 | 7 | OpenSpec |
+| 4 | 7 / 1 / 0 / 0 | 8 | 5 / 0 / 5 / 0 | 10 | Vanilla CC |
+| 5 | 5 / 3 / 0 / 0 | 8 | 3 / 1 / 3 / 0 | 7 | OpenSpec |
+| 6 | 2 / 4 / 3 / 0 | 9 | 6 / 4 / 1 / 0 | 11 | Vanilla CC |
+| 7 | 2 / 5 / 2 / 0 | 9 | 0 / 2 / 5 / 0 | 7 | OpenSpec |
+| **Total** | **31 / 16 / 5 / 2** | **54** | **24 / 11 / 17 / 1** | **53** | OpenSpec 4, Vanilla CC 2, tie 1 |
 
 Totals are nearly identical (54 vs 53), but the **shape** of the churn differs sharply: Vanilla CC's plans tend to **under-predict** scope (lots of additions during implementation, only 5 removals over seven phases), while OpenSpec's plans tend to **over-predict** scope (fewer additions, 17 removals as initial-plan rows are reclassified as redundant, unreachable, or already covered by sibling phases). Both projects produce similar overall plan churn — they just err in opposite directions, and OpenSpec wins the per-phase head-to-head in 4 of 7 phases.
 
