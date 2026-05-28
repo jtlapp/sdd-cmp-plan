@@ -292,3 +292,22 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
 
 - Native CC defaulted to **HTTP-boundary integration**; OpenSpec defaulted to **layered unit-then-integration** tests, producing roughly 2× the file count and ~1.9× the case count.
 - The two strategies left **mirror-image coverage gaps**: Native CC under-tested pure-domain algorithms (deletion region, lazy-eval read purity); OpenSpec under-tests HTTP-wired concurrency and full end-to-end lifecycle walks.
+
+## Recommendations
+
+Use OpenSpec when:
+
+- Developer experience takes priority
+- The design is not well understood and requires hashing out (OpenSpec pre-implementation test plans were 8% more accurate than Native CC)
+- Understanding the solution takes priority over time and cost
+- Learning from AI takes priority over time and cost
+- It's important to have fine control over the implementation
+
+Use native CC when:
+
+- Completing with minimal time and cost takes priority
+- The design is well understood with few unresolved issues
+- Choice of implementation is unimportant
+- Understanding the implementation is unimportant
+
+OpenSpec's success suggests exploring other spec-driven development solutions too, such as [Spec-Kit](https://github.github.com/spec-kit/), [Allium](https://github.com/juxt/allium), [Kiro](https://kiro.dev), [GSD](https://github.com/open-gsd/get-shit-done-redux), and [BMAD](https://github.com/bmad-code-org/bmad-method).

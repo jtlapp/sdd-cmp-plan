@@ -45,9 +45,10 @@ configuration that occupy Claude Code's extension points. The relevant ones are:
 With that mental model, each workflow below is really a particular choice of which of
 these surfaces to use and what to put in them.
 
-### OpenSpec
+### OpenSpec (51k stars on Github)
 
-OpenSpec is a spec-driven development framework that adds a lightweight specification
+[OpenSpec](https://github.com/Fission-AI/OpenSpec) is a spec-driven development framework
+that adds a lightweight specification
 layer on top of an AI coding assistant. Its premise is that AI assistants are
 unpredictable when the requirements live only in chat history, so OpenSpec has you and
 the assistant agree on what to build, in writing, before any code is written. It is a
