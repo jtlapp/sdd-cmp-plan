@@ -62,6 +62,38 @@ Both tools correctly implemented the same 3 of the 4 defects. The missing defect
 | Proposer withdrawal | gap / obvious | Not surfaced; **no endpoint**; not tested | Not surfaced; **no endpoint**; not tested |
 | Self-routed change | gap / subtle | Listed as a settled decision in Phase 5; correct impl; tested (happy path) | Not surfaced; correct impl; tested only implicitly |
 
+## Test Suite Comparison
+
+Beyond differing on a handful of specific behaviors (covered in the next section), the two implementations produced test suites that differ substantially in *shape* — in scale, organizational style, and the layer at which they exercise the code. Full per-area detail lives in [`results/test-diffs/`](results/test-diffs/), with [`SUMMARY.md`](results/test-diffs/SUMMARY.md) as the entry point and 18 per-area reports under [`by-area/`](results/test-diffs/by-area/).
+
+### Scale and structure
+
+|  | Vanilla Claude Code | OpenSpec |
+| --- | --- | --- |
+| Test files | 46 | 96 |
+| Total test cases (approx.) | 484 | ~900 |
+| Layout | flat `test/*.test.ts` | `test/<feature>/*.test.ts` mirroring `src/` |
+| Test API | `node:test` `test()` blocks | `describe` / `it` / `beforeEach` blocks |
+| Layering | mostly HTTP-boundary integration | mixed: pure-domain unit + HTTP integration |
+
+OpenSpec produced roughly twice the files and twice the cases. The increase is driven almost entirely by a unit-test layer — covering the proposal store, the change-derivation pipeline, the identity middleware, and the format validators — that vanilla Claude Code does not have at all.
+
+### Testing philosophy
+
+**Vanilla Claude Code** favored HTTP-boundary integration as its dominant style. State transitions, invariant checks, store mechanics, and middleware are all exercised through real route calls; test files are flat under `test/` and named after the endpoint or feature they cover (e.g. `taxaCreate`, `proposalsParse`, `cascadeRollback`). The result is a suite that proves the wire contract end-to-end, but pays for it with weaker failure localization — when something breaks, the failure points back to a route rather than the offending function.
+
+**OpenSpec** built a unit-test layer underneath an integration layer. Pure-domain functions, store internals, the change-derivation pipeline, and middleware each have dedicated unit-test files; HTTP integration files focus on wiring and on cross-cutting scenarios. Tests sit under `test/<feature>/` directories that mirror the source layout. The result is finer error localization and explicit purity/import-discipline assertions, at the cost of weaker wire-integration coverage in places — for example, the write-serialization lock is verified as a primitive in isolation but not proven wired to every mutating route.
+
+### What each suite is positioned to catch
+
+The two strategies are good at catching different classes of regression:
+
+- **Vanilla CC's HTTP-first approach is positioned to catch:** end-to-end lifecycle and state-machine bugs that only surface across many steps (full proposal accept → reject → dismiss → reset walks); integration-wiring bugs where a route forgets to apply concurrency control or auth gating; observable response-shape regressions on real requests.
+- **OpenSpec's unit-layered approach is positioned to catch:** subtle bugs in pure-domain algorithms — for instance, deletion-region semantics around halt frontiers — before they get masked by the integration paths that exercise them; read-side purity regressions (assertions that repeated reads do not mutate state); isolation-layer purity violations such as a domain module reaching into the HTTP layer.
+- **Symmetric blind spots:** each side has a small number of PRD-mandated behaviors that only the other side verifies. These are quantified in the [Testing Divergence](#testing-divergence) subsection below.
+
+Combined, the two suites would be stronger than either alone: they are positioned to catch *different* classes of regression, and the gaps in each are largely covered by the strengths of the other.
+
 ## PRD Gap Implementation and Testing
 
 This section summarizes how each tool resolved the PRD ambiguities that surfaced during implementation and which PRD-mandated behaviors each tool verified via test. Full reasoning lives in [`results/test-diffs/CRITICAL-DIFFS.md`](results/test-diffs/CRITICAL-DIFFS.md); the tables below are a scoreboard distillation focused on critical and partially-critical gaps. A gap is **critical** when its resolution changes a domain action's outcome or stored state; **partial** means only part of the divergence (e.g. the underlying rule, not its status-code dressing) is critical.

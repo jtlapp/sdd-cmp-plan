@@ -2,6 +2,8 @@
 
 This document describes a plan for comparing spec-driven development workflows with each other and with vibe coding not using specs. I wrote a complex [Produce Requirements Document](prd/prd.md) (PRD), divided it into phases, and implement the phases separately for each workflow, producing artifacts I could use to compare how well the different workflows did. I responded to any issues and questions the LLM raised that it didn't seem to have a solution for, allowing the LLM to benefit from its due diligence. I posted a separate document explaining the results.
 
+TBD: Choose between "vanilla CC" and "CC-only", also "CC/Openspec" or similar
+
 ## Objective
 
 The objective of this experiment is to evaluate how well spec-driven development workflows perform compared to each other and to development without using tool-managed specifications. I specifically wanted to see whether spec-driven development helps uncover more gaps and inconsistencies, so I chose to implement a complex project having a few gaps and inconsistencies.
