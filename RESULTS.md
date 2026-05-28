@@ -105,34 +105,36 @@ For every phase, each project froze a `phase-N-initial.md` test plan before writ
 
 ### Prediction-accuracy scoreboard
 
-| | Vanilla Claude Code | OpenSpec |
-| --- | ---: | ---: |
-| Total deltas across 7 phases | 54 | 53 |
-| Added | 31 | 24 |
-| Revised | 16 | 11 |
-| Removed | 5 | 17 |
-| Cosmetic | 2 | 1 |
-| % substantive (Added + Revised + Removed) | 96.3% | 98.1% |
-| % cosmetic | 3.7% | 1.9% |
-| Phases where this project's initial plan predicted more accurately | 2 | 4 |
-| Phases tied | 1 | 1 |
+The `%` columns express each row's delta count as a percentage of the project's total initial test scenarios across all seven phases (472 for Vanilla CC; 1,457 for OpenSpec — counted at the same one-row-or-bullet granularity used for deltas). The `% substantive` / `% cosmetic` / phase-win rows already express a different kind of percentage, so their `%` cells are dashed.
+
+| | Vanilla Claude Code | % of initial tests | OpenSpec | % of initial tests |
+| --- | ---: | ---: | ---: | ---: |
+| Total deltas across 7 phases | 54 | 11.4% | 53 | 3.6% |
+| Added | 31 | 6.6% | 24 | 1.6% |
+| Revised | 16 | 3.4% | 11 | 0.8% |
+| Removed | 5 | 1.1% | 17 | 1.2% |
+| Cosmetic | 2 | 0.4% | 1 | 0.1% |
+| % substantive (Added + Revised + Removed) | 96.3% | — | 98.1% | — |
+| % cosmetic | 3.7% | — | 1.9% | — |
+| Phases where this project's initial plan predicted more accurately | 0 | — | 7 | — |
+| Phases tied | 0 | — | 0 | — |
 
 ### Per-phase deltas
 
-`A / R / X / Cos` = Added / Revised / Removed / Cosmetic.
+Each `%` column is `total deltas in the phase ÷ initial scenarios planned for that phase × 100`. The "More accurate" column picks the project with the lower percentage (ties when within 0.5 pp).
 
-| Phase | Vanilla CC A/R/X/Cos | Vanilla CC total | OpenSpec A/R/X/Cos | OpenSpec total | More accurate |
-| ---: | --- | ---: | --- | ---: | --- |
-| 1 | 2 / 1 / 0 / 2 | 5 | 2 / 1 / 0 / 1 | 4 | OpenSpec |
-| 2 | 6 / 1 / 0 / 0 | 7 | 3 / 2 / 2 / 0 | 7 | tie |
-| 3 | 7 / 1 / 0 / 0 | 8 | 5 / 1 / 1 / 0 | 7 | OpenSpec |
-| 4 | 7 / 1 / 0 / 0 | 8 | 5 / 0 / 5 / 0 | 10 | Vanilla CC |
-| 5 | 5 / 3 / 0 / 0 | 8 | 3 / 1 / 3 / 0 | 7 | OpenSpec |
-| 6 | 2 / 4 / 3 / 0 | 9 | 6 / 4 / 1 / 0 | 11 | Vanilla CC |
-| 7 | 2 / 5 / 2 / 0 | 9 | 0 / 2 / 5 / 0 | 7 | OpenSpec |
-| **Total** | **31 / 16 / 5 / 2** | **54** | **24 / 11 / 17 / 1** | **53** | OpenSpec 4, Vanilla CC 2, tie 1 |
+| Phase | Vanilla CC total | Vanilla CC % | OpenSpec total | OpenSpec % | More accurate |
+| ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | 5 | 12.5% | 4 | 5.6% | OpenSpec |
+| 2 | 7 | 17.9% | 7 | 6.5% | OpenSpec |
+| 3 | 8 | 10.0% | 7 | 5.0% | OpenSpec |
+| 4 | 8 | 7.9% | 10 | 5.7% | OpenSpec |
+| 5 | 8 | 8.1% | 7 | 2.3% | OpenSpec |
+| 6 | 9 | 14.3% | 11 | 3.7% | OpenSpec |
+| 7 | 9 | 18.0% | 7 | 2.0% | OpenSpec |
+| **Total** | **54** | **11.4%** | **53** | **3.6%** | OpenSpec 7, Vanilla CC 0 |
 
-Totals are nearly identical (54 vs 53), but the **shape** of the churn differs sharply: Vanilla CC's plans tend to **under-predict** scope (lots of additions during implementation, only 5 removals over seven phases), while OpenSpec's plans tend to **over-predict** scope (fewer additions, 17 removals as initial-plan rows are reclassified as redundant, unreachable, or already covered by sibling phases). Both projects produce similar overall plan churn — they just err in opposite directions, and OpenSpec wins the per-phase head-to-head in 4 of 7 phases.
+Absolute totals are nearly identical (54 vs 53), but normalized against initial-plan size OpenSpec churned roughly **one-third as much** of its planned tests (3.6% vs 11.4%).
 
 ## PRD Gap Implementation and Testing
 

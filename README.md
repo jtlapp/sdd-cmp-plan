@@ -315,6 +315,7 @@ I attempted to implement the PRD in both workflows as analogously as possible. T
 
 ### Pure-CC Workflow Process
 
+- *(add next phase brief)* I added the brief for the next phase to the repo.
 - **Plan.** I prompted to enter planning mode to plan the next phase.
 - *(interaction)* Claude Code asked me questions, almost exclusively via multiple choice.
 - *(generate plan)* Once Claude Code felt it had enough information, it automatically generated an implementaiton plan.
@@ -324,14 +325,15 @@ I attempted to implement the PRD in both workflows as analogously as possible. T
 
 ### CC/OpenSpec Workflow Process
 
-- Explore
-- (Interaction)
-- Propose
-- (Interaction ?)
-- (Write initial test plan)
-- Apply
-- (Write final test plan)
-- Archive
+- *(add next phase brief)* I added the brief for the next phase to the repo.
+- **Explore.** I entered `/opsx:explore` to enter exploration mode.
+- *(interaction)* OpenSpec immediately picked up on the next phase, began an evaluation, and presented me with questions and "threads" to explore.
+- **Propose.** At a certain point during exploration, OpenSpec would say it's ready to create a proposal. I would say to go ahead.
+- *(generate proposal)* OpenSpec would then generate the artifacts `proposal.md`, `specs/`, `design.md`, and `tasks.md` under `openspec/changes/`.
+- **Write initial test plan.** OpenSpec would then say it's ready to "apply" or "implement." I would first tell it to generate the initial test plan.
+- **Apply.** After it completes the initial test plan, I'd type `/opsx:apply` to implement the proposal.
+- *(auto-write final test plan)* After completing implementation, I believe Claude Code always automatically generated the final test plan.
+- **Archive.** Last, I'd enter `opsx:archive` to incorporate the change artifacts into the living specs under `openspec/specs/` and to archive the change artifacts under `openspec/changes/archive/`.
 
 ## Conclusions
 
