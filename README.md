@@ -8,6 +8,8 @@ The objective of this experiment is to evaluate how well spec-driven development
 
 ## Caveats
 
+TBD: Where does this belong?
+
 - I had the tools create anticipated test cases in advance of implementation, which certainly affected outcomes. The tools also maintained summaries of the final test cases and the diffs from the initial.
 - OpenSpec is not intended for more than 10 tasks at a time, but several phases had more than 10.
 - I started with a specification detailing observable behavior but not implementation. Spec-driven development may be more geared toward working with the LLM to define the initial specification, especially one as technical as I defined.
@@ -18,6 +20,7 @@ The objective of this experiment is to evaluate how well spec-driven development
 I intended to test OpenSpec, Allium, and vanilla Claude Code, but the effort was too time-consuming and I did not get around to testing Allium. I did however design the test of OpenSpec to be comparable to the intended test of Allium.
 
 TBD: describe the tools
+TBD: Rename "tools"?
 
 | Feature | Claude Code<br>w/ Planning | OpenSpec | OpenSpec +<br> OpenLore drift | Allium<br>(untested) |
 | --- | --- | --- | --- | --- |
@@ -26,6 +29,10 @@ TBD: describe the tools
 | Detects spec drift | n/a | no | YES | YES |
 | Specs only describe behavior | n/a | YES | YES | YES |
 | Planning phase | YES | YES | YES | ? |
+
+TBD: Describe OpenSpec
+TBD: Describe how OpenSpec works
+TBD: Describe OpenSpec artifacts
 
 ## The Target Project
 
@@ -181,7 +188,7 @@ After developing the PRD, I asked Claude.ai to break its implementation into pha
 
 7. **Accepting a batch of changes has to succeed or fail as a single unit.** When a reviewer accepts a proposal that pulls along several dependent changes in one cascade, every constituent change has to be applied in order and validated against the state produced by the previous ones — and if any single step fails, the entire cascade has to be undone, including the steps that already succeeded. The validity of any individual change can also flip depending on what got applied before it in the same cascade, so a change that would have been fine in isolation can fail inside the cascade and vice versa. Implementations that apply changes greedily, or that validate against a stale snapshot, will either corrupt the model on failure or reject cascades that should have gone through.
 
-8. **Validity of queued changes is judged only when someone looks.** A change that has been queued up for a reviewer might quietly become invalid because of something an unrelated party did, and the system deliberately does *not* notice this in the moment — it only re-evaluates validity when the reviewer next reads or acts on their queue. There are also several different reasons a change can become invalid, and they aren't treated the same way: some are dropped automatically, others sit in the queue marked invalid until the reviewer explicitly dismisses them. Collapsing those modes together — or eagerly recomputing validity to "be safe" — breaks both performance and the contract the reviewer is operating under.
+8. **Queued changes are lazily validated.** A change that has been queued up for a reviewer might quietly become invalid because of something an unrelated party did, and the system deliberately does *not* notice this in the moment — it only re-evaluates validity when the reviewer next reads or acts on their queue. There are also several different reasons a change can become invalid, and they aren't treated the same way: some are dropped automatically, others sit in the queue marked invalid until the reviewer explicitly dismisses them. Collapsing those modes together — or eagerly recomputing validity to "be safe" — breaks both performance and the contract the reviewer is operating under.
 
 ## Introduced Defects
 
@@ -221,7 +228,7 @@ OpenSpec
 ## Conclusions
 
 - OpenSpec invites more participation in the design and implementation process
-- OpenSpec `explore` is friendlier and more enjoyable than CC's `plan`
+- OpenSpec `explore` is friendlier and more enjoyable than CC's `plan` -- clear delination between conversation and implementation
 - OpenSpec is a great tool for understanding what the AI is doing
 - OpenSpec is a better tool for helping junior devs learn
 - OpenSpec takes a lot more time and is a lot more costly
