@@ -38,4 +38,25 @@ I recorded all conversations between Claude Code and the user and performed an a
 
 ## Handling of Introduced Defects
 
+Here is a summary of how the two tools handled the four intentionally planted defects. Per-implementation details:
+[cc-only](results/defects/cc-only.md), [cc-openspec](results/defects/cc-openspec.md).
 
+### Defect Scoreboard
+
+Both tools correctly implemented the same 3 of the 4 defects. The missing defect was additional functionality allowing a proposer of changes to a tree to withdraw their proposal. In fairness, there should have been no expectation for the LLM to see this as a required feature.
+
+|                                                            | Vanilla Claude Code | OpenSpec |
+| ---                                                        | ---                 | ---      |
+| Defects surfaced in conversation                           | 1 / 4               | 0 / 4    |
+| Defects correctly resolved in the implementation           | 3 / 4               | 3 / 4    |
+| Defects with a dedicated test                              | 3 / 4               | 2 / 4    |
+| Spec-correction artifact produced                          | Yes (`prd-errata.md`) | No     |
+
+### Per-Defect Comparison
+
+| Defect | Kind / difficulty | Vanilla Claude Code | OpenSpec |
+| --- | --- | --- | --- |
+| Cascade atomicity §12.2 vs §15.5 | inconsistency / obvious | **Surfaced**; user resolved (§12.2 wins); atomic impl; tested | Not surfaced; atomic impl (silently chosen in derived spec); tested |
+| Name case-sensitivity §6.4 vs §3.3/§3.4 | inconsistency / subtle | Not surfaced; case-insensitive impl; tested (edge-add implicit) | Not surfaced; case-insensitive impl; tested |
+| Proposer withdrawal | gap / obvious | Not surfaced; **no endpoint**; not tested | Not surfaced; **no endpoint**; not tested |
+| Self-routed change | gap / subtle | Listed as a settled decision in Phase 5; correct impl; tested (happy path) | Not surfaced; correct impl; tested only implicitly |
