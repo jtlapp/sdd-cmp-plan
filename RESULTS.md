@@ -27,15 +27,15 @@
 
 I recorded all conversations between Claude Code and the user and performed an analysis of the conversations. The following table summarizes the analysis. Details can be found at [Native CC conversation analysis](/results/cc-only/SUMMARY.md) and [OpenSpec conversation analysis](/results/cc-openspec/SUMMARY.md).
 
-| Metric | Native CC | OpenSpec |
-| --- | --- | --- |
-| (a) Prompts from Claude Code | 16 | 40 |
-| (b) Topics presented for discussion | 55 | 141 |
-| (c) Topics user provided input on | 25 | 80 |
-| (d) Problems raised | 27 | 32 |
-| (e) Problems user answered | 13 | 28 |
-| (f) Critical problems raised | 7 | 15 |
-| (g) Critical problems user answered | 7 | 15 |
+| Metric | Native CC | OpenSpec | Factor |
+| --- | --- | --- | -- |
+| (a) Prompts from Claude Code | 16 | 40 | 2.5x |
+| (b) Topics presented for discussion | 55 | 141 | 2.6x |
+| (c) Topics user provided input on | 25 | 80 | 3.2x |
+| (d) Problems raised | 27 | 32 | 1.2x |
+| (e) Problems user answered | 13 | 28 | 2.2x |
+| (f) Critical problems raised | 7 | 15 | 2.1x |
+| (g) Critical problems user answered | 7 | 15 | 2.1x |
 
 - **(a) Prompts from Claude Code** — distinct CC turns that asked the user any question or invited input. A single turn with five sub-questions = 1 prompt.
 - **(b) Topics presented for discussion** — every distinct topic AND nested sub-bullet CC raised for the user to weigh in on. A topic with three nested sub-points counts as 4 (1 parent + 3 children).
@@ -76,11 +76,11 @@ Beyond differing on a handful of specific behaviors (covered in the next section
 
 ### Scale and structure
 
-|  | Native CC | OpenSpec |
-| --- | --- | --- |
-| Test files | 46 | 96 |
-| Total test cases (approx.) | 484 | ~900 |
-| Layering | mostly HTTP-boundary integration | mixed: pure-domain unit + HTTP integration |
+|  | Native CC | OpenSpec | Factor |
+| --- | --- | --- | -- |
+| Test files | 46 | 96 | 2.1x |
+| Total test cases (approx.) | 484 | ~900 | 1.9x |
+| Layering | mostly HTTP-boundary integration | mixed: pure-domain unit + HTTP integration | |
 
 ### Testing approach
 
