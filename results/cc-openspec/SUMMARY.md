@@ -10,7 +10,9 @@ Quantitative engagement and spec-issue summary across the seven phase transcript
 | (b) Topics presented for discussion | 20 | 18 | 8 | 9 | 31 | 33 | 22 | 141 |
 | (c) Topics user provided input on | 16 | 11 | 5 | 6 | 19 | 14 | 9 | 80 |
 | (d) Problems raised | 3 | 2 | 3 | 3 | 12 | 4 | 5 | 32 |
-| (e) Problems user provided feedback on | 3 | 2 | 0 | 2 | 12 | 4 | 5 | 28 |
+| (e) Problems user answered | 3 | 2 | 0 | 2 | 12 | 4 | 5 | 28 |
+| (f) Critical problems raised | 0 | 0 | 1 | 2 | 7 | 3 | 2 | 15 |
+| (g) Critical problems user answered | 0 | 0 | 1 | 2 | 7 | 3 | 2 | 15 |
 
 ## Problems raised, by phase
 
@@ -29,7 +31,7 @@ Quantitative engagement and spec-issue summary across the seven phase transcript
   *Resolution:* Header format check is global; POST /users and GET /users still 400 on malformed X-Username; only POST /reset is fully exempt. (user-provided — "lock it in")
 
 ### Phase 3 — Domain model and invariant engine
-- **Snapshot vs. delta invariant API ambiguous** — brief says "given a candidate state or a proposed change," which are quite different API shapes; spec doesn't pin which.
+- **Snapshot vs. delta invariant API ambiguous** — (CRITICAL) brief says "given a candidate state or a proposed change," which are quite different API shapes; spec doesn't pin which.
   *Resolution:* CC chose snapshot-first with thin delta wrappers. (CC-proposed, user accepted)
 - **`shared` not surfaced by §15.2 despite being a §3.3 predicate** — `shared` is a defined domain predicate in §3.3 but §15.2's read fields don't include it; spec gap on whether read responses should expose it.
   *Resolution:* CC added `shared` to per-taxon response shape. (CC-proposed, user accepted)
@@ -37,17 +39,17 @@ Quantitative engagement and spec-issue summary across the seven phase transcript
   *Resolution:* CC pinned it in the new `taxon-domain` spec (monotonic `t${n}`, reset to 1). (CC-proposed, user accepted)
 
 ### Phase 4 — Direct owner actions
-- **"Shared" precondition definition (§6.3 precondition 1)** — operational meaning of "no taxon in the deletion region is reachable from more than one root" is ambiguous; a tempting parent-count > 1 shortcut quietly differs from the PRD's stated property when fan-out occurs above N.
+- **"Shared" precondition definition (§6.3 precondition 1)** — (CRITICAL) operational meaning of "no taxon in the deletion region is reachable from more than one root" is ambiguous; a tempting parent-count > 1 shortcut quietly differs from the PRD's stated property when fan-out occurs above N.
   *Resolution:* User confirmed intent ("avoid cascade-deleting an item reachable from more than one root"); CC ruled out the shortcut and committed to using `isShared` to match PRD wording. (user-provided)
-- **Edge-add subtree validation gap (§6.4)** — whether the Phase 3 invariant engine's `checkAddEdge` actually validates across the child's whole live subtree when the edge is added, or only treats the child as a leaf.
+- **Edge-add subtree validation gap (§6.4)** — (CRITICAL) whether the Phase 3 invariant engine's `checkAddEdge` actually validates across the child's whole live subtree when the edge is added, or only treats the child as a leaf.
   *Resolution:* CC verified the engine builds a candidate Graph that includes c's existing subtree and walks from every root — no gap exists; Phase 4 tests should still explicitly exercise subtree cases. (CC-proposed, user accepted by moving on)
 - **Unregistered-owner status-code gap (§15.6)** — §15.6's status-code mapping has no clean home for "PATCH-supplied new owner is well-formed but not registered" — not 400 (not malformed), not 403 (caller is fine), not 404 (users not listed), not 409 (not a conflict).
   *Resolution:* 400 validation_error with tag `unregistered-owner`. (user-provided)
 
 ### Phase 5 — Proposal submission
-- **Existence checks at submission vs deferred** — §9.2, §10.2, §11.3, and §11.4 give conflicting signals about whether non-top existence is validated at submission or recorded as a dependency for later.
+- **Existence checks at submission vs deferred** — (CRITICAL) §9.2, §10.2, §11.3, and §11.4 give conflicting signals about whether non-top existence is validated at submission or recorded as a dependency for later.
   *Resolution:* User picked routing snapshot at submission; missing target → 400. (user-provided)
-- **Shape-error vs existence-dependency boundary** — PRD does not draw an explicit line between "malformed payload → 400" and "well-formed but its existence dependency may never resolve."
+- **Shape-error vs existence-dependency boundary** — (CRITICAL) PRD does not draw an explicit line between "malformed payload → 400" and "well-formed but its existence dependency may never resolve."
   *Resolution:* User directed that the entire dependency tree must be valid at submission, returning 400 otherwise. (user-provided)
 - **Status view no-op disposition value** — §11.5 says no-ops carry "a disposition indicating they are structural" without naming the literal value.
   *Resolution:* User chose `"structural"`. (user-provided)
@@ -57,35 +59,35 @@ Quantitative engagement and spec-issue summary across the seven phase transcript
   *Resolution:* User chose `reviewer: null` in status view while latent-under-create. (user-provided)
 - **POST /proposals 201 body shape** — §15.4 only says "proposal ID and initial status tree" without specifying the envelope.
   *Resolution:* User accepted same shape as GET /proposals/{id}. (user-provided)
-- **Reason field on status nodes** — §11.5 mentions a reason for negative states, but Phase 5 never produces them.
+- **Reason field on status nodes** — (CRITICAL) §11.5 mentions a reason for negative states, but Phase 5 never produces them.
   *Resolution:* User directed shaping the field now. (user-provided)
 - **GET /proposals list shape and additional filters** — §15.2 only says "optionally filterable by proposer" without specifying entry fields, ordering, pagination, or other filters.
   *Resolution:* User accepted lean entries with `?proposer=` and `?targetRootId=` filters. (user-provided)
-- **§3.3 global invariants at submission** — PRD doesn't explicitly say whether cycle/duplicate/clash invariants are checked at submission or only at acceptance.
+- **§3.3 global invariants at submission** — (CRITICAL) PRD doesn't explicitly say whether cycle/duplicate/clash invariants are checked at submission or only at acceptance.
   *Resolution:* User confirmed acceptance-time only per §10.3. (user-provided)
-- **Detach's existence dependency — taxon vs edge** — PRD's "currently exist at that position" language is ambiguous about whether detach checks just the taxon or the parent→child edge.
+- **Detach's existence dependency — taxon vs edge** — (CRITICAL) PRD's "currently exist at that position" language is ambiguous about whether detach checks just the taxon or the parent→child edge.
   *Resolution:* User confirmed edge check. (user-provided)
-- **Rename's existence requirement — strict vs unified reading** — §10.2 literally classifies only path ancestors as existence deps; doesn't say whether rename's own payload-position edge must exist.
+- **Rename's existence requirement — strict vs unified reading** — (CRITICAL) §10.2 literally classifies only path ancestors as existence deps; doesn't say whether rename's own payload-position edge must exist.
   *Resolution:* User chose unified reading (every operative-node-with-id requires its payload-parent edge). (user-provided)
-- **Same id at multiple payload positions (rename + detach of same id)** — PRD doesn't say whether the same taxon id may appear at distinct payload positions, nor how to disambiguate the resulting changes.
+- **Same id at multiple payload positions (rename + detach of same id)** — (CRITICAL) PRD doesn't say whether the same taxon id may appear at distinct payload positions, nor how to disambiguate the resulting changes.
   *Resolution:* Allowed; each operative position is a distinct change with its own changeId. (CC-proposed, user accepted)
 
 ### Phase 6 — Single review loop
-- **Failed-accept disposition undefined** — brief says an accept that fails revalidation "simply fails with a reason," but doesn't specify whether the change stays queued, transitions to invalid, or something else.
+- **Failed-accept disposition undefined** — (CRITICAL) brief says an accept that fails revalidation "simply fails with a reason," but doesn't specify whether the change stays queued, transitions to invalid, or something else.
   *Resolution:* Transition to invalid, store reason, keep in queue (case-3-shaped lazy). (user-provided)
-- **Existence-dep failure at promotion undefined** — §11.3 says promote "provided existence dependencies also currently hold" but is silent on what happens when they don't; §11.4 case 1 doesn't cover the case either.
+- **Existence-dep failure at promotion undefined** — (CRITICAL) §11.3 says promote "provided existence dependencies also currently hold" but is silent on what happens when they don't; §11.4 case 1 doesn't cover the case either.
   *Resolution:* Transition to invalid, extending §11.4 case 1 by analogy. (user-provided)
-- **§12.3 vs §11.4 case 1 phrasing tension** — §12.3 says rejecting a change makes "all payload descendants invalid" without qualification, while §11.4 case 1 restricts cascade to add/graft-ancestor rejection.
+- **§12.3 vs §11.4 case 1 phrasing tension** — (CRITICAL) §12.3 says rejecting a change makes "all payload descendants invalid" without qualification, while §11.4 case 1 restricts cascade to add/graft-ancestor rejection.
   *Resolution:* Adopt dep-model interpretation — only add/graft rejection cascades; rename/detach reject affects only the one change. (CC-proposed, user accepted)
 - **Reject body reason field unspecified** — §15.5 lists POST /changes/{id}/reject with no body schema, while §11.5 mentions an optional human-readable reason on rejected/invalid.
   *Resolution:* Accept optional `{ reason?: string }` body with a fixed default reason when omitted. (user-provided)
 
 ### Phase 7 — Cascade, invalidation, integration
-- **Proposer-status poll not named as a lazy-evaluation trigger** — §11.4 names reviewer reads and actions as triggers but is silent on whether proposer polls (§11.5) also trigger re-evaluation, leaving the proposer view's freshness undefined.
+- **Proposer-status poll not named as a lazy-evaluation trigger** — (CRITICAL) §11.4 names reviewer reads and actions as triggers but is silent on whether proposer polls (§11.5) also trigger re-evaluation, leaving the proposer view's freshness undefined.
   *Resolution:* User chose to allow the proposer view to lag reality. (user-provided)
 - **§11.4 doesn't specify whether invalid markings are persisted or computed on read** — lazy-evaluation wording leaves the storage model unspecified.
   *Resolution:* User directed CC to pick the simpler implementation; CC then chose persist-on-detection. (user-provided)
-- **Direct ownership reassignment missing from §11.4 case-3 trigger enumeration** — the case-3 enumeration lists edit/delete/edge-change/cross-proposal-accept but omits §14 ownership reassignment, leaving its invalidation impact undefined.
+- **Direct ownership reassignment missing from §11.4 case-3 trigger enumeration** — (CRITICAL) the case-3 enumeration lists edit/delete/edge-change/cross-proposal-accept but omits §14 ownership reassignment, leaving its invalidation impact undefined.
   *Resolution:* User stated owner is not part of validity state, so ownership change cannot invalidate; CC then separately resolved the routing half as sticky. (user-provided)
 - **§12.2 cascade-failure "reason" shape underspecified** — PRD says only "a reason identifying the failure" without defining whether it is a string or a structured object.
   *Resolution:* User said "a string is fine — keep it simple." (user-provided)
@@ -98,4 +100,6 @@ Quantitative engagement and spec-issue summary across the seven phase transcript
 - **(b) Topics presented for discussion** — every distinct topic AND nested sub-bullet CC raised for the user to weigh in on. A topic with three nested sub-points counts as 4 (1 parent + 3 children).
 - **(c) Topics user provided input on** — subset of (b) the user's reply explicitly addressed.
 - **(d) Problems raised** — spec issues only: gaps, ambiguities, inconsistencies, or contradictions in the PRD or phase brief. Implementation issues and pure design-preference questions are not counted.
-- **(e) Problems user provided feedback on** — subset of (d) where the user's reply gave a resolution or direction.
+- **(e) Problems user answered** — subset of (d) where the user's reply gave a resolution or direction.
+- **(f) Critical problems raised** — subset of (e) where the problem's resolution has a material impact on functionality.
+- **(g) Critical problems user answered** — subset of (f) where the user's reply gave a resolution or direction.
