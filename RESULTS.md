@@ -2,7 +2,8 @@
 
 ## Effort and Cost
 
-| | CC-Only Compute Time | OpenSpec Compute Time* | CC-Only API Cost | OpenSpec API Cost* |
+| | CC-Only<br>Compute Time | OpenSpec<br>Compute Time* | CC-Only<br>API Cost | OpenSpec<br>API Cost* |
+| --- | --- | --- | --- | --- |
 | Phase 1 | 0.08 hrs |  hrs | $ 2.11 | $  |
 | Phase 2 |  hrs |  hrs | $  | $  |
 | Phase 3 |  hrs |  hrs | $  | $  |
@@ -10,7 +11,7 @@
 | Phase 5 |  hrs |  hrs | $  | $  |
 | Phase 6 |  hrs |  hrs | $  | $  |
 | Phase 7 |  hrs |  hrs | $  | $  |
-| Total |  hrs |  hrs | $  | $  |
+| TOTAL |  hrs |  hrs | $  | $  |
 
 \* I reduced the actual OpenSpec values by 4% to remove cost of running OpenLore drift.
 
@@ -65,11 +66,13 @@ Both tools correctly implemented the same 3 of the 4 defects. The missing defect
 
 This section summarizes how each tool resolved the PRD ambiguities that surfaced during implementation and which PRD-mandated behaviors each tool verified via test. Full reasoning lives in [`results/test-diffs/CRITICAL-DIFFS.md`](results/test-diffs/CRITICAL-DIFFS.md); the tables below are a scoreboard distillation focused on critical and partially-critical gaps. A gap is **critical** when its resolution changes a domain action's outcome or stored state; **partial** means only part of the divergence (e.g. the underlying rule, not its status-code dressing) is critical.
 
-### Critical Spec-Resolution Gaps
+### Implementation Divergence
 
-PRD ambiguities both tools had to resolve. Codes (G1–G6) match the [Critical spec gaps](results/test-diffs/CRITICAL-DIFFS.md#critical-spec-gaps) section of CRITICAL-DIFFS.md.
+Each row in the per-gap detail table below is a PRD ambiguity that forced the two tools to pick a resolution. Both tools resolved every gap, but on some they resolved *differently* — and on a few the PRD doesn't pick a winner, so both resolutions are defensible. Codes (G1–G6) match the [Critical spec gaps](results/test-diffs/CRITICAL-DIFFS.md#critical-spec-gaps) section of CRITICAL-DIFFS.md.
 
-#### Scoreboard
+On critical PRD correctness OpenSpec wins 3, Vanilla Claude Code wins 0, with 3 gaps genuinely ambiguous; critical coverage gaps split evenly 2-2.
+
+#### Implementation divergence scoreboard
 
 |                                       | Vanilla Claude Code | OpenSpec |
 | ---                                   | ---                 | ---      |
@@ -78,7 +81,7 @@ PRD ambiguities both tools had to resolve. Codes (G1–G6) match the [Critical s
 
 CRITICAL-DIFFS.md's 15-item ranking lists 5 critical + 2 partial rows but ranks #1 and #4 both map to G1 (the reads-auth gate surfacing in two ranked areas), so the 7 ranking rows collapse to 6 unique underlying gaps.
 
-#### Tally
+#### Implementation divergence tally
 
 | Outcome                            | Count | Gaps       |
 | ---                                | ---   | ---        |
@@ -86,7 +89,7 @@ CRITICAL-DIFFS.md's 15-item ranking lists 5 critical + 2 partial rows but ranks 
 | Vanilla Claude Code more PRD-correct | 0   | —          |
 | Ambiguous (PRD doesn't pick)       | 3     | G4, G5, G6 |
 
-#### Per-gap detail
+#### Implementation divergence per-gap detail
 
 | Gap | PRD reading | Vanilla Claude Code | OpenSpec | Verdict |
 | --- | --- | --- | --- | --- |
@@ -97,22 +100,21 @@ CRITICAL-DIFFS.md's 15-item ranking lists 5 critical + 2 partial rows but ranks 
 | G5 submission-time existence checks | §9–§11 give conflicting signals on which existence failures are caught at submission | Requires existence only for routing; defers deeper checks to acceptance | Validates the full dependency tree at submission with explicit error tags | Ambiguous — PRD doesn't pick |
 | G6 latent rename + ownership reassignment | §6.2/§14 silent on reviewer routing after owner change | Tests promotion-time re-resolution of a latent rename | Tests sticky routing of an already-queued rename | Ambiguous — different scenarios tested; combined behavior untested in both |
 
-### Test Coverage of Critical Gaps
+### Testing Divergence
 
-PRD-mandated behaviors verified by tests on one side only. Both implementations *may* do the right thing; the unverified side has no proof that it does. Full reasoning in the [Critical coverage gaps](results/test-diffs/CRITICAL-DIFFS.md#critical-coverage-gaps) section of CRITICAL-DIFFS.md.
+Each row in the per-gap detail table below is a PRD-mandated behavior verified by tests on one side only — a *coverage* gap rather than a behavioral one. Both implementations *may* do the right thing; the unverified side just has no proof. Codes (C1–C4) are introduced for this table; full reasoning is in the [Critical coverage gaps](results/test-diffs/CRITICAL-DIFFS.md#critical-coverage-gaps) section of CRITICAL-DIFFS.md.
 
-|                                                 | Vanilla Claude Code | OpenSpec |
-| ---                                             | ---                 | ---      |
-| Critical PRD gaps tested only by this side      | 2                   | 2        |
-| Gaps tested only by this side                   | C1, C2              | C3, C4   |
+#### Testing divergence scoreboard
 
-#### Tally
+|                                            | Vanilla Claude Code | OpenSpec |
+| ---                                        | ---                 | ---      |
+| Gaps tested only by this side              | C1, C2              | C3, C4   |
 
-| Tested only by      | Count | Gaps |
-| ---                 | ---   | --- |
-| Vanilla Claude Code | 2     | C1 (A.1/A.2 lifecycle end-to-end through accept → reject → dismiss → reset); C2 (HTTP-boundary write-lock wiring on every mutating route) |
-| OpenSpec            | 2     | C3 (§6.3 owner-scoped region as a pure-domain unit, including halt-frontier edge cases); C4 (lazy-evaluation read-purity negative assertions) |
+#### Testing divergence per-gap detail
 
-### Verdict
-
-On critical PRD correctness OpenSpec wins 3, Vanilla Claude Code wins 0, with 3 gaps genuinely ambiguous; critical coverage gaps split evenly 2-2.
+| Gap | Tested by | Description |
+| --- | --- | --- |
+| C1  | Vanilla Claude Code | A.1/A.2 lifecycle end-to-end through accept → reject → dismiss → reset |
+| C2  | Vanilla Claude Code | HTTP-boundary write-lock wiring on every mutating route |
+| C3  | OpenSpec            | §6.3 owner-scoped region as a pure-domain unit, including halt-frontier edge cases |
+| C4  | OpenSpec            | Lazy-evaluation read-purity negative assertions |
