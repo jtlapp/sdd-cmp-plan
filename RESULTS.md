@@ -31,6 +31,8 @@
 
 I recorded all conversations between Claude Code and the user and performed an analysis of the conversations. The following table summarizes the analysis. Details can be found at [Native CC conversation analysis](/results/cc-only/SUMMARY.md) and [OpenSpec conversation analysis](/results/cc-openspec/SUMMARY.md).
 
+<div align="center">
+
 | Metric | Native CC | OpenSpec | Factor |
 | --- | --- | --- | -- |
 | (a) Prompts from Claude Code | 16 | 40 | 2.5x |
@@ -40,6 +42,8 @@ I recorded all conversations between Claude Code and the user and performed an a
 | (e) Problems user answered | 13 | 28 | 2.2x |
 | (f) Critical problems raised | 7 | 15 | 2.1x |
 | (g) Critical problems user answered | 7 | 15 | 2.1x |
+
+</div>
 
 - **(a) Prompts from Claude Code** — distinct CC turns that asked the user any question or invited input. A single turn with five sub-questions = 1 prompt.
 - **(b) Topics presented for discussion** — every distinct topic AND nested sub-bullet CC raised for the user to weigh in on. A topic with three nested sub-points counts as 4 (1 parent + 3 children).
@@ -58,6 +62,8 @@ Here is a summary of how the two tools handled the four intentionally planted de
 
 Both tools correctly implemented the same 3 of the 4 defects. The missing defect was additional functionality allowing a proposer of changes to a tree to withdraw their proposal. In fairness, there should have been no expectation for the LLM to see this as a required feature.
 
+<div align="center">
+
 |                                                            | Native CC | OpenSpec |
 | ---                                                        | ---                 | ---      |
 | Defects surfaced in conversation                           | 1 / 4               | 0 / 4    |
@@ -65,7 +71,11 @@ Both tools correctly implemented the same 3 of the 4 defects. The missing defect
 | Defects with a dedicated test                              | 3 / 4               | 2 / 4    |
 | Spec-correction artifact produced                          | Yes (`prd-errata.md`) | No     |
 
+</div>
+
 ### Per-Defect Comparison
+
+<div align="center">
 
 | Defect | Kind / difficulty | Native CC | OpenSpec |
 | --- | --- | --- | --- |
@@ -74,17 +84,23 @@ Both tools correctly implemented the same 3 of the 4 defects. The missing defect
 | Proposer withdrawal | gap / obvious | Not surfaced; **no endpoint**; not tested | Not surfaced; **no endpoint**; not tested |
 | Self-routed change | gap / subtle | Listed as a settled decision in Phase 5; correct impl; tested (happy path) | Not surfaced; correct impl; tested only implicitly |
 
+</div>
+
 ## Test Suite Comparison
 
 Beyond differing on a handful of specific behaviors (covered in the next section), the two implementations produced test suites that differ substantially in *shape* — in scale, organizational style, and the layer at which they exercise the code. Full per-area detail lives in [`results/test-diffs/`](results/test-diffs/), with [`SUMMARY.md`](results/test-diffs/SUMMARY.md) as the entry point and 18 per-area reports under [`by-area/`](results/test-diffs/by-area/).
 
 ### Scale and structure
 
+<div align="center">
+
 |  | Native CC | OpenSpec | Factor |
 | --- | --- | --- | -- |
 | Test files | 46 | 96 | 2.1x |
 | Total test cases (approx.) | 484 | ~900 | 1.9x |
 | Layering | mostly HTTP-boundary integration | mixed: pure-domain unit + HTTP integration | |
+
+</div>
 
 ### Testing approach
 
@@ -119,6 +135,8 @@ For every phase, each project froze a `phase-N-initial.md` test plan before writ
 
 The `%` columns express each row's delta count as a percentage of the project's total initial test scenarios across all seven phases (472 for Native CC; 1,457 for OpenSpec — counted at the same one-row-or-bullet granularity used for deltas). The `% substantive` / `% cosmetic` / phase-win rows already express a different kind of percentage, so their `%` cells are dashed.
 
+<div align="center">
+
 | | Native CC | % of initial tests | OpenSpec | % of initial tests |
 | --- | ---: | ---: | ---: | ---: |
 | Total deltas across 7 phases | 54 | 11.4% | 53 | 3.6% |
@@ -131,9 +149,13 @@ The `%` columns express each row's delta count as a percentage of the project's 
 | Phases where this project's initial plan predicted more accurately | 0 | — | 7 | — |
 | Phases tied | 0 | — | 0 | — |
 
+</div>
+
 ### Per-phase deltas
 
 Each `%` column is `total deltas in the phase ÷ initial scenarios planned for that phase × 100`. The "More accurate" column picks the project with the lower percentage (ties when within 0.5 pp).
+
+<div align="center">
 
 | Phase | Native CC total | Native CC % | OpenSpec total | OpenSpec % | More accurate |
 | ---: | ---: | ---: | ---: | ---: | --- |
@@ -145,6 +167,8 @@ Each `%` column is `total deltas in the phase ÷ initial scenarios planned for t
 | 6 | 9 | 14.3% | 11 | 3.7% | OpenSpec |
 | 7 | 9 | 18.0% | 7 | 2.0% | OpenSpec |
 | **Total** | **54** | **11.4%** | **53** | **3.6%** | OpenSpec 7, Native CC 0 |
+
+</div>
 
 Absolute totals are nearly identical (54 vs 53), but normalized against initial-plan size OpenSpec churned roughly **one-third as much** of its planned tests (3.6% vs 11.4%).
 
@@ -160,14 +184,20 @@ On critical PRD correctness OpenSpec wins 3, Native CC wins 0, with 3 gaps genui
 
 #### Implementation divergence scoreboard
 
+<div align="center">
+
 |                                       | Native CC | OpenSpec |
 | ---                                   | ---                 | ---      |
 | Unambiguous critical gaps PRD-correct | 0 / 3               | 3 / 3    |
 | PRD-ambiguous gaps (both defensible)  | 3                   | 3        |
 
+</div>
+
 CRITICAL-DIFFS.md's 15-item ranking lists 5 critical + 2 partial rows but ranks #1 and #4 both map to G1 (the reads-auth gate surfacing in two ranked areas), so the 7 ranking rows collapse to 6 unique underlying gaps.
 
 #### Implementation divergence tally
+
+<div align="center">
 
 | Outcome                            | Count | Gaps       |
 | ---                                | ---   | ---        |
@@ -175,7 +205,11 @@ CRITICAL-DIFFS.md's 15-item ranking lists 5 critical + 2 partial rows but ranks 
 | Native CC more PRD-correct | 0   | —          |
 | Ambiguous (PRD doesn't pick)       | 3     | G4, G5, G6 |
 
+</div>
+
 #### Implementation divergence per-gap detail
+
+<div align="center">
 
 | Gap | PRD reading | Native CC | OpenSpec | Verdict |
 | --- | --- | --- | --- | --- |
@@ -186,17 +220,25 @@ CRITICAL-DIFFS.md's 15-item ranking lists 5 critical + 2 partial rows but ranks 
 | G5 submission-time existence checks | §9–§11 give conflicting signals on which existence failures are caught at submission | Requires existence only for routing; defers deeper checks to acceptance | Validates the full dependency tree at submission with explicit error tags | Ambiguous — PRD doesn't pick |
 | G6 latent rename + ownership reassignment | §6.2/§14 silent on reviewer routing after owner change | Tests promotion-time re-resolution of a latent rename | Tests sticky routing of an already-queued rename | Ambiguous — different scenarios tested; combined behavior untested in both |
 
+</div>
+
 ### Testing Divergence
 
 Each row in the per-gap detail table below is a PRD-mandated behavior verified by tests on one side only — a *coverage* gap rather than a behavioral one. Both implementations *may* do the right thing; the unverified side just has no proof. Codes (C1–C4) are introduced for this table; full reasoning is in the [Critical coverage gaps](results/test-diffs/CRITICAL-DIFFS.md#critical-coverage-gaps) section of CRITICAL-DIFFS.md.
 
 #### Testing divergence scoreboard
 
+<div align="center">
+
 |                                            | Native CC | OpenSpec |
 | ---                                        | ---                 | ---      |
 | Gaps tested only by this side              | C1, C2              | C3, C4   |
 
+</div>
+
 #### Testing divergence per-gap detail
+
+<div align="center">
 
 | Gap | Tested by | Description |
 | --- | --- | --- |
@@ -204,6 +246,8 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
 | C2  | Native CC | HTTP-boundary write-lock wiring on every mutating route |
 | C3  | OpenSpec            | §6.3 owner-scoped region as a pure-domain unit, including halt-frontier edge cases |
 | C4  | OpenSpec            | Lazy-evaluation read-purity negative assertions |
+
+</div>
 
 ## Conclusions
 

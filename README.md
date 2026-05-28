@@ -125,6 +125,8 @@ did not test Allium.
 
 ### Workflow Feature Comparison
 
+<div align="center">
+
 | Feature | Native CC | OpenSpec | OpenSpec +<br> OpenLore drift | Allium<br>(unexamined) |
 | --- | --- | --- | --- | --- |
 | Creates specs | no | YES | YES | YES |
@@ -133,6 +135,8 @@ did not test Allium.
 | Specs only describe behavior | n/a | YES | YES | YES |
 | Planning phase | YES | YES | YES | ? |
 | Conversational planning | no | YES | YES | ? |
+
+</div>
 
 ## The Target Project
 
