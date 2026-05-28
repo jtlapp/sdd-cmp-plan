@@ -1,5 +1,19 @@
 # Results of comparing OpenSpec with vanilla Claude Code
 
+## Effort and Cost
+
+| | CC-Only Compute Time | CC-Only API Cost | OpenSpec Compute Time* | OpenSpec API Cost* |
+| Phase 1 |  hrs |  hrs | $  | $  |
+| Phase 2 |  hrs |  hrs | $  | $  |
+| Phase 3 |  hrs |  hrs | $  | $  |
+| Phase 4 |  hrs |  hrs | $  | $  |
+| Phase 5 |  hrs |  hrs | $  | $  |
+| Phase 6 |  hrs |  hrs | $  | $  |
+| Phase 7 |  hrs |  hrs | $  | $  |
+| Total |  hrs |  hrs | $  | $  |
+
+\* I reduced the actual OpenSpec values by 4% to remove cost of running OpenLore drift.
+
 ## Conversation Comparison
 
 I recorded all conversations between Claude Code and the user and performed an analysis of the conversations. The following table summarizes the analysis. Details can be found at [vanilla CC conversation anaylsis](/results/cc-only/SUMMARY.md) AND [OpenSpec conversation analysis](/results/cc-openspec/SUMMARY.md).
@@ -21,3 +35,7 @@ I recorded all conversations between Claude Code and the user and performed an a
 - **(e) Problems user answered** — subset of (d) where the user's reply gave a resolution or direction.
 - **(f) Critical problems raised** — user-selected subset of (e) where the problem's resolution has a material impact on functionality.
 - **(g) Critical problems user answered** — subset of (f) where the user's reply gave a resolution or direction.
+
+## Handling of Introduced Defects
+
+
