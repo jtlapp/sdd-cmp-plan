@@ -2,18 +2,18 @@
 
 ## Effort and Cost
 
-| | Native CC<br>Compute Time | OpenSpec<br>Compute Time* | Native CC<br>API Cost | OpenSpec<br>API Cost* |
-| --- | --- | --- | --- | --- |
-| Phase 1 | 5 min | 36 min | $ 2.11 | $ 11.78 |
-| Phase 2 | 14 min | 33 min | $ 5.36 | $ 14.08 |
-| Phase 3 | 15 min | 35 min | $ 5.19 | $ 14.66 |
-| Phase 4 | 26 min | 45 min | $ 12.47 | $ 27.21 |
-| Phase 5 | 22 min | 57 min | $ 8.98 | $ 28.91 |
-| Phase 6 | 25 min | 60 min | $ 9.74 | $ 40.29 |
-| Phase 7 | 34 min | 76 min | $ 16.79 | $ 61.34 |
-| TOTAL |  hrs |  hrs | $  | $  |
+| | Native CC<br>Compute Time | OpenSpec<br>Compute Time* | Native CC<br>API Cost | OpenSpec<br>API Cost* | % |
+| --- | --- | --- | --- | --- | -- |
+| Phase 1 | 5 min | 36 min | $ 2.11 | $ 11.78 | 0 |
+| Phase 2 | 14 min | 33 min | $ 5.36 | $ 14.08 | 6 |
+| Phase 3 | 15 min | 35 min | $ 5.19 | $ 14.66 | 5 |
+| Phase 4 | 26 min | 45 min | $ 12.47 | $ 27.21 | 4 |
+| Phase 5 | 22 min | 57 min | $ 8.98 | $ 28.91 | 4 |
+| Phase 6 | 25 min | 60 min | $ 9.74 | $ 40.29 | 4 |
+| Phase 7 | 34 min | 76 min | $ 16.79 | $ 61.34 | 4 |
+| TOTAL | 2.35 hrs | 5.70 hrs | $ 60.64 | $ 198.27 | - |
 
-\* I reduced the actual OpenSpec values by 4% to remove cost of running OpenLore drift.
+\* I reduced the actual OpenSpec values by percentage usage of OpenLore `drift`, which never actually detected drift and therefore need not have been part of the workflow.
 
 ## Caveats
 
