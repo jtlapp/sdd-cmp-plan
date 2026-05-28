@@ -1,8 +1,8 @@
-# Results of comparing OpenSpec with vanilla Claude Code
+# Results of comparing OpenSpec with Native CC
 
 ## Effort and Cost
 
-| | CC-Only<br>Compute Time | OpenSpec<br>Compute Time* | CC-Only<br>API Cost | OpenSpec<br>API Cost* |
+| | Native CC<br>Compute Time | OpenSpec<br>Compute Time* | Native CC<br>API Cost | OpenSpec<br>API Cost* |
 | --- | --- | --- | --- | --- |
 | Phase 1 | 5 min | 36 min | $ 2.11 | $ 11.78 |
 | Phase 2 | 14 min | 33 min | $ 5.36 | $ 14.08 |
@@ -24,9 +24,9 @@
 
 ## Conversation Comparison
 
-I recorded all conversations between Claude Code and the user and performed an analysis of the conversations. The following table summarizes the analysis. Details can be found at [vanilla CC conversation anaylsis](/results/cc-only/SUMMARY.md) AND [OpenSpec conversation analysis](/results/cc-openspec/SUMMARY.md).
+I recorded all conversations between Claude Code and the user and performed an analysis of the conversations. The following table summarizes the analysis. Details can be found at [Native CC conversation analysis](/results/cc-only/SUMMARY.md) and [OpenSpec conversation analysis](/results/cc-openspec/SUMMARY.md).
 
-| Metric | Vanilla Claude Code | OpenSpec |
+| Metric | Native CC | OpenSpec |
 | --- | --- | --- |
 | (a) Prompts from Claude Code | 16 | 40 |
 | (b) Topics presented for discussion | 55 | 141 |
@@ -47,13 +47,13 @@ I recorded all conversations between Claude Code and the user and performed an a
 ## Handling of Introduced Defects
 
 Here is a summary of how the two tools handled the four intentionally planted defects. Per-implementation details:
-[cc-only](results/defects/cc-only.md), [cc-openspec](results/defects/cc-openspec.md).
+[Native CC](results/defects/cc-only.md), [OpenSpec](results/defects/cc-openspec.md).
 
 ### Defect Scoreboard
 
 Both tools correctly implemented the same 3 of the 4 defects. The missing defect was additional functionality allowing a proposer of changes to a tree to withdraw their proposal. In fairness, there should have been no expectation for the LLM to see this as a required feature.
 
-|                                                            | Vanilla Claude Code | OpenSpec |
+|                                                            | Native CC | OpenSpec |
 | ---                                                        | ---                 | ---      |
 | Defects surfaced in conversation                           | 1 / 4               | 0 / 4    |
 | Defects correctly resolved in the implementation           | 3 / 4               | 3 / 4    |
@@ -62,7 +62,7 @@ Both tools correctly implemented the same 3 of the 4 defects. The missing defect
 
 ### Per-Defect Comparison
 
-| Defect | Kind / difficulty | Vanilla Claude Code | OpenSpec |
+| Defect | Kind / difficulty | Native CC | OpenSpec |
 | --- | --- | --- | --- |
 | Cascade atomicity §12.2 vs §15.5 | inconsistency / obvious | **Surfaced**; user resolved (§12.2 wins); atomic impl; tested | Not surfaced; atomic impl (silently chosen in derived spec); tested |
 | Name case-sensitivity §6.4 vs §3.3/§3.4 | inconsistency / subtle | Not surfaced; case-insensitive impl; tested (edge-add implicit) | Not surfaced; case-insensitive impl; tested |
@@ -75,7 +75,7 @@ Beyond differing on a handful of specific behaviors (covered in the next section
 
 ### Scale and structure
 
-|  | Vanilla Claude Code | OpenSpec |
+|  | Native CC | OpenSpec |
 | --- | --- | --- |
 | Test files | 46 | 96 |
 | Total test cases (approx.) | 484 | ~900 |
@@ -83,7 +83,7 @@ Beyond differing on a handful of specific behaviors (covered in the next section
 
 ### Testing approach
 
-Vanilla Claude Code — HTTP-boundary integration as dominant style:
+Native CC — HTTP-boundary integration as dominant style:
 - State transitions, invariant checks, store mechanics, and middleware all exercised through real route calls.
 - Proves the wire contract end-to-end, but with weaker failure localization — when something breaks, the failure points back to a route rather than the offending function.
 
@@ -96,7 +96,7 @@ OpenSpec — unit-test layer underneath an integration layer:
 
 The two strategies are good at catching different classes of regression:
 
-- Vanilla CC's HTTP-first approach is positioned to catch:
+- Native CC's HTTP-first approach is positioned to catch:
   - End-to-end lifecycle and state-machine bugs that only surface across many steps (full proposal accept → reject → dismiss → reset walks).
   - Integration-wiring bugs where a route forgets to apply concurrency control or auth gating.
   - Observable response-shape regressions on real requests.
@@ -112,9 +112,9 @@ For every phase, each project froze a `phase-N-initial.md` test plan before writ
 
 ### Prediction-accuracy scoreboard
 
-The `%` columns express each row's delta count as a percentage of the project's total initial test scenarios across all seven phases (472 for Vanilla CC; 1,457 for OpenSpec — counted at the same one-row-or-bullet granularity used for deltas). The `% substantive` / `% cosmetic` / phase-win rows already express a different kind of percentage, so their `%` cells are dashed.
+The `%` columns express each row's delta count as a percentage of the project's total initial test scenarios across all seven phases (472 for Native CC; 1,457 for OpenSpec — counted at the same one-row-or-bullet granularity used for deltas). The `% substantive` / `% cosmetic` / phase-win rows already express a different kind of percentage, so their `%` cells are dashed.
 
-| | Vanilla Claude Code | % of initial tests | OpenSpec | % of initial tests |
+| | Native CC | % of initial tests | OpenSpec | % of initial tests |
 | --- | ---: | ---: | ---: | ---: |
 | Total deltas across 7 phases | 54 | 11.4% | 53 | 3.6% |
 | Added | 31 | 6.6% | 24 | 1.6% |
@@ -130,7 +130,7 @@ The `%` columns express each row's delta count as a percentage of the project's 
 
 Each `%` column is `total deltas in the phase ÷ initial scenarios planned for that phase × 100`. The "More accurate" column picks the project with the lower percentage (ties when within 0.5 pp).
 
-| Phase | Vanilla CC total | Vanilla CC % | OpenSpec total | OpenSpec % | More accurate |
+| Phase | Native CC total | Native CC % | OpenSpec total | OpenSpec % | More accurate |
 | ---: | ---: | ---: | ---: | ---: | --- |
 | 1 | 5 | 12.5% | 4 | 5.6% | OpenSpec |
 | 2 | 7 | 17.9% | 7 | 6.5% | OpenSpec |
@@ -139,7 +139,7 @@ Each `%` column is `total deltas in the phase ÷ initial scenarios planned for t
 | 5 | 8 | 8.1% | 7 | 2.3% | OpenSpec |
 | 6 | 9 | 14.3% | 11 | 3.7% | OpenSpec |
 | 7 | 9 | 18.0% | 7 | 2.0% | OpenSpec |
-| **Total** | **54** | **11.4%** | **53** | **3.6%** | OpenSpec 7, Vanilla CC 0 |
+| **Total** | **54** | **11.4%** | **53** | **3.6%** | OpenSpec 7, Native CC 0 |
 
 Absolute totals are nearly identical (54 vs 53), but normalized against initial-plan size OpenSpec churned roughly **one-third as much** of its planned tests (3.6% vs 11.4%).
 
@@ -151,11 +151,11 @@ This section summarizes how each tool resolved the PRD ambiguities that surfaced
 
 Each row in the per-gap detail table below is a PRD ambiguity that forced the two tools to pick a resolution. Both tools resolved every gap, but on some they resolved *differently* — and on a few the PRD doesn't pick a winner, so both resolutions are defensible. Codes (G1–G6) match the [Critical spec gaps](results/test-diffs/CRITICAL-DIFFS.md#critical-spec-gaps) section of CRITICAL-DIFFS.md.
 
-On critical PRD correctness OpenSpec wins 3, Vanilla Claude Code wins 0, with 3 gaps genuinely ambiguous; critical coverage gaps split evenly 2-2.
+On critical PRD correctness OpenSpec wins 3, Native CC wins 0, with 3 gaps genuinely ambiguous; critical coverage gaps split evenly 2-2.
 
 #### Implementation divergence scoreboard
 
-|                                       | Vanilla Claude Code | OpenSpec |
+|                                       | Native CC | OpenSpec |
 | ---                                   | ---                 | ---      |
 | Unambiguous critical gaps PRD-correct | 0 / 3               | 3 / 3    |
 | PRD-ambiguous gaps (both defensible)  | 3                   | 3        |
@@ -167,12 +167,12 @@ CRITICAL-DIFFS.md's 15-item ranking lists 5 critical + 2 partial rows but ranks 
 | Outcome                            | Count | Gaps       |
 | ---                                | ---   | ---        |
 | OpenSpec more PRD-correct          | 3     | G1, G2, G3 |
-| Vanilla Claude Code more PRD-correct | 0   | —          |
+| Native CC more PRD-correct | 0   | —          |
 | Ambiguous (PRD doesn't pick)       | 3     | G4, G5, G6 |
 
 #### Implementation divergence per-gap detail
 
-| Gap | PRD reading | Vanilla Claude Code | OpenSpec | Verdict |
+| Gap | PRD reading | Native CC | OpenSpec | Verdict |
 | --- | --- | --- | --- | --- |
 | G1 reads-auth gate | §4 declares reads explicitly open to all callers | Identity middleware 403s any unregistered caller, including on reads | Reads accept null, unregistered, and registered callers alike | OpenSpec aligns with §4 |
 | G2 failed self-accept disposition | §11.4 case 2 applies to "another" queued change, not the acted-on one | Treats failed accept as case 2: change becomes invalid and is auto-dismissed from the queue | Treats failed accept as case 3: change becomes invalid but stays queued for manual dismissal | OpenSpec matches §11.4 literally |
@@ -187,7 +187,7 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
 
 #### Testing divergence scoreboard
 
-|                                            | Vanilla Claude Code | OpenSpec |
+|                                            | Native CC | OpenSpec |
 | ---                                        | ---                 | ---      |
 | Gaps tested only by this side              | C1, C2              | C3, C4   |
 
@@ -195,8 +195,8 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
 
 | Gap | Tested by | Description |
 | --- | --- | --- |
-| C1  | Vanilla Claude Code | A.1/A.2 lifecycle end-to-end through accept → reject → dismiss → reset |
-| C2  | Vanilla Claude Code | HTTP-boundary write-lock wiring on every mutating route |
+| C1  | Native CC | A.1/A.2 lifecycle end-to-end through accept → reject → dismiss → reset |
+| C2  | Native CC | HTTP-boundary write-lock wiring on every mutating route |
 | C3  | OpenSpec            | §6.3 owner-scoped region as a pure-domain unit, including halt-frontier edge cases |
 | C4  | OpenSpec            | Lazy-evaluation read-purity negative assertions |
 
@@ -209,7 +209,7 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
   - I'm not facing walls of text repeating implementation.
   - I'm not trying to communicate via multiple-choice menus.
 - OpenSpec takes **much longer to compute** and is much more costly.
-- Native-CC is **better for vibe coding** a quick solution by minimizing user's input.
+- Native CC is **better for vibe coding** a quick solution by minimizing user's input.
 
 ### Design Visibility
 

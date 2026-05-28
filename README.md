@@ -9,7 +9,7 @@ The objective of this experiment is to evaluate how well spec-driven development
 ## Workflows Under Comparison
 
 Every workflow in this comparison runs on Claude Code. What differs is the tooling
-layered on top of it: vanilla Claude Code uses none, two workflows add OpenSpec (one
+layered on top of it: Native Claude Code (hereafter "Native CC") uses none, two workflows add OpenSpec (one
 of them also adding OpenLore), and the last replaces OpenSpec with Allium. To understand
 how OpenSpec and Allium change the experience, it helps to first understand the surfaces
 Claude Code exposes for tools like these to plug into.
@@ -121,7 +121,7 @@ did not test Allium.
 
 ### Workflow Feature Comparison
 
-| Feature | Claude Code<br>w/ Planning | OpenSpec | OpenSpec +<br> OpenLore drift | Allium<br>(unexamined) |
+| Feature | Native CC | OpenSpec | OpenSpec +<br> OpenLore drift | Allium<br>(unexamined) |
 | --- | --- | --- | --- | --- |
 | Creates specs | no | YES | YES | YES |
 | Maintains specs | n/a | YES | YES | YES |
@@ -302,7 +302,7 @@ The PRD also contains four deliberately introduced defects, planted so we could 
 
 I attempted to implement the PRD in both workflows as analogously as possible. This entailed providing both projects with a `CLAUDE.md` explaining the process and then walking the LLM through the process as required via prompting. I planned for an anticipated process, but here I document the actual resulting process:
 
-### Pure-CC Workflow Process
+### Native CC Workflow Process
 
 - *(add next phase brief)* I added the brief for the next phase to the repo.
 - **Plan.** I prompted to enter planning mode to plan the next phase.
@@ -312,7 +312,7 @@ I attempted to implement the PRD in both workflows as analogously as possible. T
 - **Approve and accept edits.** Claude presented the implemenation plan, which I always accepted without review.
 - *(auto-write final test plan)* After completing implementation, I believe Claude Code always automatically generated the final test plan.
 
-### CC/OpenSpec Workflow Process
+### OpenSpec Workflow Process
 
 - *(add next phase brief)* I added the brief for the next phase to the repo.
 - **Explore.** I entered `/opsx:explore` to enter exploration mode.
