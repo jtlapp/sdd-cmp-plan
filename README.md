@@ -1,26 +1,25 @@
-# Spec-Driven Development Tool Comparison Plan
+# Spec-Driven Development Workflow Comparison Plan
 
-This document describes a plan for comparing spec-driven development tools with each other and with vibe coding not using specs. I wrote a complex [Produce Requirements Document](prd/prd.md) (PRD), divided it into phases, and asked each tool to implement the phases, producing artifacts I could use to compare how well the tools did. I responded to any issues and questions the LLM raised that it didn't seem to have a solution for, allowing the LLM to benefit from its due diligence. I posted a separate document explaining the results.
+This document describes a plan for comparing spec-driven development workflows with each other and with vibe coding not using specs. I wrote a complex [Produce Requirements Document](prd/prd.md) (PRD), divided it into phases, and implement the phases separately for each workflow, producing artifacts I could use to compare how well the different workflows did. I responded to any issues and questions the LLM raised that it didn't seem to have a solution for, allowing the LLM to benefit from its due diligence. I posted a separate document explaining the results.
 
 ## Objective
 
-The objective of this experiment is to evaluate how well spec-driven development tools perform compared to each other and to development without using tool-managed specifications. I specifically wanted to see whether spec-driven development helps uncover more gaps and inconsistencies, so I chose to have the tools implement a complex project having a few gaps and inconsistencies.
+The objective of this experiment is to evaluate how well spec-driven development workflows perform compared to each other and to development without using tool-managed specifications. I specifically wanted to see whether spec-driven development helps uncover more gaps and inconsistencies, so I chose to implement a complex project having a few gaps and inconsistencies.
 
 ## Caveats
 
 TBD: Where does this belong?
 
-- I had the tools create anticipated test cases in advance of implementation, which certainly affected outcomes. The tools also maintained summaries of the final test cases and the diffs from the initial.
+- I had the workflows create anticipated test cases in advance of implementation, which certainly affected outcomes. The workflows also maintained summaries of the final test cases and the diffs from the initial.
 - OpenSpec is not intended for more than 10 tasks at a time, but several phases had more than 10.
 - I started with a specification detailing observable behavior but not implementation. Spec-driven development may be more geared toward working with the LLM to define the initial specification, especially one as technical as I defined.
-- The tools gave opportunities for me to explore aspects of implementation during planning, but I only explored the aspects that the LLM appeared to be indicating were potentially problematic. I think both LLMs would have done better had I done more joint exploration.
+- The workflows gave opportunities for me to explore aspects of implementation during planning, but I only explored the aspects that the LLM appeared to be indicating were potentially problematic. I think both LLMs would have done better had I done more joint exploration.
 
-## Tools Tested
+## Workflows Tested
 
 I intended to test OpenSpec, Allium, and vanilla Claude Code, but the effort was too time-consuming and I did not get around to testing Allium. I did however design the test of OpenSpec to be comparable to the intended test of Allium.
 
-TBD: describe the tools
-TBD: Rename "tools"?
+TBD: describe the workflows
 
 | Feature | Claude Code<br>w/ Planning | OpenSpec | OpenSpec +<br> OpenLore drift | Allium<br>(untested) |
 | --- | --- | --- | --- | --- |
@@ -36,7 +35,7 @@ TBD: Describe OpenSpec artifacts
 
 ## The Target Project
 
-I worked with The Claude Code website to produce a PRD for a webservice that would be challenging to implement correctly. The project is an aspect of a problem I've been thinking about a long time, but you'll need some background to understand it. I chose a complex problem to tax the tool so I could more readily compare how well different tools do.
+I worked with The Claude Code website to produce a PRD for a webservice that would be challenging to implement correctly. The project is an aspect of a problem I've been thinking about a long time, but you'll need some background to understand it. I chose a complex problem to tax the workflow so I could more readily compare how well different workflows do.
 
 ### Project Background and Problem
 
@@ -149,7 +148,7 @@ In reality, the trees would be much more complex, sharing many subtrees having m
 
 I developed the [Produce Requirements Document](prd/prd.md) (PRD) using the Claude.ai website. I spent about 4 hours carefully explaining my vision and working with Claude to iron on inconsistencies, doing so over several conversations. My original vision was to produce a common API for all implementations, but I eventually realized that differences in design decisions would change the API, so I only abstractly specified the endpoints.
 
-I was planning to create a second PRD for extending the solution into a peer-to-peer protocol. Asking the tools to implement this extension on top of the existing implementation would test the tool's ability to refactor, but I ran out of time.
+I was planning to create a second PRD for extending the solution into a peer-to-peer protocol. Asking the workflows to implement this extension on top of the existing implementation would test the workflow's ability to refactor, but I ran out of time.
 
 ## Implementation Phases
 
@@ -229,8 +228,8 @@ OpenSpec
 
 - OpenSpec invites more participation in the design and implementation process
 - OpenSpec `explore` is friendlier and more enjoyable than CC's `plan` -- clear delination between conversation and implementation
-- OpenSpec is a great tool for understanding what the AI is doing
-- OpenSpec is a better tool for helping junior devs learn
+- OpenSpec is a great workflow for understanding what the AI is doing
+- OpenSpec is a better workflow for helping junior devs learn
 - OpenSpec takes a lot more time and is a lot more costly
 - Vanilla CC is better for vibe code a quick solution
 - Allium, having 9 agents vote on each code change, is probably very expensive, best suited for developing a particular component.

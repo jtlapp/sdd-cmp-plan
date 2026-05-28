@@ -60,3 +60,59 @@ Both tools correctly implemented the same 3 of the 4 defects. The missing defect
 | Name case-sensitivity §6.4 vs §3.3/§3.4 | inconsistency / subtle | Not surfaced; case-insensitive impl; tested (edge-add implicit) | Not surfaced; case-insensitive impl; tested |
 | Proposer withdrawal | gap / obvious | Not surfaced; **no endpoint**; not tested | Not surfaced; **no endpoint**; not tested |
 | Self-routed change | gap / subtle | Listed as a settled decision in Phase 5; correct impl; tested (happy path) | Not surfaced; correct impl; tested only implicitly |
+
+## PRD Gap Implementation and Testing
+
+This section summarizes how each tool resolved the PRD ambiguities that surfaced during implementation and which PRD-mandated behaviors each tool verified via test. Full reasoning lives in [`results/test-diffs/CRITICAL-DIFFS.md`](results/test-diffs/CRITICAL-DIFFS.md); the tables below are a scoreboard distillation focused on critical and partially-critical gaps. A gap is **critical** when its resolution changes a domain action's outcome or stored state; **partial** means only part of the divergence (e.g. the underlying rule, not its status-code dressing) is critical.
+
+### Critical Spec-Resolution Gaps
+
+PRD ambiguities both tools had to resolve. Codes (G1–G6) match the [Critical spec gaps](results/test-diffs/CRITICAL-DIFFS.md#critical-spec-gaps) section of CRITICAL-DIFFS.md.
+
+#### Scoreboard
+
+|                                       | Vanilla Claude Code | OpenSpec |
+| ---                                   | ---                 | ---      |
+| Unambiguous critical gaps PRD-correct | 0 / 3               | 3 / 3    |
+| PRD-ambiguous gaps (both defensible)  | 3                   | 3        |
+
+CRITICAL-DIFFS.md's 15-item ranking lists 5 critical + 2 partial rows but ranks #1 and #4 both map to G1 (the reads-auth gate surfacing in two ranked areas), so the 7 ranking rows collapse to 6 unique underlying gaps.
+
+#### Tally
+
+| Outcome                            | Count | Gaps       |
+| ---                                | ---   | ---        |
+| OpenSpec more PRD-correct          | 3     | G1, G2, G3 |
+| Vanilla Claude Code more PRD-correct | 0   | —          |
+| Ambiguous (PRD doesn't pick)       | 3     | G4, G5, G6 |
+
+#### Per-gap detail
+
+| Gap | PRD reading | Vanilla Claude Code | OpenSpec | Verdict |
+| --- | --- | --- | --- | --- |
+| G1 reads-auth gate | §4 declares reads explicitly open to all callers | Identity middleware 403s any unregistered caller, including on reads | Reads accept null, unregistered, and registered callers alike | OpenSpec aligns with §4 |
+| G2 failed self-accept disposition | §11.4 case 2 applies to "another" queued change, not the acted-on one | Treats failed accept as case 2: change becomes invalid and is auto-dismissed from the queue | Treats failed accept as case 3: change becomes invalid but stays queued for manual dismissal | OpenSpec matches §11.4 literally |
+| G3 owner casing on writes | §4 makes the registry the source of truth for canonical casing | Stores `X-Username` verbatim; the same user can appear under different spellings on different taxa | Canonicalizes to the registry's stored form; one spelling per user across all taxa | OpenSpec preserves registry as canonical source |
+| G4 `shared` field on reads | §15.2 enumerates response fields but is not necessarily exhaustive | Omits `shared` from all read responses | Exposes derived `shared: boolean` on taxa and tree nodes | Ambiguous — both defensible |
+| G5 submission-time existence checks | §9–§11 give conflicting signals on which existence failures are caught at submission | Requires existence only for routing; defers deeper checks to acceptance | Validates the full dependency tree at submission with explicit error tags | Ambiguous — PRD doesn't pick |
+| G6 latent rename + ownership reassignment | §6.2/§14 silent on reviewer routing after owner change | Tests promotion-time re-resolution of a latent rename | Tests sticky routing of an already-queued rename | Ambiguous — different scenarios tested; combined behavior untested in both |
+
+### Test Coverage of Critical Gaps
+
+PRD-mandated behaviors verified by tests on one side only. Both implementations *may* do the right thing; the unverified side has no proof that it does. Full reasoning in the [Critical coverage gaps](results/test-diffs/CRITICAL-DIFFS.md#critical-coverage-gaps) section of CRITICAL-DIFFS.md.
+
+|                                                 | Vanilla Claude Code | OpenSpec |
+| ---                                             | ---                 | ---      |
+| Critical PRD gaps tested only by this side      | 2                   | 2        |
+| Gaps tested only by this side                   | C1, C2              | C3, C4   |
+
+#### Tally
+
+| Tested only by      | Count | Gaps |
+| ---                 | ---   | --- |
+| Vanilla Claude Code | 2     | C1 (A.1/A.2 lifecycle end-to-end through accept → reject → dismiss → reset); C2 (HTTP-boundary write-lock wiring on every mutating route) |
+| OpenSpec            | 2     | C3 (§6.3 owner-scoped region as a pure-domain unit, including halt-frontier edge cases); C4 (lazy-evaluation read-purity negative assertions) |
+
+### Verdict
+
+On critical PRD correctness OpenSpec wins 3, Vanilla Claude Code wins 0, with 3 gaps genuinely ambiguous; critical coverage gaps split evenly 2-2.
