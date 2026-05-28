@@ -15,6 +15,13 @@
 
 \* I reduced the actual OpenSpec values by 4% to remove cost of running OpenLore drift.
 
+## Caveats
+
+- **Initial/final test plans.** I had the workflows create anticipated test cases in advance of implementation, which certainly affected outcomes. The workflows also maintained summaries of the final test cases and the diffs from the initial test cases. This also increased usage.
+- **Overtaxed OpenSpec.** OpenSpec is not intended for more than 10 tasks at a time, but several phases had more than 10.
+- **Didn't spec from scratch.** I started with a PRD detailing observable behavior. Spec-driven development is geared toward working with the LLM to define the specification from scratch.
+- **Assisted with surfaced problems.** The workflows gave opportunities for me to explore aspects of implementation during planning, but I mainly explored the aspects that the LLM appeared to be indicating were potentially problematic.
+
 ## Conversation Comparison
 
 I recorded all conversations between Claude Code and the user and performed an analysis of the conversations. The following table summarizes the analysis. Details can be found at [vanilla CC conversation anaylsis](/results/cc-only/SUMMARY.md) AND [OpenSpec conversation analysis](/results/cc-openspec/SUMMARY.md).
@@ -192,3 +199,21 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
 | C2  | Vanilla Claude Code | HTTP-boundary write-lock wiring on every mutating route |
 | C3  | OpenSpec            | §6.3 owner-scoped region as a pure-domain unit, including halt-frontier edge cases |
 | C4  | OpenSpec            | Lazy-evaluation read-purity negative assertions |
+
+## Conclusions
+
+### Developer Experience
+
+- OpenSpec `explore` is **much friendlier** and more enjoyable than CC's `plan`.
+  - I don't have to worry about CC spontaneously deciding to implement.
+  - I'm not facing walls of text repeating implementation.
+  - I'm not trying to communicate via multiple-choice menus.
+- OpenSpec takes **much longer to compute** and is much more costly.
+- Native-CC is **better for vibe coding** a quick solution by minimizing user's input.
+
+### Design Visibility
+
+- OpenSpec **invites more participation** in the design and implementation process.
+- OpenSpec is a **great workflow for understanding** what the AI is doing.
+  - Offers "threads" for the user to "pull on" to investigate implementation decisions.
+  - OpenSpec is a better workflow for helping junior devs learn from AI.

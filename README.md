@@ -2,20 +2,11 @@
 
 This document describes a plan for comparing spec-driven development workflows with each other and with vibe coding not using specs. I wrote a complex [Produce Requirements Document](prd/prd.md) (PRD), divided it into phases, and implement the phases separately for each workflow, producing artifacts I could use to compare how well the different workflows did. I responded to any issues and questions the LLM raised that it didn't seem to have a solution for, allowing the LLM to benefit from its due diligence. I posted a separate document explaining the results.
 
-TBD: Choose between "vanilla CC" and "CC-only" and "Pure CC", also "CC/Openspec" or similar
+TBD: Choose between "vanilla CC" and "CC-only" and "Pure CC" "native CC", also "CC/Openspec" or similar
 
 ## Objective
 
 The objective of this experiment is to evaluate how well spec-driven development workflows perform compared to each other and to development without using tool-managed specifications. I specifically wanted to see whether spec-driven development helps uncover more gaps and inconsistencies, so I chose to implement a complex project having a few gaps and inconsistencies.
-
-## Caveats
-
-TBD: Where does this belong?
-
-- I had the workflows create anticipated test cases in advance of implementation, which certainly affected outcomes. The workflows also maintained summaries of the final test cases and the diffs from the initial.
-- OpenSpec is not intended for more than 10 tasks at a time, but several phases had more than 10.
-- I started with a specification detailing observable behavior but not implementation. Spec-driven development may be more geared toward working with the LLM to define the initial specification, especially one as technical as I defined.
-- The workflows gave opportunities for me to explore aspects of implementation during planning, but I only explored the aspects that the LLM appeared to be indicating were potentially problematic. I think both LLMs would have done better had I done more joint exploration.
 
 ## Workflows Under Comparison
 
@@ -334,18 +325,3 @@ I attempted to implement the PRD in both workflows as analogously as possible. T
 - **Apply.** After it completes the initial test plan, I'd type `/opsx:apply` to implement the proposal.
 - *(auto-write final test plan)* After completing implementation, I believe Claude Code always automatically generated the final test plan.
 - **Archive.** Last, I'd enter `opsx:archive` to incorporate the change artifacts into the living specs under `openspec/specs/` and to archive the change artifacts under `openspec/changes/archive/`.
-
-## Conclusions
-
-- OpenSpec invites more participation in the design and implementation process
-- OpenSpec `explore` is friendlier and more enjoyable than CC's `plan` -- clear delination between conversation and implementation
-- OpenSpec is a great workflow for understanding what the AI is doing
-- OpenSpec is a better workflow for helping junior devs learn
-- OpenSpec takes a lot more time and is a lot more costly
-- Vanilla CC is better for vibe code a quick solution
-- Allium, having 9 agents vote on each code change, is probably very expensive, best suited for developing a particular component.
-- Vanilla CC is designed to reduce user's effort, minimize user input, especially with multiple choice decisions.
-
-## Notes
-
-- Lazy evaluation complicated things.
