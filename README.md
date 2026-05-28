@@ -277,6 +277,8 @@ After developing the PRD, I asked Claude.ai to break its implementation into pha
 7. **Cascade + invalidation + integration** — atomic accept-cascade with
    rollback, the three invalidation modes, dismiss, and end-to-end coverage.
 
+All phases were implemented with **Opus 4.7**.
+
 ## Anticipated Complications
 
 1. **Validation reaches across every shared tree.** Because a single subtree (like Carol's Science Fiction) can appear inside several different trees, a change to that subtree can have consequences in trees the proposer never looked at. Renaming a taxon, for example, might be perfectly fine in the tree where the proposal was filed, but collide with a same-named sibling somewhere over in a stranger's tree. An implementation that only checks the tree where the change was proposed will appear correct in casual testing and silently break the invariants that hold the model together.

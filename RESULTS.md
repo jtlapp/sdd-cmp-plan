@@ -53,6 +53,38 @@ I recorded all conversations between Claude Code and the user and performed an a
 - **(f) Critical problems raised** — user-selected subset of (e) where the problem's resolution has a material impact on functionality.
 - **(g) Critical problems user answered** — subset of (f) where the user's reply gave a resolution or direction.
 
+## Code Size and Complexity
+
+I measured code size and complexity with [scc](https://github.com/boyter/scc) separately for `src/` and `test/` files. The complexity measure is scc's fast approximation of [cyclomatic complexity](https://en.wikipedia.org/wiki/Cyclomatic_complexity).
+
+### Source code metrics
+
+<div align="center">
+
+|  | Native CC | OpenSpec | Factor |
+| --- | ---: | ---: | ---: |
+| Files | 23 | 42 | 1.8x |
+| Lines | 3,772 | 5,738 | 1.5x |
+| Code | 2,456 | 3,896 | 1.6x |
+| Complexity | 622 | 925 | 1.5x |
+| Avg. code lines / file | 107 | 93 | 0.87x |
+
+</div>
+
+### Test code metrics
+
+<div align="center">
+
+|  | Native CC | OpenSpec | Factor |
+| --- | ---: | ---: | ---: |
+| Files | 47 | 97 | 2.1x |
+| Lines | 11,988 | 18,687 | 1.6x |
+| Code | 9,650 | 16,315 | 1.7x |
+| Complexity | 317 | 415 | 1.3x |
+| Avg. code lines / file | 205 | 168 | 0.82x |
+
+</div>
+
 ## Handling of Introduced Defects
 
 Here is a summary of how the two tools handled the four intentionally planted defects. Per-implementation details:
@@ -293,22 +325,34 @@ Each row in the per-gap detail table below is a PRD-mandated behavior verified b
 - Native CC defaulted to **HTTP-boundary integration**; OpenSpec defaulted to **layered unit-then-integration** tests, producing roughly 2× the file count and ~1.9× the case count.
 - The two strategies left **mirror-image coverage gaps**: Native CC under-tested pure-domain algorithms (deletion region, lazy-eval read purity); OpenSpec under-tests HTTP-wired concurrency and full end-to-end lifecycle walks.
 
+### Size and Complexity Tradeoff
+
+- OpenSpec produced **~1.6x the source code** and **~1.7x the test code**.
+- The OpenSpec solution was **1.5x as complex** as the Native CC solution.
+
 ## Recommendations
 
-Use OpenSpec when:
+Use OpenSpec when human understanding is more important than maintainability:
 
 - Developer experience takes priority
 - The design is not well understood and requires hashing out (no critical gaps missed; OpenSpec pre-implementation test plans were 8% more accurate than Native CC)
 - Understanding the solution takes priority over time and cost
 - Learning from AI takes priority over time and cost
 - It's important to have fine control over the implementation
+- **Code volume and complexity are unimportant** (does this ever happen?)
 
-Use native CC when:
+Use native CC when maintainability is more important than human understanding:
 
 - Completing with minimal time and cost takes priority
 - The design is well understood with few unresolved issues
 - Choice of implementation is unimportant
 - Understanding the implementation is unimportant
 - It's okay to defer finding gaps to runtime
+- **Minimizing code volume and complexity is a priority** (when isn't it?)
+
+The two workflows could be used in concert to produce a better solution:
+
+- Use OpenSpec to create the specification (maximizing human understanding).
+- Use Native CC to implement the specification (maximizing maintainability).
 
 OpenSpec's success suggests exploring other spec-driven development solutions too, such as [Spec-Kit](https://github.github.com/spec-kit/), [Allium](https://github.com/juxt/allium), [Kiro](https://kiro.dev), [GSD](https://github.com/open-gsd/get-shit-done-redux), and [BMAD](https://github.com/bmad-code-org/bmad-method).
