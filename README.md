@@ -2,7 +2,7 @@
 
 This document describes a plan for comparing spec-driven development workflows with each other and with vibe coding not using specs. I wrote a complex [Produce Requirements Document](prd/prd.md) (PRD), divided it into phases, and implement the phases separately for each workflow, producing artifacts I could use to compare how well the different workflows did. I responded to any issues and questions the LLM raised that it didn't seem to have a solution for, allowing the LLM to benefit from its due diligence. I posted a separate document explaining the results.
 
-TBD: Choose between "vanilla CC" and "CC-only", also "CC/Openspec" or similar
+TBD: Choose between "vanilla CC" and "CC-only" and "Pure CC", also "CC/Openspec" or similar
 
 ## Objective
 
