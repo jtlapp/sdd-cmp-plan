@@ -309,19 +309,20 @@ The PRD also contains four deliberately introduced defects, planted so we could 
 
 4. **(Gap, subtle) The spec never decides what happens when a proposal contains an operation on a taxon the proposer themselves owns.** Proposals are described as targeting trees owned "wholly or partly by others," which quietly admits mixed ownership — and the routing rule that sends each change to its taxon's owner will then mechanically route some of those changes back to the proposer. Whether that case is allowed at all, whether it auto-applies (the proposer could just edit directly), or whether it queues for the proposer's own self-review like any other change, is never said. The routing rule has an answer in the mechanical sense, so a shallow read concludes the case is handled; the real gap is the unaddressed design decision, which only surfaces when a tool composes the two sections and notices the boundary case neither alone resolves.
 
-## Implementation Process
+## Workflow Process
 
-Add `CLAUDE.md`
+I attempted to implement the PRD in both workflows as analogously as possible. This entailed providing both projects with a `CLAUDE.md` explaining the process and then walking the LLM through the process as required via prompting. I planned for an anticipated process, but here I document the actual resulting process:
 
-Claude Code
+### Pure-CC Workflow Process
 
-- Plan
-- (Interaction)
-- (Write initial test plan)
-- Approve and accept edits
-- (Write final test plan)
+- **Plan.** I prompted to enter planning mode to plan the next phase.
+- *(interaction)* Claude Code asked me questions, almost exclusively via multiple choice.
+- *(generate plan)* Once Claude Code felt it had enough information, it automatically generated an implementaiton plan.
+- *(auto-write initial test plan)* After writing the implementation plan, Claude Code automatically generated an initial test plan.
+- **Approve and accept edits.** Claude presented the implemenation plan, which I always accepted without review.
+- *(auto-write final test plan)* After completing implementation, I believe Claude Code always automatically generated the final test plan.
 
-OpenSpec
+### CC/OpenSpec Workflow Process
 
 - Explore
 - (Interaction)

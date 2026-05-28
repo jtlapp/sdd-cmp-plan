@@ -99,6 +99,42 @@ The two strategies are good at catching different classes of regression:
   - Isolation-layer purity violations such as a domain module reaching into the HTTP layer.
 - Symmetric blind spots: each side has a small number of PRD-mandated behaviors that only the other side verifies. These are quantified in the [Testing Divergence](#testing-divergence) subsection below.
 
+## Phase Test-Plan Prediction Accuracy
+
+For every phase, each project froze a `phase-N-initial.md` test plan before writing code, then closed a `phase-N-final.md` with a changelog of how the plan evolved during implementation. Comparing those changelogs across all seven phases is direct evidence of how well each tool's up-front test plan held up. Full per-phase reasoning, the reason-category breakdown, and notable individual deltas live in [`results/test-diffs/PHASE-DIFFS.md`](results/test-diffs/PHASE-DIFFS.md); the tables below are the headline data.
+
+### Prediction-accuracy scoreboard
+
+| | Vanilla Claude Code | OpenSpec |
+| --- | ---: | ---: |
+| Total deltas across 7 phases | 54 | 53 |
+| Added | 31 | 24 |
+| Revised | 16 | 11 |
+| Renamed | 1 | 0 |
+| Removed | 5 | 17 |
+| Confirmed-no-test | 1 | 1 |
+| % substantive (Added + Revised + Removed) | 96.3% | 98.1% |
+| % cosmetic (Renamed + Confirmed-no-test) | 3.7% | 1.9% |
+| Phases where this project's initial plan predicted more accurately | 2 | 4 |
+| Phases tied | 1 | 1 |
+
+### Per-phase deltas
+
+`A / R / Re / X / C` = Added / Revised / Renamed / Removed / Confirmed-no-test.
+
+| Phase | Vanilla CC A/R/Re/X/C | Vanilla CC total | OpenSpec A/R/Re/X/C | OpenSpec total | More accurate |
+| ---: | --- | ---: | --- | ---: | --- |
+| 1 | 2 / 1 / 1 / 0 / 1 | 5 | 2 / 1 / 0 / 0 / 1 | 4 | OpenSpec |
+| 2 | 6 / 1 / 0 / 0 / 0 | 7 | 3 / 2 / 0 / 2 / 0 | 7 | tie |
+| 3 | 7 / 1 / 0 / 0 / 0 | 8 | 5 / 1 / 0 / 1 / 0 | 7 | OpenSpec |
+| 4 | 7 / 1 / 0 / 0 / 0 | 8 | 5 / 0 / 0 / 5 / 0 | 10 | Vanilla CC |
+| 5 | 5 / 3 / 0 / 0 / 0 | 8 | 3 / 1 / 0 / 3 / 0 | 7 | OpenSpec |
+| 6 | 2 / 4 / 0 / 3 / 0 | 9 | 6 / 4 / 0 / 1 / 0 | 11 | Vanilla CC |
+| 7 | 2 / 5 / 0 / 2 / 0 | 9 | 0 / 2 / 0 / 5 / 0 | 7 | OpenSpec |
+| **Total** | **31 / 16 / 1 / 5 / 1** | **54** | **24 / 11 / 0 / 17 / 1** | **53** | OpenSpec 4, Vanilla CC 2, tie 1 |
+
+Totals are nearly identical (54 vs 53), but the **shape** of the churn differs sharply: Vanilla CC's plans tend to **under-predict** scope (lots of additions during implementation, only 5 removals over seven phases), while OpenSpec's plans tend to **over-predict** scope (fewer additions, 17 removals as initial-plan rows are reclassified as redundant, unreachable, or already covered by sibling phases). Both projects produce similar overall plan churn — they just err in opposite directions, and OpenSpec wins the per-phase head-to-head in 4 of 7 phases.
+
 ## PRD Gap Implementation and Testing
 
 This section summarizes how each tool resolved the PRD ambiguities that surfaced during implementation and which PRD-mandated behaviors each tool verified via test. Full reasoning lives in [`results/test-diffs/CRITICAL-DIFFS.md`](results/test-diffs/CRITICAL-DIFFS.md); the tables below are a scoreboard distillation focused on critical and partially-critical gaps. A gap is **critical** when its resolution changes a domain action's outcome or stored state; **partial** means only part of the divergence (e.g. the underlying rule, not its status-code dressing) is critical.
